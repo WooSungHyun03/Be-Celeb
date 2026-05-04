@@ -1,0 +1,18 @@
+{
+  "trends": [
+    {
+      "id": "trend-001",
+      "title": "AI voice-over daily vlog",
+      "category": "ai-video",
+      "platforms": ["tiktok", "youtube-shorts"],
+      "score": 87
+    },
+    {
+      "id": "trend-002",
+      "title": "One-bite mukbang review",
+      "category": "mukbang",
+      "platforms": ["instagram-reels", "tiktok"],
+      "score": 82
+    }
+  ]
+}

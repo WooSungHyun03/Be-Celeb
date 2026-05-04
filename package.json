@@ -1,0 +1,17 @@
+{
+  "name": "be-celeb",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Be Celeb monorepo skeleton for SNS trend strategy recommendations.",
+  "workspaces": [
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:api": "cd apps/api && uvicorn app.main:app --reload",
+    "build:web": "npm --workspace apps/web run build",
+    "lint:web": "npm --workspace apps/web run lint",
+    "type-check:web": "npm --workspace apps/web run type-check"
+  }
+}

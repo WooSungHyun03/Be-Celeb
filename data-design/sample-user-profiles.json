@@ -1,0 +1,22 @@
+{
+  "profiles": [
+    {
+      "id": "profile-001",
+      "displayName": "Be Celeb Creator",
+      "handle": "be_celeb_creator",
+      "primaryCategory": "ai-video",
+      "platforms": ["tiktok", "youtube-shorts"],
+      "goals": ["growth", "branding"],
+      "followerRange": "1K-10K"
+    },
+    {
+      "id": "profile-002",
+      "displayName": "Food Clip Lab",
+      "handle": "food_clip_lab",
+      "primaryCategory": "mukbang",
+      "platforms": ["instagram-reels", "tiktok"],
+      "goals": ["growth", "community"],
+      "followerRange": "10K-50K"
+    }
+  ]
+}
