@@ -21,6 +21,7 @@
 - `apps/web/next.config.ts`
 - `apps/api/app/core/config.py`
 
+
 ## 프론트엔드 역할
 
 - Next.js App Router 페이지 개발
@@ -39,6 +40,7 @@
 - `apps/web/src/types`
 - `apps/web/public`
 
+
 ## 백엔드 역할
 
 - Next.js Route Handler
@@ -55,6 +57,7 @@
 - `apps/web/src/lib/openai`
 - `apps/web/src/lib/resend`
 - `apps/api/app`
+
 
 ## 데이터/디자인 관리 역할
 
