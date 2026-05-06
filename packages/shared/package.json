@@ -1,0 +1,15 @@
+{
+  "name": "@be-celeb/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./types/trend": "./types/trend.ts",
+    "./types/recommendation": "./types/recommendation.ts",
+    "./types/user": "./types/user.ts",
+    "./constants/categories": "./constants/categories.ts",
+    "./constants/platforms": "./constants/platforms.ts",
+    "./constants/rule-types": "./constants/rule-types.ts",
+    "./utils/score": "./utils/score.ts"
+  }
+}
