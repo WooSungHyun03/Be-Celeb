@@ -13,9 +13,12 @@ export default async function RecommendationDetailPage({ params }: Recommendatio
   const recommendation = mockRecommendations.find((item) => item.id === id) ?? mockRecommendations[0];
 
   return (
-    <div className="space-y-6">
-      <Link className="text-sm font-medium text-emerald-700" href={ROUTES.recommendations}>
-        ← 추천 목록
+    <div className="space-y-8">
+      <Link
+        href={ROUTES.recommendations}
+        className="inline-flex items-center gap-2 text-sm font-medium text-emerald-600 hover:text-emerald-700"
+      >
+        ← 목록으로
       </Link>
       <RecommendationDetail recommendation={recommendation} />
     </div>
