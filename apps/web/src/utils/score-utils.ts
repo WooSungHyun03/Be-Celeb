@@ -1,4 +1,4 @@
-// Provides score helpers for trend and recommendation mock views.
+﻿// Provides score helpers for trend and recommendation mock views.
 export function getScoreLabel(score: number) {
   if (score >= 85) {
     return "High";
@@ -13,7 +13,7 @@ export function getScoreLabel(score: number) {
 
 export function getScoreTone(score: number) {
   if (score >= 85) {
-    return "text-emerald-700";
+    return "text-violet-700";
   }
 
   if (score >= 70) {
