@@ -1,70 +1,64 @@
-// Renders mock onboarding steps for platform, category, and goal selection.
-'use client';
+﻿"use client";
 
-import { useState } from 'react';
-import { Button } from '@/components/common/Button';
-import { Card } from '@/components/common/Card';
-import { CategoryStep } from '@/components/onboarding/CategoryStep';
-import { GoalStep } from '@/components/onboarding/GoalStep';
-import { PlatformStep } from '@/components/onboarding/PlatformStep';
+// Renders onboarding steps for platform, category, and goal selection.
+import { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/common/Button";
+import { Card } from "@/components/common/Card";
+import { Toast } from "@/components/common/Toast";
+import { CategoryStep } from "@/components/onboarding/CategoryStep";
+import { GoalStep } from "@/components/onboarding/GoalStep";
+import { PlatformStep } from "@/components/onboarding/PlatformStep";
+import { ROUTES } from "@/constants/routes";
 
 export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(0);
-  const steps = ['플랫폼', '카테고리', '목표'];
+  const [completed, setCompleted] = useState(false);
+  const steps = ["플랫폼", "카테고리", "목표"];
   const totalSteps = steps.length;
   const progressPercent = ((currentStep + 1) / totalSteps) * 100;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto max-w-3xl space-y-8">
       <div>
-        <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Get started</p>
-        <h1 className="mt-3 text-4xl font-semibold text-ink">개인 분석 시작</h1>
-        <p className="mt-3 text-base text-slate-600">
-          3가지 간단한 단계로 당신의 계정과 목표에 맞춘 추천을 받아보세요.
-        </p>
+        <p className="text-sm font-semibold uppercase text-violet-700">Get started</p>
+        <h1 className="mt-3 text-4xl font-bold text-ink">개인 분석 시작</h1>
+        <p className="mt-3 text-base leading-7 text-slate-600">세 가지 선택만으로 계정 목표에 맞춘 트렌드와 콘텐츠 추천 화면을 구성합니다.</p>
       </div>
 
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm font-medium">
-            <span className="text-slate-600">진행률</span>
-            <span className="text-ink">{currentStep + 1} of {totalSteps}</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between text-sm font-semibold">
+          <span className="text-slate-600">진행률</span>
+          <span className="text-ink">{currentStep + 1} / {totalSteps}</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+          <div className="h-full bg-violet-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+        </div>
+        <div className="flex gap-2 text-xs font-medium text-slate-500">
+          {steps.map((step, index) => (
+            <span className={index === currentStep ? "text-violet-700" : ""} key={step}>{step}</span>
+          ))}
         </div>
       </div>
 
       <Card>
         <div className="space-y-8">
-          <div className="space-y-4">
-            {currentStep === 0 && <PlatformStep />}
-            {currentStep === 1 && <CategoryStep />}
-            {currentStep === 2 && <GoalStep />}
-          </div>
+          {currentStep === 0 && <PlatformStep />}
+          {currentStep === 1 && <CategoryStep />}
+          {currentStep === 2 && <GoalStep />}
+          {completed ? <Toast message="온보딩이 완료되었습니다. 대시보드에서 추천을 확인하세요." /> : null}
 
           <div className="flex gap-3 border-t border-slate-200 pt-6">
-            <Button
-              variant="secondary"
-              onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
-              disabled={currentStep === 0}
-            >
+            <Button variant="secondary" onClick={() => setCurrentStep(Math.max(0, currentStep - 1))} disabled={currentStep === 0}>
               이전
             </Button>
-            <Button
-              className="flex-1"
-              onClick={() => {
-                if (currentStep < totalSteps - 1) {
-                  setCurrentStep(currentStep + 1);
-                }
-              }}
-            >
-              {currentStep === totalSteps - 1 ? '분석 완료' : '다음'}
-            </Button>
+            {currentStep === totalSteps - 1 ? (
+              <Link href={ROUTES.dashboard} className="inline-flex min-h-10 flex-1 items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800" onClick={() => setCompleted(true)}>
+                분석 완료
+              </Link>
+            ) : (
+              <Button className="flex-1" onClick={() => setCurrentStep(currentStep + 1)}>다음</Button>
+            )}
           </div>
         </div>
       </Card>

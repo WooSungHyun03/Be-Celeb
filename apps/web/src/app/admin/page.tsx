@@ -1,46 +1,43 @@
-// Renders the admin placeholder page for future trend management.
-import { Card } from "@/components/common/Card";
+// Renders the admin UI draft for future trend management.
 import { Badge } from "@/components/common/Badge";
+import { Card } from "@/components/common/Card";
+import { mockRecommendations } from "@/mocks/mockRecommendations";
 import { mockTrends } from "@/mocks/mockTrends";
+
+const metrics = [
+  { label: "총 트렌드", value: mockTrends.length },
+  { label: "추천 데이터", value: mockRecommendations.length },
+  { label: "API 호출", value: "1.2K" },
+];
 
 export default function AdminPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-semibold text-ink">관리자</h1>
-        <p className="mt-3 text-base text-slate-600">트렌드 데이터 및 시스템 설정을 관리하는 공간입니다.</p>
+        <Badge tone="warning">Admin draft</Badge>
+        <h1 className="mt-3 text-4xl font-bold text-ink">관리자</h1>
+        <p className="mt-3 text-base leading-7 text-slate-600">트렌드 데이터, 추천 상태, 운영 지표를 확인하는 관리자 페이지 초안입니다.</p>
       </div>
-      <div className="grid gap-6 sm:grid-cols-3">
-        <Card className="rounded-3xl border-slate-200">
-          <p className="text-sm uppercase tracking-[0.12em] text-slate-400">총 트렌드</p>
-          <p className="mt-4 text-4xl font-bold text-ink">{mockTrends.length}</p>
-        </Card>
-        <Card className="rounded-3xl border-slate-200">
-          <p className="text-sm uppercase tracking-[0.12em] text-slate-400">활성 사용자</p>
-          <p className="mt-4 text-4xl font-bold text-ink">142</p>
-        </Card>
-        <Card className="rounded-3xl border-slate-200">
-          <p className="text-sm uppercase tracking-[0.12em] text-slate-400">API 호출</p>
-          <p className="mt-4 text-4xl font-bold text-ink">1.2K</p>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {metrics.map((metric) => (
+          <Card key={metric.label}>
+            <p className="text-sm font-semibold text-slate-500">{metric.label}</p>
+            <p className="mt-4 text-4xl font-bold text-ink">{metric.value}</p>
+          </Card>
+        ))}
       </div>
 
-      <Card className="rounded-3xl border-slate-200">
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-ink">트렌드 우선순위 큐</h2>
-          <div className="divide-y divide-slate-200">
-            {mockTrends.map((trend) => (
-              <div className="flex items-center justify-between gap-4 py-4" key={trend.id}>
-                <div className="flex-1">
-                  <p className="font-semibold text-ink">{trend.title}</p>
-                  <p className="mt-1 text-sm text-slate-500">{trend.category}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone="brand">스코어: {trend.score}</Badge>
-                </div>
+      <Card title="트렌드 우선순위">
+        <div className="divide-y divide-slate-200">
+          {mockTrends.map((trend) => (
+            <div className="flex items-center justify-between gap-4 py-4" key={trend.id}>
+              <div className="flex-1">
+                <p className="font-semibold text-ink">{trend.title}</p>
+                <p className="mt-1 text-sm text-slate-500">{trend.category} · +{trend.growthRate}%</p>
               </div>
-            ))}
-          </div>
+              <Badge tone="brand">점수 {trend.score}</Badge>
+            </div>
+          ))}
         </div>
       </Card>
     </div>

@@ -6,8 +6,10 @@ export const ROUTES = {
   onboarding: "/onboarding",
   dashboard: "/dashboard",
   trends: "/trends",
+  trendingItems: "/trending-items",
   recommendations: "/recommendations",
   saved: "/saved",
   pricing: "/pricing",
+  profile: "/profile",
   admin: "/admin",
 } as const;

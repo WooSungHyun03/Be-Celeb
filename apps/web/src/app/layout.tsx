@@ -5,8 +5,8 @@ import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 
 export const metadata: Metadata = {
-  title: "Be Celeb",
-  description: "SNS trend strategy recommendation service skeleton.",
+  title: "Be Celeb | SNS 트렌드 전략 추천",
+  description: "크리에이터를 위한 SNS 트렌드 분석과 콘텐츠 추천 서비스",
 };
 
 type RootLayoutProps = {
@@ -18,7 +18,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="ko">
       <body>
         <Header />
-        <main className="mx-auto min-h-[calc(100vh-148px)] w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <main className="mx-auto min-h-[calc(100vh-180px)] w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           {children}
         </main>
         <Footer />

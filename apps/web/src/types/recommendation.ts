@@ -10,6 +10,10 @@ export type Recommendation = {
   category: TrendCategory;
   platforms: Platform[];
   priority: RecommendationPriority;
+  score: number;
+  hook: string;
+  outline: string[];
+  hashtags: string[];
   reason: string;
   steps: string[];
   relatedTrendIds: string[];

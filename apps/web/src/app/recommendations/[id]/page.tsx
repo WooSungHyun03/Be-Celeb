@@ -1,4 +1,4 @@
-// Renders a mock recommendation detail page from route params.
+// Renders a recommendation detail page from route params.
 import Link from "next/link";
 import { RecommendationDetail } from "@/components/recommendation/RecommendationDetail";
 import { ROUTES } from "@/constants/routes";
@@ -14,11 +14,8 @@ export default async function RecommendationDetailPage({ params }: Recommendatio
 
   return (
     <div className="space-y-8">
-      <Link
-        href={ROUTES.recommendations}
-        className="inline-flex items-center gap-2 text-sm font-medium text-emerald-600 hover:text-emerald-700"
-      >
-        ← 목록으로
+      <Link href={ROUTES.recommendations} className="inline-flex text-sm font-semibold text-violet-700 hover:text-violet-800">
+        추천 목록으로
       </Link>
       <RecommendationDetail recommendation={recommendation} />
     </div>
