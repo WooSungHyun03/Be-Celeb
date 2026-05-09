@@ -40,10 +40,10 @@ async def get_main_page_data():
     if raw_rec_data:
         sample_rec_data = {
             **raw_rec_data,
+            # SampleRecommendation 스키마의 필드명(hook_text 등)에 맞춰 매핑
             "hook_text": raw_rec_data.get("hook_text") or raw_rec_data.get("hook"),
             "content_plan": raw_rec_data.get("content_plan") or raw_rec_data.get("outline"),
             "expected_score": raw_rec_data.get("expected_score") or raw_rec_data.get("score"),
-            "hashtags": raw_rec_data.get("hashtags") or [],
         }
     
     # Recommendation 모델과 SampleRecommendation 모델의 필드 차이가 있을 수 있으므로 
