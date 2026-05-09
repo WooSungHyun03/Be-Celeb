@@ -35,7 +35,7 @@ async def get_main_page_data():
     # 첫 번째 추천 아이템을 샘플로 사용합니다.
     raw_rec_data = recommendations[0].model_dump() if recommendations else {}
     
-    # DB 스키마(Recommendation) 필드명을 웹 스키마(SampleRecommendation) 규격에 맞게 매핑
+    # SampleRecommendation 스키마 규격(snake_case)에 맞게 데이터 매핑 및 누락 방지
     sample_rec_data = {}
     if raw_rec_data:
         sample_rec_data = {
