@@ -33,6 +33,174 @@ Be Celeb은 인스타그램 릴스, 틱톡, 유튜브 쇼츠 같은 숏폼 SNS �
 - AI: OpenAI Responses API
 - Deployment: Vercel, Render, Cloudflare
 
+## 역할별 담당 디렉토리
+
+팀은 3명 역할로 나눕니다.
+
+| 역할 | 주로 수정 가능 | 협의 없이 수정하지 않는 영역 |
+| --- | --- | --- |
+| Frontend | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/features/`, `apps/web/src/utils/`, `apps/web/src/types/`, `apps/web/src/constants/`, `apps/web/public/` | `apps/web/src/app/api/`, `apps/web/src/lib/`, `apps/api/`, `supabase/` |
+| Backend | `apps/api/`, `apps/web/src/app/api/`, `apps/web/src/lib/supabase/`, `apps/web/src/lib/openai/`, `apps/web/src/lib/resend/`, `apps/web/src/lib/config/`, `supabase/` | `apps/web/src/components/`, 화면 페이지 디렉토리, `data-design/` |
+| Data/Design | `data-design/`, `apps/web/src/mocks/`, `apps/web/src/constants/`, `apps/api/app/mocks/`, `packages/shared/constants/` | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/app/api/`, `apps/api/app/services/`, `supabase/schema.sql` |
+
+자세한 역할별 파일 목록은 `docs/role-guide.md`와 `docs/role-task-list.md`를 확인합니다.
+
+## Git Conflict 방지 규칙
+
+- 담당 디렉토리 외 파일은 수정하지 않습니다.
+- `package.json`, `requirements.txt`, `schema.sql`, `tsconfig.json`, `tailwind.config.ts` 같은 공통 파일은 Jira 티켓을 만들고 수정합니다.
+- 매일 작업 시작 전 `develop`을 최신화합니다.
+- 작업은 항상 `feature/*`, `fix/*`, `docs/*` 브랜치에서 합니다.
+- `main`과 `develop`에는 직접 push하지 않습니다.
+- Pull Request를 통해서만 merge합니다.
+- 같은 페이지를 두 명이 동시에 수정하지 않습니다.
+- mock data 구조 변경 시 Frontend/Backend 모두에게 알립니다.
+- API response 형식 변경 시 `docs/api-contract.md`를 먼저 수정합니다.
+
+자세한 규칙은 `docs/git-conflict-prevention.md`를 확인합니다.
+
+## 초보자용 작업 시작 방법
+
+처음 한 번:
+
+```bash
+git clone <REPOSITORY_URL>
+cd be-celeb
+git checkout develop
+git pull origin develop
+```
+
+매일 작업 시작:
+
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b feature/역할-작업명
+```
+
+Frontend 예시:
+
+```bash
+git checkout -b feature/frontend-dashboard
+cd apps/web
+npm install
+npm run dev
+```
+
+Backend 예시:
+
+```bash
+git checkout -b feature/backend-recommendation-api
+cd apps/api
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+Data/Design 예시:
+
+```bash
+git checkout -b feature/data-rulebase
+git add data-design apps/web/src/mocks apps/web/src/constants
+git commit -m "data: add rulebase and sample trends"
+git push origin feature/data-rulebase
+```
+
+전체 명령어 가이드는 `docs/beginner-git-guide.md`를 확인합니다.
+
+## 브랜치 전략
+
+- `main`: 배포 가능한 안정 브랜치. 직접 push 금지.
+- `develop`: 개발 통합 브랜치. 직접 push 금지.
+- `feature/frontend-작업명`: Frontend 작업.
+- `feature/backend-작업명`: Backend 작업.
+- `feature/data-작업명`: Data 작업.
+- `feature/design-작업명`: Design 작업.
+- `fix/버그명`: 버그 수정.
+- `docs/문서명`: 문서 작업.
+
+예시:
+
+```txt
+feature/frontend-landing-page
+feature/backend-openai-service
+feature/data-rulebase
+feature/design-service-copy
+fix/cors-error
+docs/jira-workflow
+```
+
+## PR 규칙
+
+- PR 제목에 Jira 티켓 번호를 포함합니다.
+- PR 설명에 작업 내용, 수정한 디렉토리, 테스트 방법을 작성합니다.
+- 화면 작업이면 스크린샷을 첨부합니다.
+- API 작업이면 요청/응답 예시를 첨부합니다.
+- conflict가 있으면 혼자 해결하지 말고 담당자에게 공유합니다.
+- API response를 바꿨다면 `docs/api-contract.md` 변경을 PR에 포함합니다.
+
+PR 템플릿은 `.github/pull_request_template.md`를 사용합니다.
+
+## Jira 티켓 규칙
+
+Jira 상태값:
+
+- `Backlog`
+- `To Do`
+- `In Progress`
+- `Code Review`
+- `Done`
+
+Epic 예시:
+
+- `FE: Frontend UI`
+- `BE: Backend API`
+- `DATA: Trend Data and Rulebase`
+- `DESIGN: Design and Copy`
+- `DEPLOY: Deployment`
+- `DOCS: Documentation`
+
+티켓 예시:
+
+- `FE-1 랜딩 페이지 UI 구현`
+- `BE-3 OpenAI 추천 API 연결`
+- `DATA-2 룰베이스 추천 규칙 작성`
+- `DESIGN-1 랜딩 페이지 문구 작성`
+
+자세한 규칙은 `docs/jira-workflow.md`를 확인합니다.
+
+## 역할별 구현해야 하는 기능 요약
+
+Frontend:
+
+- 랜딩, 로그인, 회원가입, 온보딩, 대시보드, 트렌드, 추천, 저장, 가격제 UI
+- Header, Sidebar/Navbar, Footer, Button, Card, Input, Badge
+- Loading, Empty, Error 상태 UI
+- 추천 생성/저장/복사 버튼 UI
+- 카테고리/플랫폼 필터와 추천 결과 표시 UI
+
+Backend:
+
+- FastAPI `/health`, `/recommendations/generate`
+- Next.js API route
+- Supabase Auth/DB 연결
+- OpenAI API 호출
+- Resend 이메일 발송
+- 룰베이스 점수 계산
+- API contract, SQL schema, RLS 정책
+
+Data/Design:
+
+- 트렌드 카테고리
+- 플랫폼 목록
+- 룰베이스 추천 규칙
+- 샘플 트렌드와 사용자 프로필
+- 서비스 문구, 온보딩 질문, 추천 결과 예시 문구
+- 발표용 데이터와 데모 시나리오
+
+자세한 구현 목록은 `docs/role-task-list.md`를 확인합니다.
+
 ## 로컬 실행
 
 ### Web
