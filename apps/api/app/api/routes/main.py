@@ -35,15 +35,15 @@ async def get_main_page_data():
     # 첫 번째 추천 아이템을 샘플로 사용합니다.
     raw_rec_data = recommendations[0].model_dump() if recommendations else {}
     
-    # DB 스키마(Recommendation) 필드명을 웹 스키마(SampleRecommendation) 규격에 맞게 매핑
+    # SampleRecommendation 스키마 규격(snake_case)에 맞게 데이터 매핑 및 누락 방지
     sample_rec_data = {}
     if raw_rec_data:
         sample_rec_data = {
             **raw_rec_data,
-            # DB 필드명(hook_text 등)이 있을 경우 우선적으로 매핑
-            "hook": raw_rec_data.get("hook_text") or raw_rec_data.get("hook"),
-            "outline": raw_rec_data.get("content_plan") or raw_rec_data.get("outline"),
-            "score": raw_rec_data.get("expected_score") or raw_rec_data.get("score"),
+            "hook_text": raw_rec_data.get("hook_text") or raw_rec_data.get("hook"),
+            "content_plan": raw_rec_data.get("content_plan") or raw_rec_data.get("outline"),
+            "expected_score": raw_rec_data.get("expected_score") or raw_rec_data.get("score"),
+            "hashtags": raw_rec_data.get("hashtags") or [],
         }
     
     # Recommendation 모델과 SampleRecommendation 모델의 필드 차이가 있을 수 있으므로 
