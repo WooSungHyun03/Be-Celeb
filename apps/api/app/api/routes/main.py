@@ -2,7 +2,7 @@
 from fastapi import APIRouter, status
 from app.schemas.main import MainResponse, ServiceStats, TrendSummary, SampleRecommendation
 
-router = APIRouter()
+router = APIRouter(tags=["main"])
 
 @router.get(
     "/main", 
