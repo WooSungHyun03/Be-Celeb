@@ -1,7 +1,7 @@
 # Creates the FastAPI application and registers mock API routers.
 from fastapi import FastAPI
 
-from app.api.routes import analysis, health, recommendations, trends
+from app.api.routes import analysis, health, recommendations, trends, main
 from app.core.config import get_settings
 from app.core.cors import configure_cors
 
@@ -15,7 +15,8 @@ app = FastAPI(
 
 configure_cors(app, settings)
 
-app.include_router(health.router)
-app.include_router(trends.router)
-app.include_router(recommendations.router)
-app.include_router(analysis.router)
+app.include_router(health)
+app.include_router(trends)
+app.include_router(recommendations)
+app.include_router(analysis)
+app.include_router(main, prefix="/api/v1")
