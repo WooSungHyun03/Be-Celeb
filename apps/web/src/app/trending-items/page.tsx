@@ -1,5 +1,7 @@
 ﻿import { Badge } from "@/components/common/Badge";
 
+import { PageHeader } from "@/components/common/PageHeader";
+
 type TrendingItem = {
   name: string;
   signal: string;
@@ -156,23 +158,21 @@ export default function TrendingItemsPage() {
   return (
     <div className="space-y-8">
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
-          <div>
-            <Badge tone="brand">Rising item board</Badge>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight text-ink">카테고리별 인기 상승 아이템</h1>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-              트렌드 콘텐츠에 바로 연결하기 좋은 상품을 카테고리별로 정리했습니다. 각 아이템은 외부 검색 페이지로 연결되어 상품 탐색으로 이어집니다.
-            </p>
-          </div>
-          <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-            {metrics.map((metric) => (
-              <div className="border-r border-slate-200 px-4 py-4 last:border-r-0" key={metric.label}>
-                <p className="text-xs font-semibold text-slate-500">{metric.label}</p>
-                <p className="mt-2 text-2xl font-bold text-ink">{metric.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <PageHeader
+          eyebrow={<Badge tone="brand">Rising item board</Badge>}
+          title="카테고리별 인기 상승 아이템"
+          description="트렌드 콘텐츠에 바로 연결하기 좋은 상품을 카테고리별로 정리했습니다. 각 아이템은 외부 검색 페이지로 연결되어 상품 탐색으로 이어집니다."
+          action={
+            <div className="grid w-full grid-cols-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 lg:w-[420px]">
+              {metrics.map((metric) => (
+                <div className="border-r border-slate-200 px-4 py-4 last:border-r-0" key={metric.label}>
+                  <p className="text-xs font-semibold text-slate-500">{metric.label}</p>
+                  <p className="mt-2 text-2xl font-bold text-ink">{metric.value}</p>
+                </div>
+              ))}
+            </div>
+          }
+        />
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">

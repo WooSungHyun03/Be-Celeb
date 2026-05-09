@@ -1,6 +1,7 @@
 // Renders the admin UI draft for future trend management.
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import { PageHeader } from "@/components/common/PageHeader";
 import { mockRecommendations } from "@/mocks/mockRecommendations";
 import { mockTrends } from "@/mocks/mockTrends";
 
@@ -13,11 +14,11 @@ const metrics = [
 export default function AdminPage() {
   return (
     <div className="space-y-8">
-      <div>
-        <Badge tone="warning">Admin draft</Badge>
-        <h1 className="mt-3 text-4xl font-bold text-ink">관리자</h1>
-        <p className="mt-3 text-base leading-7 text-slate-600">트렌드 데이터, 추천 상태, 운영 지표를 확인하는 관리자 페이지 초안입니다.</p>
-      </div>
+      <PageHeader
+        eyebrow={<Badge tone="warning">Admin draft</Badge>}
+        title="관리자"
+        description="트렌드 데이터, 추천 상태, 운영 지표를 확인하는 관리자 페이지 초안입니다."
+      />
       <div className="grid gap-4 sm:grid-cols-3">
         {metrics.map((metric) => (
           <Card key={metric.label}>
