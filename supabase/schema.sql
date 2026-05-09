@@ -247,6 +247,8 @@ alter table public.strategy_articles alter column content set not null;
 create unique index if not exists strategy_articles_slug_unique_idx on public.strategy_articles(slug);
 create index if not exists idx_strategy_articles_category on public.strategy_articles(category);
 create index if not exists idx_strategy_articles_active on public.strategy_articles(is_active);
+create index if not exists idx_strategy_articles_created_at
+on public.strategy_articles(created_at);
 
 -- 11. Logs
 -- Do not store sensitive information such as passwords, tokens, addresses, or raw personal identifiers in log messages.
@@ -267,6 +269,7 @@ alter table public.error_logs alter column method set not null;
 
 create index if not exists idx_error_logs_user_id on public.error_logs(user_id);
 create index if not exists idx_error_logs_created_at on public.error_logs(created_at);
+create index if not exists idx_error_logs_code on public.error_logs(code);
 
 create table if not exists public.not_found_logs (
   id uuid primary key default gen_random_uuid(),
