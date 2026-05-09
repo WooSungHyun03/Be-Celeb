@@ -23,6 +23,13 @@ export function getPublicEnv() {
   };
 }
 
+export function getSupabasePublicEnv() {
+  return {
+    supabaseUrl: requireValue("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL),
+    supabaseAnonKey: requireValue("NEXT_PUBLIC_SUPABASE_ANON_KEY", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+  };
+}
+
 export function getServerEnv() {
   return {
     ...getPublicEnv(),
@@ -31,6 +38,13 @@ export function getServerEnv() {
     openaiModel: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
     resendApiKey: requireValue("RESEND_API_KEY", process.env.RESEND_API_KEY),
     resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "no-reply@be-celeb.org",
+  };
+}
+
+export function getSupabaseServerEnv() {
+  return {
+    ...getSupabasePublicEnv(),
+    supabaseServiceRoleKey: requireValue("SUPABASE_SERVICE_ROLE_KEY", process.env.SUPABASE_SERVICE_ROLE_KEY),
   };
 }
 
