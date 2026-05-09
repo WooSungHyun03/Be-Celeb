@@ -1,5 +1,5 @@
 -- Be Celeb Supabase schema
--- Feedback fixed version: non-destructive, idempotent MVP tables
+-- Final feedback fixed version: non-destructive, idempotent MVP tables
 
 create extension if not exists "pgcrypto";
 
@@ -40,6 +40,7 @@ alter table public.profiles alter column nickname set not null;
 create unique index if not exists profiles_nickname_unique_idx on public.profiles(nickname);
 create index if not exists idx_profiles_user_id on public.profiles(user_id);
 create index if not exists idx_profiles_nickname on public.profiles(nickname);
+create index if not exists idx_profiles_instagram_username on public.profiles(instagram_username);
 
 -- 2. Creator profile / onboarding detail
 create table if not exists public.creator_profiles (
@@ -143,6 +144,9 @@ begin
   end if;
 end $$;
 
+-- Validate the favorite target type constraint after adding it.
+alter table public.favorites validate constraint favorites_type_check;
+
 create index if not exists idx_favorites_user_id on public.favorites(user_id);
 create index if not exists idx_favorites_type on public.favorites(type);
 
@@ -163,13 +167,18 @@ create table if not exists public.addresses (
 create index if not exists idx_addresses_user_id on public.addresses(user_id);
 create index if not exists idx_addresses_user_default on public.addresses(user_id, is_default);
 
+-- Guarantees only one default shipping address per user.
+create unique index if not exists addresses_one_default_per_user_idx
+on public.addresses(user_id)
+where is_default = true;
+
 -- 8. Public service contents
 create table if not exists public.service_contents (
   id uuid primary key default gen_random_uuid(),
   section text not null,
   title text not null,
   description text not null,
-  display_order integer not null default 0,
+  sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -177,7 +186,24 @@ create table if not exists public.service_contents (
 
 create unique index if not exists service_contents_section_unique_idx on public.service_contents(section);
 create index if not exists idx_service_contents_section on public.service_contents(section);
+alter table public.service_contents add column if not exists sort_order integer not null default 0;
+
+-- Backfill sort_order from legacy display_order if the older column exists.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'service_contents'
+      and column_name = 'display_order'
+  ) then
+    execute 'update public.service_contents set sort_order = display_order where sort_order = 0 and display_order is not null';
+  end if;
+end $$;
+
 create index if not exists idx_service_contents_active on public.service_contents(is_active);
+create index if not exists idx_service_contents_sort_order on public.service_contents(sort_order);
 
 -- 9. Sample recommendations
 create table if not exists public.sample_recommendations (
@@ -187,6 +213,7 @@ create table if not exists public.sample_recommendations (
   hook text not null,
   hashtags text[] not null default '{}',
   summary text not null,
+  sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -194,7 +221,10 @@ create table if not exists public.sample_recommendations (
 
 create unique index if not exists sample_recommendations_title_unique_idx on public.sample_recommendations(title);
 create index if not exists idx_sample_recommendations_category on public.sample_recommendations(category);
+alter table public.sample_recommendations add column if not exists sort_order integer not null default 0;
+
 create index if not exists idx_sample_recommendations_active on public.sample_recommendations(is_active);
+create index if not exists idx_sample_recommendations_sort_order on public.sample_recommendations(sort_order);
 
 -- 10. Strategy articles
 create table if not exists public.strategy_articles (
@@ -203,11 +233,16 @@ create table if not exists public.strategy_articles (
   title text not null,
   category text not null,
   summary text not null,
-  content text,
+  thumbnail_url text,
+  content text not null,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.strategy_articles add column if not exists thumbnail_url text;
+update public.strategy_articles set content = summary where content is null;
+alter table public.strategy_articles alter column content set not null;
 
 create unique index if not exists strategy_articles_slug_unique_idx on public.strategy_articles(slug);
 create index if not exists idx_strategy_articles_category on public.strategy_articles(category);
@@ -218,12 +253,17 @@ create index if not exists idx_strategy_articles_active on public.strategy_artic
 create table if not exists public.error_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
-  path text,
-  method text,
+  path text not null,
+  method text not null,
   message text not null,
   code text,
   created_at timestamptz not null default now()
 );
+
+update public.error_logs set path = 'unknown' where path is null;
+update public.error_logs set method = 'UNKNOWN' where method is null;
+alter table public.error_logs alter column path set not null;
+alter table public.error_logs alter column method set not null;
 
 create index if not exists idx_error_logs_user_id on public.error_logs(user_id);
 create index if not exists idx_error_logs_created_at on public.error_logs(created_at);

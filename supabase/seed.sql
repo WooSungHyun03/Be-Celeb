@@ -129,7 +129,7 @@ on conflict (name) do update set
   updated_at = now();
 
 insert into public.service_contents (
-  section, title, description, display_order, is_active
+  section, title, description, sort_order, is_active
 ) values
 (
   'hero',
@@ -162,12 +162,12 @@ insert into public.service_contents (
 on conflict (section) do update set
   title = excluded.title,
   description = excluded.description,
-  display_order = excluded.display_order,
+  sort_order = excluded.sort_order,
   is_active = excluded.is_active,
   updated_at = now();
 
 insert into public.sample_recommendations (
-  title, category, hook, hashtags, summary, is_active
+  title, category, hook, hashtags, summary, sort_order, is_active
 ) values
 (
   '출근 전 5분 GRWM',
@@ -175,6 +175,7 @@ insert into public.sample_recommendations (
   '출근 전 5분이면 충분한 데일리 메이크업',
   array['#GRWM', '#데일리메이크업', '#직장인룩'],
   '짧은 준비 과정과 완성 컷을 연결해 저장률을 높이는 콘텐츠입니다.',
+  1,
   true
 ),
 (
@@ -183,6 +184,7 @@ insert into public.sample_recommendations (
   '이 조명 하나로 방 분위기가 달라집니다',
   array['#자취템', '#방꾸미기', '#가성비템'],
   '저렴한 상품을 활용해 Before/After 구성이 가능한 추천 샘플입니다.',
+  2,
   true
 ),
 (
@@ -191,6 +193,7 @@ insert into public.sample_recommendations (
   '처음 운동하는 사람도 따라 할 수 있는 3분 루틴',
   array['#운동루틴', '#홈트', '#운동초보'],
   '진입장벽이 낮은 루틴형 콘텐츠로 반복 시청을 유도합니다.',
+  3,
   true
 ),
 (
@@ -199,6 +202,7 @@ insert into public.sample_recommendations (
   '가방 하나로 완성하는 3가지 데일리룩',
   array['#코디추천', '#데일리룩', '#패션템'],
   '하나의 상품을 여러 스타일로 보여주는 상품 연계형 콘텐츠입니다.',
+  4,
   true
 )
 on conflict (title) do update set
@@ -206,17 +210,19 @@ on conflict (title) do update set
   hook = excluded.hook,
   hashtags = excluded.hashtags,
   summary = excluded.summary,
+  sort_order = excluded.sort_order,
   is_active = excluded.is_active,
   updated_at = now();
 
 insert into public.strategy_articles (
-  slug, title, category, summary, content, is_active
+  slug, title, category, summary, thumbnail_url, content, is_active
 ) values
 (
   'short-form-hook-strategy',
   '숏폼 첫 3초 훅 만드는 법',
   'content_strategy',
   '초반 이탈을 줄이기 위한 질문형/비교형 훅 작성법입니다.',
+  null,
   '첫 3초에는 결과를 먼저 보여주거나 사용자의 문제를 직접 언급하는 방식이 효과적입니다.',
   true
 ),
@@ -225,6 +231,7 @@ insert into public.strategy_articles (
   '트렌드 키워드 고르는 기준',
   'trend',
   '조회수보다 계정 카테고리와의 적합도를 우선하는 전략입니다.',
+  null,
   '모든 트렌드를 따라가기보다 자신의 카테고리와 연결 가능한 키워드를 선택해야 합니다.',
   true
 ),
@@ -233,6 +240,7 @@ insert into public.strategy_articles (
   '상품 추천 콘텐츠 구성법',
   'commerce',
   '상품 소개를 광고처럼 보이지 않게 구성하는 방법입니다.',
+  null,
   '문제 제기, 사용 장면, 결과 비교 순서로 구성하면 자연스럽게 상품 가치를 전달할 수 있습니다.',
   true
 )
@@ -240,6 +248,7 @@ on conflict (slug) do update set
   title = excluded.title,
   category = excluded.category,
   summary = excluded.summary,
+  thumbnail_url = excluded.thumbnail_url,
   content = excluded.content,
   is_active = excluded.is_active,
   updated_at = now();

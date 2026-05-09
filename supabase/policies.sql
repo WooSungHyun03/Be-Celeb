@@ -1,5 +1,5 @@
 -- Be Celeb RLS policies
--- Feedback fixed version
+-- Final feedback fixed version
 
 alter table public.profiles enable row level security;
 alter table public.creator_profiles enable row level security;
