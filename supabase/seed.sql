@@ -1,61 +1,106 @@
--- Be Celeb production seed draft.
--- This seed avoids inserting auth-owned users. Apply user/profile data through Supabase Auth flows.
+-- Be Celeb seed
+-- Auth user seed is intentionally excluded.
 
 insert into public.trends (
   title,
-  description,
+  type,
   category,
-  platforms,
-  score,
-  growth_rate,
-  direction,
-  tags,
-  predicted_peak
+  summary,
+  keywords,
+  hashtags,
+  thumbnail_url
 ) values
 (
-  'AI voice-over daily vlog',
-  'AI narration and captions applied to daily short-form videos.',
-  'ai-video',
-  array['tiktok', 'youtube-shorts'],
-  87,
-  18,
-  'rising',
-  array['ai narration', 'vlog', 'caption'],
-  '2026-06-15'
+  'GRWM 숏폼',
+  'content',
+  'beauty',
+  '준비 과정을 빠르게 보여주는 릴스 트렌드',
+  array['GRWM', '데일리', '메이크업'],
+  array['#GRWM', '#데일리룩'],
+  null
 ),
 (
-  'One-bite mukbang review',
-  'Short food review format centered on one-bite reactions.',
-  'mukbang',
-  array['instagram-reels', 'tiktok'],
-  82,
-  11,
-  'rising',
-  array['mukbang', 'food review', 'quick cut'],
-  '2026-05-28'
+  '카페 브이로그',
+  'content',
+  'lifestyle',
+  '감성 카페 방문과 메뉴 리뷰 중심 콘텐츠',
+  array['카페', '브이로그', '감성'],
+  array['#카페추천', '#브이로그'],
+  null
+),
+(
+  '운동 루틴 공유',
+  'content',
+  'fitness',
+  '짧은 루틴과 변화 과정을 보여주는 콘텐츠',
+  array['운동', '루틴', '챌린지'],
+  array['#운동루틴', '#헬스'],
+  null
+),
+(
+  '가성비 패션템',
+  'product',
+  'fashion',
+  '저렴하지만 활용도 높은 패션 아이템 소개',
+  array['패션', '가성비', '코디'],
+  array['#패션템', '#코디추천'],
+  null
+),
+(
+  '자취 꿀템',
+  'product',
+  'living',
+  '자취생에게 유용한 생활용품 소개',
+  array['자취', '생활용품', '꿀템'],
+  array['#자취템', '#생활꿀템'],
+  null
 );
 
-insert into public.trend_rules (
+insert into public.products (
   name,
-  rule_type,
   category,
-  platform,
-  weight,
+  price,
+  image_url,
+  purchase_url,
   description
 ) values
 (
-  'AI video production process boost',
-  'category-fit',
-  'ai-video',
+  '미니 LED 조명',
+  'living',
+  12900,
   null,
-  1.25,
-  'AI 영상 계정에는 제작 과정, before/after, 프롬프트 공개 포맷을 우선 추천한다.'
+  null,
+  '숏폼 촬영용 감성 조명'
 ),
 (
-  'TikTok repeatable hook boost',
-  'platform-fit',
+  '데일리 크로스백',
+  'fashion',
+  24900,
   null,
-  'tiktok',
-  1.10,
-  'TikTok에서는 반복 가능한 훅과 챌린지성을 우선 평가한다.'
+  null,
+  '코디 콘텐츠에 활용하기 좋은 가방'
+),
+(
+  '무선 삼각대',
+  'camera',
+  18900,
+  null,
+  null,
+  '릴스와 쇼츠 촬영용 기본 장비'
+),
+(
+  '틴트 립밤',
+  'beauty',
+  9900,
+  null,
+  null,
+  'GRWM 콘텐츠에 적합한 뷰티 아이템'
+),
+(
+  '데스크 정리함',
+  'living',
+  15900,
+  null,
+  null,
+  '방꾸미기/자취 콘텐츠용 소품'
 );

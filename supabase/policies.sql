@@ -1,73 +1,64 @@
--- Be Celeb RLS policy draft.
--- TODO: Review with the team before production launch, especially admin/service-role flows.
+-- Be Celeb RLS policies
+-- Priority 1 MVP tables
 
-alter table public.users enable row level security;
-alter table public.user_profiles enable row level security;
+alter table public.profiles enable row level security;
+alter table public.creator_profiles enable row level security;
+alter table public.user_plans enable row level security;
 alter table public.trends enable row level security;
-alter table public.trend_rules enable row level security;
-alter table public.recommendations enable row level security;
-alter table public.saved_recommendations enable row level security;
+alter table public.products enable row level security;
+alter table public.favorites enable row level security;
 
-create policy "Users can read own user row"
-on public.users
-for select
-using (auth.uid() = id);
-
-create policy "Users can update own user row"
-on public.users
-for update
-using (auth.uid() = id)
-with check (auth.uid() = id);
-
-create policy "Users can read own profile"
-on public.user_profiles
-for select
+create policy "profiles_select_own"
+on public.profiles for select
 using (auth.uid() = user_id);
 
-create policy "Users can insert own profile"
-on public.user_profiles
-for insert
+create policy "profiles_insert_own"
+on public.profiles for insert
 with check (auth.uid() = user_id);
 
-create policy "Users can update own profile"
-on public.user_profiles
-for update
+create policy "profiles_update_own"
+on public.profiles for update
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
-create policy "Authenticated users can read trends"
-on public.trends
-for select
-to authenticated
-using (true);
+create policy "creator_profiles_select_own"
+on public.creator_profiles for select
+using (auth.uid() = user_id);
 
-create policy "Authenticated users can read active trend rules"
-on public.trend_rules
-for select
-to authenticated
+create policy "creator_profiles_insert_own"
+on public.creator_profiles for insert
+with check (auth.uid() = user_id);
+
+create policy "creator_profiles_update_own"
+on public.creator_profiles for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "user_plans_select_own"
+on public.user_plans for select
+using (auth.uid() = user_id);
+
+create policy "trends_select_active"
+on public.trends for select
 using (is_active = true);
 
-create policy "Users can read own recommendations"
-on public.recommendations
-for select
+create policy "products_select_active"
+on public.products for select
+using (is_active = true);
+
+create policy "favorites_select_own"
+on public.favorites for select
 using (auth.uid() = user_id);
 
-create policy "Users can insert own recommendations"
-on public.recommendations
-for insert
+create policy "favorites_insert_own"
+on public.favorites for insert
 with check (auth.uid() = user_id);
 
-create policy "Users can read own saved recommendations"
-on public.saved_recommendations
-for select
-using (auth.uid() = user_id);
-
-create policy "Users can save own recommendations"
-on public.saved_recommendations
-for insert
+create policy "favorites_update_own"
+on public.favorites for update
+using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
-create policy "Users can delete own saved recommendations"
-on public.saved_recommendations
-for delete
+create policy "favorites_delete_own"
+on public.favorites for delete
 using (auth.uid() = user_id);
