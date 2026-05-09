@@ -1,5 +1,5 @@
 -- Be Celeb RLS policies
--- Priority 1 MVP tables
+-- Feedback fixed version
 
 alter table public.profiles enable row level security;
 alter table public.creator_profiles enable row level security;
@@ -7,58 +7,146 @@ alter table public.user_plans enable row level security;
 alter table public.trends enable row level security;
 alter table public.products enable row level security;
 alter table public.favorites enable row level security;
+alter table public.addresses enable row level security;
+alter table public.service_contents enable row level security;
+alter table public.sample_recommendations enable row level security;
+alter table public.strategy_articles enable row level security;
+alter table public.error_logs enable row level security;
+alter table public.not_found_logs enable row level security;
 
-create policy "profiles_select_own"
-on public.profiles for select
-using (auth.uid() = user_id);
+-- profiles
+DROP POLICY IF EXISTS "profiles_select_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
 
-create policy "profiles_insert_own"
-on public.profiles for insert
-with check (auth.uid() = user_id);
+CREATE POLICY "profiles_select_own"
+ON public.profiles FOR SELECT
+USING (auth.uid() = user_id);
 
-create policy "profiles_update_own"
-on public.profiles for update
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+CREATE POLICY "profiles_insert_own"
+ON public.profiles FOR INSERT
+WITH CHECK (auth.uid() = user_id);
 
-create policy "creator_profiles_select_own"
-on public.creator_profiles for select
-using (auth.uid() = user_id);
+CREATE POLICY "profiles_update_own"
+ON public.profiles FOR UPDATE
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
 
-create policy "creator_profiles_insert_own"
-on public.creator_profiles for insert
-with check (auth.uid() = user_id);
+-- creator_profiles
+DROP POLICY IF EXISTS "creator_profiles_select_own" ON public.creator_profiles;
+DROP POLICY IF EXISTS "creator_profiles_insert_own" ON public.creator_profiles;
+DROP POLICY IF EXISTS "creator_profiles_update_own" ON public.creator_profiles;
 
-create policy "creator_profiles_update_own"
-on public.creator_profiles for update
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+CREATE POLICY "creator_profiles_select_own"
+ON public.creator_profiles FOR SELECT
+USING (auth.uid() = user_id);
 
-create policy "user_plans_select_own"
-on public.user_plans for select
-using (auth.uid() = user_id);
+CREATE POLICY "creator_profiles_insert_own"
+ON public.creator_profiles FOR INSERT
+WITH CHECK (auth.uid() = user_id);
 
-create policy "trends_select_active"
-on public.trends for select
-using (is_active = true);
+CREATE POLICY "creator_profiles_update_own"
+ON public.creator_profiles FOR UPDATE
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
 
-create policy "products_select_active"
-on public.products for select
-using (is_active = true);
+-- user_plans: users can read only their own plan. Mutation is reserved for service role.
+DROP POLICY IF EXISTS "user_plans_select_own" ON public.user_plans;
 
-create policy "favorites_select_own"
-on public.favorites for select
-using (auth.uid() = user_id);
+CREATE POLICY "user_plans_select_own"
+ON public.user_plans FOR SELECT
+USING (auth.uid() = user_id);
 
-create policy "favorites_insert_own"
-on public.favorites for insert
-with check (auth.uid() = user_id);
+-- favorites
+DROP POLICY IF EXISTS "favorites_select_own" ON public.favorites;
+DROP POLICY IF EXISTS "favorites_insert_own" ON public.favorites;
+DROP POLICY IF EXISTS "favorites_update_own" ON public.favorites;
+DROP POLICY IF EXISTS "favorites_delete_own" ON public.favorites;
 
-create policy "favorites_update_own"
-on public.favorites for update
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+CREATE POLICY "favorites_select_own"
+ON public.favorites FOR SELECT
+USING (auth.uid() = user_id);
 
-create policy "favorites_delete_own"
-on public.favorites for delete
-using (auth.uid() = user_id);
+CREATE POLICY "favorites_insert_own"
+ON public.favorites FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "favorites_update_own"
+ON public.favorites FOR UPDATE
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "favorites_delete_own"
+ON public.favorites FOR DELETE
+USING (auth.uid() = user_id);
+
+-- addresses
+DROP POLICY IF EXISTS "addresses_select_own" ON public.addresses;
+DROP POLICY IF EXISTS "addresses_insert_own" ON public.addresses;
+DROP POLICY IF EXISTS "addresses_update_own" ON public.addresses;
+DROP POLICY IF EXISTS "addresses_delete_own" ON public.addresses;
+
+CREATE POLICY "addresses_select_own"
+ON public.addresses FOR SELECT
+USING (auth.uid() = user_id);
+
+CREATE POLICY "addresses_insert_own"
+ON public.addresses FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "addresses_update_own"
+ON public.addresses FOR UPDATE
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "addresses_delete_own"
+ON public.addresses FOR DELETE
+USING (auth.uid() = user_id);
+
+-- Public content tables: readable by anon/authenticated when active.
+DROP POLICY IF EXISTS "trends_select_active" ON public.trends;
+DROP POLICY IF EXISTS "products_select_active" ON public.products;
+DROP POLICY IF EXISTS "service_contents_select_active" ON public.service_contents;
+DROP POLICY IF EXISTS "sample_recommendations_select_active" ON public.sample_recommendations;
+DROP POLICY IF EXISTS "strategy_articles_select_active" ON public.strategy_articles;
+
+CREATE POLICY "trends_select_active"
+ON public.trends FOR SELECT
+USING (is_active = true);
+
+CREATE POLICY "products_select_active"
+ON public.products FOR SELECT
+USING (is_active = true);
+
+CREATE POLICY "service_contents_select_active"
+ON public.service_contents FOR SELECT
+USING (is_active = true);
+
+CREATE POLICY "sample_recommendations_select_active"
+ON public.sample_recommendations FOR SELECT
+USING (is_active = true);
+
+CREATE POLICY "strategy_articles_select_active"
+ON public.strategy_articles FOR SELECT
+USING (is_active = true);
+
+-- Logs: allow insert only. No select policy is defined until admin role is implemented.
+DROP POLICY IF EXISTS "error_logs_insert" ON public.error_logs;
+DROP POLICY IF EXISTS "not_found_logs_insert" ON public.not_found_logs;
+
+CREATE POLICY "error_logs_insert"
+ON public.error_logs FOR INSERT
+WITH CHECK (true);
+
+CREATE POLICY "not_found_logs_insert"
+ON public.not_found_logs FOR INSERT
+WITH CHECK (true);
+
+-- Explicit grants for Supabase anon/authenticated roles.
+GRANT SELECT ON public.trends TO anon, authenticated;
+GRANT SELECT ON public.products TO anon, authenticated;
+GRANT SELECT ON public.service_contents TO anon, authenticated;
+GRANT SELECT ON public.sample_recommendations TO anon, authenticated;
+GRANT SELECT ON public.strategy_articles TO anon, authenticated;
+GRANT INSERT ON public.error_logs TO anon, authenticated;
+GRANT INSERT ON public.not_found_logs TO anon, authenticated;
