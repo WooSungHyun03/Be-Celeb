@@ -47,6 +47,28 @@ async function deleteAuthUserAfterSignupFailure(userId: string, request: Request
   });
 }
 
+function getNicknameLookupFailureMessage(error: { code?: string; message?: string }) {
+  const message = error.message?.toLowerCase() ?? "";
+
+  if (error.code === "42P01" || message.includes("relation") || message.includes("does not exist")) {
+    return "Supabase profiles table is not ready in production.";
+  }
+
+  if (error.code === "42703" || message.includes("column")) {
+    return "Supabase profiles.nickname column is not ready in production.";
+  }
+
+  if (error.code === "42501" || message.includes("permission denied")) {
+    return "Supabase profile lookup permission is not configured.";
+  }
+
+  if (message.includes("invalid api key") || message.includes("jwt")) {
+    return "Supabase service role key is not configured correctly.";
+  }
+
+  return "Failed to check nickname availability. Check Supabase environment variables and production schema.";
+}
+
 export async function POST(request: Request) {
   try {
     const body = await readJsonObject(request);
@@ -122,7 +144,7 @@ export async function POST(request: Request) {
         message: `Signup nickname lookup failed: ${nicknameLookupError.message}`,
       });
 
-      return apiError("Failed to check nickname availability.", "SUPABASE_ERROR", 500);
+      return apiError(getNicknameLookupFailureMessage(nicknameLookupError), "SUPABASE_ERROR", 500);
     }
 
     if (existingNickname) {
