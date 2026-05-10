@@ -111,6 +111,17 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (nicknameLookupError) {
+      console.error("[signup] nickname lookup failed", {
+        code: nicknameLookupError.code,
+        message: nicknameLookupError.message,
+      });
+
+      await logApiError({
+        request,
+        code: "SUPABASE_ERROR",
+        message: `Signup nickname lookup failed: ${nicknameLookupError.message}`,
+      });
+
       return apiError("Failed to check nickname availability.", "SUPABASE_ERROR", 500);
     }
 
