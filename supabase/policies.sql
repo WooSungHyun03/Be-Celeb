@@ -181,6 +181,7 @@ USING (auth.uid() = user_id);
 
 
 -- Explicit grants for Supabase anon/authenticated roles.
+
 GRANT SELECT ON public.trends TO anon, authenticated;
 GRANT SELECT ON public.products TO anon, authenticated;
 GRANT SELECT ON public.service_contents TO anon, authenticated;

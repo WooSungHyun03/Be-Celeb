@@ -331,6 +331,7 @@ on conflict (username) do update set
   follower_count = excluded.follower_count;
 
 
+
 -- =========================================================
 -- 7. Reels Seed Data
 -- mock 릴스 분석 데이터

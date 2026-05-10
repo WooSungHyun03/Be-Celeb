@@ -397,6 +397,7 @@ create trigger set_strategy_articles_updated_at
 before update on public.strategy_articles
 for each row execute function public.set_updated_at();
 
+
 -- Auth signup handler
 -- Creates default app rows when a new Supabase Auth user is created.
 
