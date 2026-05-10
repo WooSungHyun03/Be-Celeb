@@ -48,6 +48,12 @@ export function getSupabaseServerEnv() {
   };
 }
 
+export function getSiteUrlEnv() {
+  return {
+    siteUrl: requireValue("NEXT_PUBLIC_SITE_URL", process.env.NEXT_PUBLIC_SITE_URL),
+  };
+}
+
 export function getOpenAiEnv() {
   return {
     apiKey: requireValue("OPENAI_API_KEY", process.env.OPENAI_API_KEY),

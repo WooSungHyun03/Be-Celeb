@@ -1,10 +1,25 @@
-import { apiError, apiException, apiSuccess } from "@/lib/api/responses";
+import { apiError, apiException, apiSuccess } from "@/app/api/_utils/api";
+import { getAuthProvider, getAuthProviderUnavailableMessage } from "@/lib/config/auth-provider";
+import { clearDevAuthCookie } from "@/lib/config/dev-auth-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const provider = getAuthProvider();
+
+    if (provider === "unavailable") {
+      return apiError(getAuthProviderUnavailableMessage(), "AUTH_PROVIDER_UNAVAILABLE", 503);
+    }
+
+    if (provider === "json") {
+      const response = apiSuccess(null);
+      clearDevAuthCookie(response);
+      return response;
+    }
+
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
@@ -23,6 +38,6 @@ export async function POST() {
 
     return apiSuccess(null);
   } catch (error) {
-    return apiException(error);
+    return apiException(error, request);
   }
 }

@@ -1,11 +1,64 @@
-﻿// Renders the signup page.
+"use client";
+
+// Renders the signup page and connects it to the auth API.
+import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
 
+type ApiErrorResponse = {
+  success: false;
+  message?: string;
+  code?: string;
+};
+
 export default function SignupPage() {
+  const router = useRouter();
+  const [nickname, setNickname] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+
+    if (password !== confirmPassword) {
+      setStatus("error");
+      setMessage("비밀번호가 서로 일치하지 않아요.");
+      return;
+    }
+
+    setStatus("loading");
+
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, nickname }),
+      });
+      const payload: unknown = await response.json();
+
+      if (!response.ok) {
+        const error = payload as ApiErrorResponse;
+        setStatus("error");
+        setMessage(error.message ?? "회원가입에 실패했어요.");
+        return;
+      }
+
+      router.push(ROUTES.dashboard);
+      router.refresh();
+    } catch {
+      setStatus("error");
+      setMessage("회원가입에 실패했어요. 잠시 후 다시 시도해주세요.");
+    }
+  }
+
   return (
     <div className="mx-auto flex min-h-[760px] max-w-7xl items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
       <div className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/70 lg:grid-cols-[0.92fr_1.08fr]">
@@ -29,9 +82,7 @@ export default function SignupPage() {
           <div className="mb-8 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             {["계정 생성", "관심사 설정", "추천 보드 확인"].map((item, index) => (
               <div className="flex items-center gap-3" key={item}>
-                <span className="flex size-8 items-center justify-center rounded-full bg-violet-600 text-xs font-black text-white shadow-sm">
-                  {index + 1}
-                </span>
+                <span className="flex size-8 items-center justify-center rounded-full bg-violet-600 text-xs font-black text-white shadow-sm">{index + 1}</span>
                 <span className="text-sm font-bold">{item}</span>
               </div>
             ))}
@@ -51,22 +102,25 @@ export default function SignupPage() {
             <p className="mt-3 text-sm leading-6 text-slate-500">계정을 만들고 나에게 맞는 콘텐츠 추천을 바로 시작하세요.</p>
           </div>
 
-          <form className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+          <form className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6" onSubmit={handleSubmit}>
             <div className="space-y-4">
-              <Input label="Name" placeholder="BE CELEB" />
-              <Input label="Email" placeholder="you@example.com" type="email" />
-              <Input label="Password" placeholder="8자 이상" type="password" />
-              <Input label="Confirm Password" placeholder="비밀번호 확인" type="password" />
-              <Button className="min-h-11 w-full bg-violet-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_12px_22px_rgba(124,58,237,0.20)] hover:bg-violet-700" type="button">
-                회원가입
+              <Input autoComplete="nickname" label="Nickname" minLength={2} onChange={(event) => setNickname(event.target.value)} placeholder="BE CELEB" required value={nickname} />
+              <Input autoComplete="email" label="Email" onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required type="email" value={email} />
+              <Input autoComplete="new-password" label="Password" minLength={8} onChange={(event) => setPassword(event.target.value)} placeholder="8자 이상" required type="password" value={password} />
+              <Input autoComplete="new-password" label="Confirm Password" minLength={8} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="비밀번호 확인" required type="password" value={confirmPassword} />
+              {message ? <p className="text-sm font-medium text-rose-600">{message}</p> : null}
+              <Button
+                className="min-h-11 w-full bg-violet-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_12px_22px_rgba(124,58,237,0.20)] hover:bg-violet-700"
+                disabled={status === "loading"}
+                type="submit"
+              >
+                {status === "loading" ? "가입 중..." : "회원가입"}
               </Button>
             </div>
 
             <p className="mt-5 text-center text-sm text-slate-500">
               이미 계정이 있나요?{" "}
-              <Link href={ROUTES.login} className="font-semibold text-ink hover:underline">
-                로그인
-              </Link>
+              <Link href={ROUTES.login} className="font-semibold text-ink hover:underline">로그인</Link>
             </p>
           </form>
         </section>
