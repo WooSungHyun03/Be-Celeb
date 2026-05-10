@@ -53,7 +53,7 @@ const risingTopics = [
 const reelRecommendations = [
   {
     title: "30분 만에 콘텐츠 기획하는 방법",
-    image: "bg-[linear-gradient(135deg,#dbeafe,#fbcfe8)]",
+    image: "desk",
     badge: "추천 릴스",
     creator: "콘텐츠 메이커",
     stats: "예상 도달 12.4K",
@@ -61,7 +61,7 @@ const reelRecommendations = [
   },
   {
     title: "콘텐츠 크리에이터의 하루",
-    image: "bg-[linear-gradient(135deg,#c4b5fd,#fed7aa)]",
+    image: "studio",
     badge: "추천 릴스",
     creator: "릴스 분석 계정",
     stats: "참여율 9.8%",
@@ -69,7 +69,7 @@ const reelRecommendations = [
   },
   {
     title: "시간을 아껴주는 필수 앱 5가지",
-    image: "bg-[linear-gradient(135deg,#bfdbfe,#fde68a)]",
+    image: "phone",
     badge: "추천 릴스",
     creator: "생산성 크리에이터",
     stats: "저장률 높음",
@@ -80,22 +80,22 @@ const reelRecommendations = [
 const growthCards = [
   {
     title: "데이터 기반 인사이트",
-    description: "명확한 데이터로 트렌드를 발견하고 아이디어를 얻으세요.",
+    descriptionLines: ["명확한 데이터로 트렌드를", "발견하고 아이디어를 얻으세요."],
     icon: "chart",
   },
   {
     title: "참여율 향상",
-    description: "반응을 이끄는 콘텐츠로 참여율을 높여보세요.",
+    descriptionLines: ["반응을 이끄는 콘텐츠로", "참여율을 높여보세요."],
     icon: "heart",
   },
   {
     title: "꾸준한 콘텐츠 기획",
-    description: "아이디어가 끊기지 않는 콘텐츠 플랜을 세워보세요.",
+    descriptionLines: ["아이디어가 끊기지 않는", "콘텐츠 플랜을 세워보세요."],
     icon: "calendar",
   },
   {
     title: "더 빠른 성장",
-    description: "올바른 전략으로 더 많은 도달과 성장을 경험하세요.",
+    descriptionLines: ["올바른 전략으로 도달과", "성장을 빠르게 경험하세요."],
     icon: "rocket",
   },
 ];
@@ -258,12 +258,16 @@ function TrendInsightSection() {
 
 function GrowthIcon({ type }: { type: string }) {
   return (
-    <span className="relative inline-flex size-16 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
-      <svg aria-hidden="true" className="size-9" fill="none" viewBox="0 0 32 32">
+    <span className="relative inline-flex h-20 w-full items-center justify-center overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_35%_20%,#ffffff_0%,#ffffff_18%,transparent_19%),linear-gradient(135deg,#ede9fe_0%,#fce7f3_100%)] text-violet-600">
+      <span className="absolute left-5 top-5 size-3 rounded-full bg-violet-300/60" />
+      <span className="absolute right-6 top-4 size-2 rounded-full bg-pink-300/70" />
+      <span className="absolute bottom-4 left-9 h-2 w-9 rounded-full bg-violet-300/40" />
+      <svg aria-hidden="true" className="relative size-12" fill="none" viewBox="0 0 32 32">
         {type === "chart" ? (
           <>
             <rect fill="white" height="20" rx="4" width="24" x="4" y="6" />
             <path d="M9 21V15M16 21V10M23 21v-8" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
+            <path d="M7 10h18" stroke="#f0abfc" strokeLinecap="round" strokeWidth="2" />
           </>
         ) : null}
         {type === "heart" ? (
@@ -290,15 +294,50 @@ function GrowthIcon({ type }: { type: string }) {
   );
 }
 
+function ReelThumbnail({ type }: { type: string }) {
+  return (
+    <div className="relative h-[112px] w-[78px] shrink-0 overflow-hidden rounded-xl bg-slate-100 shadow-inner">
+      {type === "desk" ? (
+        <div className="absolute inset-0 bg-[linear-gradient(145deg,#fde68a_0%,#fed7aa_42%,#bfdbfe_100%)]">
+          <div className="absolute bottom-3 left-3 h-16 w-11 rotate-[-12deg] rounded-lg bg-white shadow-lg">
+            <div className="mx-auto mt-2 h-9 w-7 rounded bg-[linear-gradient(180deg,#334155,#94a3b8)]" />
+            <div className="mx-auto mt-1 h-1 w-6 rounded bg-slate-200" />
+          </div>
+          <div className="absolute right-2 top-3 size-7 rounded-full bg-white/80" />
+          <div className="absolute right-3 top-4 size-4 rounded-full bg-violet-400" />
+        </div>
+      ) : null}
+      {type === "studio" ? (
+        <div className="absolute inset-0 bg-[linear-gradient(145deg,#ddd6fe_0%,#fed7aa_100%)]">
+          <div className="absolute left-5 top-4 h-20 w-9 rounded-full bg-slate-800" />
+          <div className="absolute left-8 top-2 h-10 w-10 rounded-xl bg-white shadow-md" />
+          <div className="absolute bottom-3 right-3 h-16 w-5 rounded bg-slate-700" />
+          <div className="absolute bottom-5 left-3 h-8 w-8 rounded-full bg-violet-400" />
+        </div>
+      ) : null}
+      {type === "phone" ? (
+        <div className="absolute inset-0 bg-[linear-gradient(145deg,#fef3c7_0%,#bfdbfe_100%)]">
+          <div className="absolute left-5 top-4 h-20 w-11 rotate-[-10deg] rounded-xl border-2 border-slate-300 bg-white shadow-lg">
+            <div className="mx-auto mt-2 h-1 w-4 rounded bg-slate-300" />
+            <div className="mx-auto mt-3 h-8 w-7 rounded bg-[linear-gradient(180deg,#93c5fd,#ddd6fe)]" />
+            <div className="mx-auto mt-2 h-1.5 w-7 rounded bg-violet-200" />
+          </div>
+          <div className="absolute right-2 top-5 size-5 rounded-full bg-white/75" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ReelRecommendationCard({ item }: { item: (typeof reelRecommendations)[number] }) {
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-100">
+    <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-100 transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex gap-3">
-        <div className={`h-28 w-20 shrink-0 rounded-xl ${item.image}`} />
+        <ReelThumbnail type={item.image} />
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-start justify-between gap-2">
             <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-extrabold text-violet-600">{item.badge}</span>
-            <span className="text-slate-400">♡</span>
+            <span className="text-sm text-slate-400">♡</span>
           </div>
           <h3 className="line-clamp-2 text-sm font-extrabold leading-5 text-ink">{item.title}</h3>
           <p className="mt-2 text-[11px] font-bold text-slate-500">{item.creator}</p>
@@ -320,10 +359,10 @@ function ReelGrowthSection() {
   return (
     <section className="border-b border-slate-100 bg-white">
       <div className="mx-auto max-w-7xl px-4 pb-14 sm:px-6 lg:px-8">
-        <div className="mb-5 flex items-end justify-between gap-4">
+        <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-ink">나에게 맞는 릴스 추천</h2>
-            <p className="mt-2 text-sm font-medium leading-6 text-slate-500">
+            <h2 className="text-[22px] font-black tracking-tight text-ink">나에게 맞는 릴스 추천</h2>
+            <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
               내 관심사와 최근 트렌드를 바탕으로 추천받은 콘텐츠 아이디어
             </p>
           </div>
@@ -338,12 +377,14 @@ function ReelGrowthSection() {
           ))}
         </div>
 
-        <div className="mt-8 grid gap-5 lg:grid-cols-[0.72fr_1.28fr] lg:items-center">
+        <div className="mt-8 grid gap-5 lg:grid-cols-[0.68fr_1.32fr] lg:items-center">
           <div>
-            <h2 className="text-3xl font-black leading-tight tracking-tight text-ink">
+            <h2 className="text-[30px] font-black leading-tight tracking-tight text-ink xl:text-[32px]">
               더 똑똑하게
               <br />
-              <span className="bg-[linear-gradient(90deg,#7c3aed_0%,#ec4899_100%)] bg-clip-text text-transparent">인스타그램을 성장</span>시키세요
+              <span className="whitespace-nowrap">
+                <span className="bg-[linear-gradient(90deg,#7c3aed_0%,#ec4899_100%)] bg-clip-text text-transparent">인스타그램을 성장</span>시키세요
+              </span>
             </h2>
             <p className="mt-4 max-w-md text-sm font-medium leading-6 text-slate-500">
               데이터 기반 인사이트로 더 좋은 콘텐츠를 만들고, 맞는 타겟에게 도달하고, 꾸준히 성장하세요.
@@ -355,10 +396,16 @@ function ReelGrowthSection() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {growthCards.map((card) => (
-              <article className="min-h-[190px] rounded-2xl bg-[linear-gradient(180deg,#fdf4ff_0%,#f5f3ff_100%)] p-5 text-center shadow-sm shadow-violet-100" key={card.title}>
+              <article className="flex min-h-[210px] flex-col rounded-2xl bg-[linear-gradient(180deg,#fff7ff_0%,#f7f2ff_100%)] p-4 text-center shadow-sm shadow-violet-100" key={card.title}>
                 <GrowthIcon type={card.icon} />
-                <h3 className="mt-5 text-sm font-extrabold text-ink">{card.title}</h3>
-                <p className="mx-auto mt-2 max-w-[10rem] text-xs font-medium leading-5 text-slate-500">{card.description}</p>
+                <h3 className="mt-4 min-h-5 whitespace-nowrap text-[12.5px] font-extrabold text-ink">{card.title}</h3>
+                <p className="mx-auto mt-2 min-h-[36px] text-[10.5px] font-medium leading-[1.7] text-slate-500">
+                  {card.descriptionLines.map((line) => (
+                    <span className="block whitespace-nowrap" key={line}>
+                      {line}
+                    </span>
+                  ))}
+                </p>
               </article>
             ))}
           </div>
