@@ -2,6 +2,11 @@
 -- Auth user seed is intentionally excluded.
 -- Seed data uses unique keys + upsert to avoid duplicates when re-run.
 
+
+-- =========================================================
+-- 1. Trends Seed Data
+-- 인기 트렌드 / 메인 트렌드 영역
+-- =========================================================
 insert into public.trends (
   title, type, category, summary, score, keywords, hashtags, thumbnail_url, is_active
 ) values
@@ -71,6 +76,10 @@ on conflict (title) do update set
   is_active = excluded.is_active,
   updated_at = now();
 
+-- =========================================================
+-- 2. Products Seed Data
+-- 추천 상품 / 쇼핑 연동용 mock 데이터
+-- =========================================================
 insert into public.products (
   name, category, price, image_url, purchase_url, description, is_active
 ) values
@@ -128,6 +137,11 @@ on conflict (name) do update set
   is_active = excluded.is_active,
   updated_at = now();
 
+
+-- =========================================================
+-- 3. Service Contents Seed Data
+-- 메인페이지 소개 섹션
+-- =========================================================
 insert into public.service_contents (
   section, title, description, sort_order, is_active
 ) values
@@ -166,6 +180,11 @@ on conflict (section) do update set
   is_active = excluded.is_active,
   updated_at = now();
 
+
+-- =========================================================
+-- 4. Sample Recommendations Seed Data
+-- 추천 결과 예시 mock 데이터
+-- =========================================================
 insert into public.sample_recommendations (
   title, category, hook, hashtags, summary, sort_order, is_active
 ) values
@@ -214,6 +233,11 @@ on conflict (title) do update set
   is_active = excluded.is_active,
   updated_at = now();
 
+
+-- =========================================================
+-- 5. Strategy Articles Seed Data
+-- 공략글 / 콘텐츠 전략 게시글
+-- =========================================================
 insert into public.strategy_articles (
   slug, title, category, summary, thumbnail_url, content, is_active
 ) values
@@ -252,3 +276,108 @@ on conflict (slug) do update set
   content = excluded.content,
   is_active = excluded.is_active,
   updated_at = now();
+
+
+-- =========================================================
+-- 6. Influencers Seed Data
+-- mock 인플루언서 데이터
+-- =========================================================
+insert into public.influencers (
+  username,
+  category,
+  keywords,
+  hashtags,
+  follower_count
+) values
+(
+  'daily_mood.creator',
+  'lifestyle',
+  array['일상', '감성', '브이로그'],
+  array['#일상', '#브이로그', '#감성릴스'],
+  125000
+),
+(
+  'fit.shortform',
+  'fitness',
+  array['운동', '루틴', '챌린지'],
+  array['#운동루틴', '#헬스', '#챌린지'],
+  98000
+),
+(
+  'beauty.grwm',
+  'beauty',
+  array['GRWM', '메이크업', '뷰티'],
+  array['#GRWM', '#메이크업', '#뷰티팁'],
+  210000
+),
+(
+  'minimal.look',
+  'fashion',
+  array['패션', '코디', '미니멀'],
+  array['#데일리룩', '#코디추천', '#미니멀룩'],
+  173000
+),
+(
+  'home.cafe.life',
+  'living',
+  array['자취', '홈카페', '생활템'],
+  array['#홈카페', '#자취템', '#생활꿀템'],
+  86000
+)
+on conflict (username) do update set
+  category = excluded.category,
+  keywords = excluded.keywords,
+  hashtags = excluded.hashtags,
+  follower_count = excluded.follower_count;
+
+
+-- =========================================================
+-- 7. Reels Seed Data
+-- mock 릴스 분석 데이터
+-- =========================================================
+insert into public.reels (
+  influencer_id,
+  title,
+  topic,
+  format,
+  hook,
+  hashtags,
+  views,
+  likes,
+  comments,
+  saves
+)
+select
+  i.id,
+  r.title,
+  r.topic,
+  r.format,
+  r.hook,
+  r.hashtags,
+  r.views,
+  r.likes,
+  r.comments,
+  r.saves
+from (
+  values
+  ('daily_mood.creator', '퇴근 후 감성 루틴', 'evening routine', 'vlog', '퇴근 후 30분만에 분위기 바꾸는 법', array['#퇴근루틴', '#브이로그'], 320000, 18400, 290, 4200),
+  ('daily_mood.creator', '주말 카페 기록', 'cafe vlog', 'vlog', '요즘 저장 많은 카페 감성 컷', array['#카페추천', '#감성카페'], 210000, 12400, 180, 3100),
+  ('fit.shortform', '하루 10분 복근 루틴', 'workout routine', 'tutorial', '매일 10분만 따라하면 되는 루틴', array['#복근운동', '#홈트'], 540000, 32800, 760, 8900),
+  ('fit.shortform', '운동 전 스트레칭', 'stretching', 'tutorial', '운동 전 부상 줄이는 5가지 동작', array['#스트레칭', '#운동팁'], 260000, 14300, 210, 3900),
+  ('beauty.grwm', '5분 데일리 메이크업', 'daily makeup', 'grwm', '늦잠 잔 날에도 가능한 5분 메이크업', array['#GRWM', '#데일리메이크업'], 710000, 58200, 980, 12400),
+  ('beauty.grwm', '요즘 쓰는 립 조합', 'beauty item', 'review', '댓글에서 제일 많이 물어본 립 조합', array['#립추천', '#뷰티템'], 430000, 27100, 640, 7500),
+  ('minimal.look', '검정 슬랙스 코디 3가지', 'fashion styling', 'lookbook', '하나로 돌려입는 출근룩 3가지', array['#출근룩', '#슬랙스코디'], 390000, 21800, 350, 6200),
+  ('minimal.look', '봄 미니멀룩 추천', 'season fashion', 'lookbook', '깔끔하게 입고 싶을 때 이 조합', array['#미니멀룩', '#봄코디'], 280000, 16900, 260, 4700),
+  ('home.cafe.life', '자취방 홈카페 세팅', 'home cafe', 'before_after', '만원대로 홈카페 분위기 만드는 법', array['#홈카페', '#자취방꾸미기'], 350000, 20300, 410, 6800),
+  ('home.cafe.life', '책상 정리 꿀템', 'living item', 'review', '작은 방 책상 정리할 때 꼭 필요한 것', array['#생활꿀템', '#자취템'], 190000, 9800, 150, 2900)
+) as r(username, title, topic, format, hook, hashtags, views, likes, comments, saves)
+join public.influencers i on i.username = r.username
+on conflict (influencer_id, title) do update set
+  topic = excluded.topic,
+  format = excluded.format,
+  hook = excluded.hook,
+  hashtags = excluded.hashtags,
+  views = excluded.views,
+  likes = excluded.likes,
+  comments = excluded.comments,
+  saves = excluded.saves;

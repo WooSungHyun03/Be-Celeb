@@ -13,6 +13,12 @@ alter table public.sample_recommendations enable row level security;
 alter table public.strategy_articles enable row level security;
 alter table public.error_logs enable row level security;
 alter table public.not_found_logs enable row level security;
+alter table public.influencers enable row level security;
+alter table public.reels enable row level security;
+alter table public.recommendation_requests enable row level security;
+alter table public.recommendations enable row level security;
+
+
 
 -- profiles
 DROP POLICY IF EXISTS "profiles_select_own" ON public.profiles;
@@ -141,6 +147,27 @@ WITH CHECK (true);
 CREATE POLICY "not_found_logs_insert"
 ON public.not_found_logs FOR INSERT
 WITH CHECK (true);
+
+create policy "influencers_select_public"
+on public.influencers for select
+using (true);
+
+create policy "reels_select_public"
+on public.reels for select
+using (true);
+
+create policy "recommendation_requests_select_own"
+on public.recommendation_requests for select
+using (auth.uid() = user_id);
+
+create policy "recommendation_requests_insert_own"
+on public.recommendation_requests for insert
+with check (auth.uid() = user_id);
+
+create policy "recommendations_select_own"
+on public.recommendations for select
+using (auth.uid() = user_id);
+
 
 -- Explicit grants for Supabase anon/authenticated roles.
 GRANT SELECT ON public.trends TO anon, authenticated;
