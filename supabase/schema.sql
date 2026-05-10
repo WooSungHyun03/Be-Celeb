@@ -3,7 +3,9 @@
 
 create extension if not exists "pgcrypto";
 
--- updated_at helper
+-- =========================================================
+-- Helper Functions
+-- =========================================================
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -150,7 +152,74 @@ alter table public.favorites validate constraint favorites_type_check;
 create index if not exists idx_favorites_user_id on public.favorites(user_id);
 create index if not exists idx_favorites_type on public.favorites(type);
 
--- 7. Addresses
+-- 7. Influencers
+create table if not exists public.influencers (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  category text not null,
+  keywords text[] not null default '{}',
+  hashtags text[] not null default '{}',
+  follower_count integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists influencers_username_unique_idx on public.influencers(username);
+create index if not exists idx_influencers_category on public.influencers(category);
+create index if not exists idx_influencers_username on public.influencers(username);
+
+-- 8. Reels
+create table if not exists public.reels (
+  id uuid primary key default gen_random_uuid(),
+  influencer_id uuid not null references public.influencers(id) on delete cascade,
+  title text not null,
+  topic text not null,
+  format text not null,
+  hook text not null,
+  hashtags text[] not null default '{}',
+  views integer not null default 0,
+  likes integer not null default 0,
+  comments integer not null default 0,
+  saves integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists reels_title_influencer_unique_idx
+on public.reels(influencer_id, title);
+
+create index if not exists idx_reels_influencer_id on public.reels(influencer_id);
+create index if not exists idx_reels_topic on public.reels(topic);
+
+-- 9. Recommendation requests
+create table if not exists public.recommendation_requests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  input_snapshot jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_recommendation_requests_user_id
+on public.recommendation_requests(user_id);
+
+create index if not exists idx_recommendation_requests_created_at
+on public.recommendation_requests(created_at);
+
+-- 10. Recommendations
+create table if not exists public.recommendations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  request_id uuid not null references public.recommendation_requests(id) on delete cascade,
+  result jsonb not null default '{}'::jsonb,
+  raw_llm_output jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_recommendations_user_id
+on public.recommendations(user_id);
+
+create index if not exists idx_recommendations_request_id
+on public.recommendations(request_id);
+
+-- 11. Addresses
 create table if not exists public.addresses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -172,7 +241,7 @@ create unique index if not exists addresses_one_default_per_user_idx
 on public.addresses(user_id)
 where is_default = true;
 
--- 8. Public service contents
+-- 12. Public service contents
 create table if not exists public.service_contents (
   id uuid primary key default gen_random_uuid(),
   section text not null,
@@ -205,7 +274,7 @@ end $$;
 create index if not exists idx_service_contents_active on public.service_contents(is_active);
 create index if not exists idx_service_contents_sort_order on public.service_contents(sort_order);
 
--- 9. Sample recommendations
+-- 13. Sample recommendations
 create table if not exists public.sample_recommendations (
   id uuid primary key default gen_random_uuid(),
   title text not null,
@@ -226,7 +295,7 @@ alter table public.sample_recommendations add column if not exists sort_order in
 create index if not exists idx_sample_recommendations_active on public.sample_recommendations(is_active);
 create index if not exists idx_sample_recommendations_sort_order on public.sample_recommendations(sort_order);
 
--- 10. Strategy articles
+-- 14. Strategy articles
 create table if not exists public.strategy_articles (
   id uuid primary key default gen_random_uuid(),
   slug text not null,
@@ -250,7 +319,7 @@ create index if not exists idx_strategy_articles_active on public.strategy_artic
 create index if not exists idx_strategy_articles_created_at
 on public.strategy_articles(created_at);
 
--- 11. Logs
+-- 15. Logs
 -- Do not store sensitive information such as passwords, tokens, addresses, or raw personal identifiers in log messages.
 create table if not exists public.error_logs (
   id uuid primary key default gen_random_uuid(),
@@ -327,3 +396,78 @@ drop trigger if exists set_strategy_articles_updated_at on public.strategy_artic
 create trigger set_strategy_articles_updated_at
 before update on public.strategy_articles
 for each row execute function public.set_updated_at();
+
+
+-- Auth signup handler
+-- Creates default app rows when a new Supabase Auth user is created.
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (
+    user_id,
+    nickname,
+    instagram_username,
+    avatar_url,
+    onboarding_completed
+  )
+  values (
+    new.id,
+    'user_' || substring(new.id::text, 1, 8),
+    null,
+    null,
+    false
+  )
+  on conflict (user_id) do nothing;
+
+  insert into public.creator_profiles (
+    user_id,
+    instagram_experience,
+    categories,
+    follower_range,
+    upload_frequency,
+    content_goal,
+    preferred_style,
+    onboarding_completed
+  )
+  values (
+    new.id,
+    null,
+    '{}',
+    null,
+    null,
+    null,
+    null,
+    false
+  )
+  on conflict (user_id) do nothing;
+
+  insert into public.user_plans (
+    user_id,
+    plan_name,
+    monthly_recommendation_limit,
+    monthly_recommendation_used,
+    renews_at
+  )
+  values (
+    new.id,
+    'free',
+    5,
+    0,
+    date_trunc('month', now()) + interval '1 month'
+  )
+  on conflict (user_id) do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
