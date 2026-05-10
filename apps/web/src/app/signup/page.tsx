@@ -3,11 +3,8 @@
 // Renders the signup page and connects it to the auth API.
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-<<<<<<< HEAD
 import { useRouter } from "next/navigation";
-=======
 import { BrandLogo } from "@/components/common/BrandLogo";
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";

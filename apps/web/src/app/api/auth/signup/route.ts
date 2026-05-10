@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { apiError, apiException, apiSuccess, logApiError } from "@/app/api/_utils/api";
-=======
-import { apiError, apiException, apiSuccess } from "@/lib/api/responses";
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
 import {
   authErrorLooksLikeDuplicateEmail,
   CREATOR_PROFILE_SELECT,
@@ -11,7 +7,6 @@ import {
   isValidNickname,
   isValidPassword,
   PROFILE_SELECT,
-<<<<<<< HEAD
   toAuthUserPayload,
   type CreatorProfileRow,
   type ProfileRow,
@@ -51,15 +46,6 @@ async function deleteAuthUserAfterSignupFailure(userId: string, request: Request
     message,
   });
 }
-=======
-  toPublicProfile,
-  toPublicUser,
-} from "@/lib/api/account";
-import { getStringField, readJsonObject } from "@/lib/api/request";
-import { createSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase/server";
-
-export const dynamic = "force-dynamic";
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
 
 export async function POST(request: Request) {
   try {
@@ -85,7 +71,6 @@ export async function POST(request: Request) {
       return apiError("Nickname must be between 2 and 30 characters.", "VALIDATION_ERROR", 400);
     }
 
-<<<<<<< HEAD
     const provider = getAuthProvider();
 
     if (provider === "unavailable") {
@@ -107,9 +92,10 @@ export async function POST(request: Request) {
         return response;
       } catch (error) {
         if (error instanceof DevAuthStoreError) {
-          const code = error.code === "DUPLICATE_EMAIL" || error.code === "DUPLICATE_NICKNAME"
-            ? error.code
-            : "VALIDATION_ERROR";
+          const code =
+            error.code === "DUPLICATE_EMAIL" || error.code === "DUPLICATE_NICKNAME"
+              ? error.code
+              : "VALIDATION_ERROR";
           return apiError(error.message, code, error.status);
         }
 
@@ -117,8 +103,6 @@ export async function POST(request: Request) {
       }
     }
 
-=======
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
     const serviceRoleClient = getSupabaseServiceRoleClient();
     const { data: existingNickname, error: nicknameLookupError } = await serviceRoleClient
       .from("profiles")
@@ -139,13 +123,7 @@ export async function POST(request: Request) {
       email,
       password,
       options: {
-<<<<<<< HEAD
         data: { nickname },
-=======
-        data: {
-          nickname,
-        },
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
       },
     });
 
@@ -171,35 +149,24 @@ export async function POST(request: Request) {
 
     const { data: profile, error: profileError } = await serviceRoleClient
       .from("profiles")
-<<<<<<< HEAD
-      .upsert({
-        user_id: user.id,
-        nickname,
-        instagram_username: null,
-        avatar_url: null,
-        onboarding_completed: false,
-        is_deleted: false,
-      }, { onConflict: "user_id" })
+      .upsert(
+        {
+          user_id: user.id,
+          nickname,
+          instagram_username: null,
+          avatar_url: null,
+          onboarding_completed: false,
+          is_deleted: false,
+          deleted_at: null,
+        },
+        { onConflict: "user_id" },
+      )
       .select(PROFILE_SELECT)
       .single<ProfileRow>();
 
     if (profileError) {
-      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup profile insert failed: ${profileError.message}`);
+      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup profile upsert failed: ${profileError.message}`);
 
-=======
-      .insert({
-        user_id: user.id,
-        nickname,
-        display_name: nickname,
-        phone: null,
-        status: "active",
-        onboarding_completed: false,
-      })
-      .select(PROFILE_SELECT)
-      .single();
-
-    if (profileError) {
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
       if (isDuplicateError(profileError)) {
         return apiError("Nickname is already in use.", "DUPLICATE_NICKNAME", 409);
       }
@@ -207,30 +174,36 @@ export async function POST(request: Request) {
       return apiError("Failed to create profile.", "SUPABASE_ERROR", 500);
     }
 
-<<<<<<< HEAD
     const { data: plan, error: planError } = await serviceRoleClient
       .from("user_plans")
-      .upsert({
-        user_id: user.id,
-        plan_name: "free",
-        monthly_recommendation_limit: 5,
-        monthly_recommendation_used: 0,
-      }, { onConflict: "user_id" })
+      .upsert(
+        {
+          user_id: user.id,
+          plan_name: "free",
+          monthly_recommendation_limit: 5,
+          monthly_recommendation_used: 0,
+          renews_at: null,
+        },
+        { onConflict: "user_id" },
+      )
       .select(USER_PLAN_SELECT)
       .single<UserPlanRow>();
 
     if (planError) {
-      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup plan insert failed: ${planError.message}`);
+      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup plan upsert failed: ${planError.message}`);
       return apiError("Failed to create default plan.", "SUPABASE_ERROR", 500);
     }
 
     const { data: creatorProfile, error: creatorProfileError } = await serviceRoleClient
       .from("creator_profiles")
-      .upsert({
-        user_id: user.id,
-        categories: [],
-        onboarding_completed: false,
-      }, { onConflict: "user_id" })
+      .upsert(
+        {
+          user_id: user.id,
+          categories: [],
+          onboarding_completed: false,
+        },
+        { onConflict: "user_id" },
+      )
       .select(CREATOR_PROFILE_SELECT)
       .single<CreatorProfileRow>();
 
@@ -238,55 +211,19 @@ export async function POST(request: Request) {
       await deleteAuthUserAfterSignupFailure(
         user.id,
         request,
-        `Signup creator profile insert failed: ${creatorProfileError.message}`,
+        `Signup creator profile upsert failed: ${creatorProfileError.message}`,
       );
-=======
-    const startedAt = new Date().toISOString();
-    const { error: planError } = await serviceRoleClient.from("user_plans").insert({
-      user_id: user.id,
-      plan_code: "free",
-      status: "active",
-      started_at: startedAt,
-    });
-
-    if (planError) {
-      return apiError("Failed to create default plan.", "SUPABASE_ERROR", 500);
-    }
-
-    const { error: creatorProfileError } = await serviceRoleClient
-      .from("creator_profiles")
-      .insert({
-        user_id: user.id,
-        category: null,
-        platforms: [],
-        goals: [],
-        onboarding_status: "not_started",
-      })
-      .select(CREATOR_PROFILE_SELECT)
-      .single();
-
-    if (creatorProfileError) {
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
       return apiError("Failed to create creator profile.", "SUPABASE_ERROR", 500);
     }
 
     return apiSuccess(
       {
-<<<<<<< HEAD
         user: toAuthUserPayload(user, profile, plan, creatorProfile),
         authProvider: "supabase",
-=======
-        user: toPublicUser(user),
-        profile: toPublicProfile(profile),
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
       },
       201,
     );
   } catch (error) {
-<<<<<<< HEAD
     return apiException(error, request);
-=======
-    return apiException(error);
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
   }
 }

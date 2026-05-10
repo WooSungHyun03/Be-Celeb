@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { apiError, apiException, apiSuccess } from "@/app/api/_utils/api";
 import { getAuthProvider, getAuthProviderUnavailableMessage } from "@/lib/config/auth-provider";
 import { clearDevAuthCookie } from "@/lib/config/dev-auth-store";
@@ -21,15 +20,6 @@ export async function POST(request: Request) {
       return response;
     }
 
-=======
-import { apiError, apiException, apiSuccess } from "@/lib/api/responses";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-export const dynamic = "force-dynamic";
-
-export async function POST() {
-  try {
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
@@ -48,10 +38,6 @@ export async function POST() {
 
     return apiSuccess(null);
   } catch (error) {
-<<<<<<< HEAD
     return apiException(error, request);
-=======
-    return apiException(error);
->>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
   }
 }
