@@ -55,6 +55,10 @@ function getNicknameLookupFailureMessage(error: { code?: string; message?: strin
     return `Supabase profiles table is not ready in production.${codeSuffix}`;
   }
 
+  if (error.code === "PGRST205") {
+    return `Supabase profiles table is missing from the production API schema cache. Apply schema.sql or reload the Supabase schema cache.${codeSuffix}`;
+  }
+
   if (error.code === "42703" || message.includes("column")) {
     return `Supabase profiles.nickname column is not ready in production.${codeSuffix}`;
   }
