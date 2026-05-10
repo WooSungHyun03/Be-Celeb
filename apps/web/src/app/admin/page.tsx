@@ -1,25 +1,42 @@
-// Renders the admin placeholder page for future trend management.
+// Renders the admin UI draft for future trend management.
+import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import { PageHeader } from "@/components/common/PageHeader";
+import { mockRecommendations } from "@/mocks/mockRecommendations";
 import { mockTrends } from "@/mocks/mockTrends";
+
+const metrics = [
+  { label: "총 트렌드", value: mockTrends.length },
+  { label: "추천 데이터", value: mockRecommendations.length },
+  { label: "API 호출", value: "1.2K" },
+];
 
 export default function AdminPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold text-ink">관리자</h1>
-        <p className="mt-2 text-slate-600">트렌드 데이터와 룰베이스 관리 예정 영역입니다.</p>
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow={<Badge tone="warning">Admin draft</Badge>}
+        title="관리자"
+        description="트렌드 데이터, 추천 상태, 운영 지표를 확인하는 관리자 페이지 초안입니다."
+      />
+      <div className="grid gap-4 sm:grid-cols-3">
+        {metrics.map((metric) => (
+          <Card key={metric.label}>
+            <p className="text-sm font-semibold text-slate-500">{metric.label}</p>
+            <p className="mt-4 text-4xl font-bold text-ink">{metric.value}</p>
+          </Card>
+        ))}
       </div>
-      <Card title="Mock trend management queue">
+
+      <Card title="트렌드 우선순위">
         <div className="divide-y divide-slate-200">
           {mockTrends.map((trend) => (
-            <div className="flex items-center justify-between gap-4 py-3" key={trend.id}>
-              <div>
-                <p className="font-medium text-ink">{trend.title}</p>
-                <p className="text-sm text-slate-500">{trend.category}</p>
+            <div className="flex items-center justify-between gap-4 py-4" key={trend.id}>
+              <div className="flex-1">
+                <p className="font-semibold text-ink">{trend.title}</p>
+                <p className="mt-1 text-sm text-slate-500">{trend.category} · +{trend.growthRate}%</p>
               </div>
-              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                score {trend.score}
-              </span>
+              <Badge tone="brand">점수 {trend.score}</Badge>
             </div>
           ))}
         </div>

@@ -16,6 +16,10 @@ class Recommendation(BaseModel):
     category: TrendCategory
     platforms: list[Platform]
     priority: RecommendationPriority
+    expected_score: int
+    hook_text: str
+    content_plan: list[str]
+    hashtags: list[str]
     reason: str
     steps: list[str]
     related_trend_ids: list[str]

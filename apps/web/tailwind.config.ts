@@ -13,9 +13,9 @@ const config: Config = {
         ink: "#171717",
         surface: "#f8fafc",
         brand: {
-          50: "#ecfdf5",
-          500: "#10b981",
-          700: "#047857",
+          50: "#f5f3ff",
+          500: "#8b5cf6",
+          700: "#6d28d9",
         },
         signal: {
           500: "#e11d48",
