@@ -83,10 +83,10 @@ export function Header() {
         <Link className="group justify-self-start transition duration-200 hover:-translate-y-0.5" href={ROUTES.home}>
           <BrandLogo className="transition duration-200 group-hover:scale-[1.02]" size="sm" />
         </Link>
-        <nav className="hidden items-center gap-1.5 justify-self-center text-sm font-medium text-slate-600 lg:flex">
+        <nav className="hidden h-14 items-stretch gap-8 justify-self-center text-sm font-bold text-ink lg:flex">
           {navItems.map((item) => (
             <Link
-              className="relative inline-flex min-h-10 items-center rounded-lg px-4 py-2 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-50 hover:text-violet-700 active:translate-y-0"
+              className="relative inline-flex items-center px-1 transition duration-200 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:origin-center after:scale-x-0 after:rounded-full after:bg-violet-600 after:transition-transform after:duration-200 hover:text-violet-700 hover:after:scale-x-100"
               href={item.href}
               key={item.href}
             >
@@ -132,10 +132,10 @@ export function Header() {
           )}
         </div>
       </div>
-      <nav className="mx-auto flex w-full max-w-7xl gap-2 overflow-x-auto px-4 pb-2 text-sm font-medium text-slate-600 sm:px-6 lg:hidden lg:px-8">
+      <nav className="mx-auto flex w-full max-w-7xl gap-5 overflow-x-auto px-4 pb-0 text-sm font-bold text-ink sm:px-6 lg:hidden lg:px-8">
         {navItems.map((item) => (
           <Link
-            className="inline-flex min-h-10 shrink-0 items-center rounded-lg bg-slate-50 px-4 py-2 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-50 hover:text-violet-700 active:translate-y-0"
+            className="relative inline-flex min-h-10 shrink-0 items-center px-1 transition duration-200 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:scale-x-0 after:rounded-full after:bg-violet-600 after:transition-transform after:duration-200 hover:text-violet-700 hover:after:scale-x-100"
             href={item.href}
             key={item.href}
           >

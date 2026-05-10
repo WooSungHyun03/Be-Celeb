@@ -3,6 +3,8 @@ export const ROUTES = {
   home: "/",
   login: "/login",
   signup: "/signup",
+  findId: "/find-id",
+  forgotPassword: "/forgot-password",
   onboarding: "/onboarding",
   dashboard: "/dashboard",
   trends: "/trends",
