@@ -1,4 +1,4 @@
-import { apiError, apiException, apiSuccess, logApiError } from "@/app/api/_utils/api";
+﻿import { apiError, apiException, apiSuccess, logApiError } from "@/app/api/_utils/api";
 import {
   authErrorLooksLikeDuplicateEmail,
   CREATOR_PROFILE_SELECT,
@@ -92,9 +92,10 @@ export async function POST(request: Request) {
         return response;
       } catch (error) {
         if (error instanceof DevAuthStoreError) {
-          const code = error.code === "DUPLICATE_EMAIL" || error.code === "DUPLICATE_NICKNAME"
-            ? error.code
-            : "VALIDATION_ERROR";
+          const code =
+            error.code === "DUPLICATE_EMAIL" || error.code === "DUPLICATE_NICKNAME"
+              ? error.code
+              : "VALIDATION_ERROR";
           return apiError(error.message, code, error.status);
         }
 
@@ -148,19 +149,23 @@ export async function POST(request: Request) {
 
     const { data: profile, error: profileError } = await serviceRoleClient
       .from("profiles")
-      .upsert({
-        user_id: user.id,
-        nickname,
-        instagram_username: null,
-        avatar_url: null,
-        onboarding_completed: false,
-        is_deleted: false,
-      }, { onConflict: "user_id" })
+      .upsert(
+        {
+          user_id: user.id,
+          nickname,
+          instagram_username: null,
+          avatar_url: null,
+          onboarding_completed: false,
+          is_deleted: false,
+          deleted_at: null,
+        },
+        { onConflict: "user_id" },
+      )
       .select(PROFILE_SELECT)
       .single<ProfileRow>();
 
     if (profileError) {
-      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup profile insert failed: ${profileError.message}`);
+      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup profile upsert failed: ${profileError.message}`);
 
       if (isDuplicateError(profileError)) {
         return apiError("Nickname is already in use.", "DUPLICATE_NICKNAME", 409);
@@ -171,27 +176,34 @@ export async function POST(request: Request) {
 
     const { data: plan, error: planError } = await serviceRoleClient
       .from("user_plans")
-      .upsert({
-        user_id: user.id,
-        plan_name: "free",
-        monthly_recommendation_limit: 5,
-        monthly_recommendation_used: 0,
-      }, { onConflict: "user_id" })
+      .upsert(
+        {
+          user_id: user.id,
+          plan_name: "free",
+          monthly_recommendation_limit: 5,
+          monthly_recommendation_used: 0,
+          renews_at: null,
+        },
+        { onConflict: "user_id" },
+      )
       .select(USER_PLAN_SELECT)
       .single<UserPlanRow>();
 
     if (planError) {
-      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup plan insert failed: ${planError.message}`);
+      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup plan upsert failed: ${planError.message}`);
       return apiError("Failed to create default plan.", "SUPABASE_ERROR", 500);
     }
 
     const { data: creatorProfile, error: creatorProfileError } = await serviceRoleClient
       .from("creator_profiles")
-      .upsert({
-        user_id: user.id,
-        categories: [],
-        onboarding_completed: false,
-      }, { onConflict: "user_id" })
+      .upsert(
+        {
+          user_id: user.id,
+          categories: [],
+          onboarding_completed: false,
+        },
+        { onConflict: "user_id" },
+      )
       .select(CREATOR_PROFILE_SELECT)
       .single<CreatorProfileRow>();
 
@@ -199,7 +211,7 @@ export async function POST(request: Request) {
       await deleteAuthUserAfterSignupFailure(
         user.id,
         request,
-        `Signup creator profile insert failed: ${creatorProfileError.message}`,
+        `Signup creator profile upsert failed: ${creatorProfileError.message}`,
       );
       return apiError("Failed to create creator profile.", "SUPABASE_ERROR", 500);
     }

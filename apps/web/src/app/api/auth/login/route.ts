@@ -62,7 +62,8 @@ export async function POST(request: Request) {
         return response;
       } catch (error) {
         if (error instanceof DevAuthStoreError) {
-          return apiError(error.message, error.code === "INVALID_CREDENTIALS" ? "UNAUTHORIZED" : error.code, error.status);
+          const code = error.code === "INVALID_CREDENTIALS" ? "UNAUTHORIZED" : error.code;
+          return apiError(error.message, code, error.status);
         }
 
         throw error;
