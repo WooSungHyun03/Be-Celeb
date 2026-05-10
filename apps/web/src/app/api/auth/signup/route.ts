@@ -1,4 +1,4 @@
-import { apiError, apiException, apiSuccess } from "@/lib/api/responses";
+import { apiError, apiException, apiSuccess, logApiError } from "@/app/api/_utils/api";
 import {
   authErrorLooksLikeDuplicateEmail,
   CREATOR_PROFILE_SELECT,
@@ -7,13 +7,45 @@ import {
   isValidNickname,
   isValidPassword,
   PROFILE_SELECT,
-  toPublicProfile,
-  toPublicUser,
-} from "@/lib/api/account";
-import { getStringField, readJsonObject } from "@/lib/api/request";
+  toAuthUserPayload,
+  type CreatorProfileRow,
+  type ProfileRow,
+  type UserPlanRow,
+  USER_PLAN_SELECT,
+} from "@/app/api/_utils/account";
+import { getStringField, readJsonObject } from "@/app/api/_utils/request";
+import { getAuthProvider, getAuthProviderUnavailableMessage } from "@/lib/config/auth-provider";
+import {
+  createDevUser,
+  DevAuthStoreError,
+  setDevAuthCookie,
+  toDevAuthUser,
+} from "@/lib/config/dev-auth-store";
 import { createSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+async function deleteAuthUserAfterSignupFailure(userId: string, request: Request, message: string) {
+  const { error } = await getSupabaseServiceRoleClient().auth.admin.deleteUser(userId);
+
+  if (error) {
+    await logApiError({
+      request,
+      userId,
+      code: "SUPABASE_ERROR",
+      message: `${message}; compensation deleteUser failed: ${error.message}`,
+    });
+    return;
+  }
+
+  await logApiError({
+    request,
+    userId,
+    code: "SUPABASE_ERROR",
+    message,
+  });
+}
 
 export async function POST(request: Request) {
   try {
@@ -39,6 +71,37 @@ export async function POST(request: Request) {
       return apiError("Nickname must be between 2 and 30 characters.", "VALIDATION_ERROR", 400);
     }
 
+    const provider = getAuthProvider();
+
+    if (provider === "unavailable") {
+      return apiError(getAuthProviderUnavailableMessage(), "AUTH_PROVIDER_UNAVAILABLE", 503);
+    }
+
+    if (provider === "json") {
+      try {
+        const devUser = await createDevUser({ email, password, nickname });
+        const response = apiSuccess(
+          {
+            user: toDevAuthUser(devUser),
+            authProvider: "json",
+          },
+          201,
+        );
+
+        setDevAuthCookie(response, devUser.id);
+        return response;
+      } catch (error) {
+        if (error instanceof DevAuthStoreError) {
+          const code = error.code === "DUPLICATE_EMAIL" || error.code === "DUPLICATE_NICKNAME"
+            ? error.code
+            : "VALIDATION_ERROR";
+          return apiError(error.message, code, error.status);
+        }
+
+        throw error;
+      }
+    }
+
     const serviceRoleClient = getSupabaseServiceRoleClient();
     const { data: existingNickname, error: nicknameLookupError } = await serviceRoleClient
       .from("profiles")
@@ -59,9 +122,7 @@ export async function POST(request: Request) {
       email,
       password,
       options: {
-        data: {
-          nickname,
-        },
+        data: { nickname },
       },
     });
 
@@ -87,18 +148,20 @@ export async function POST(request: Request) {
 
     const { data: profile, error: profileError } = await serviceRoleClient
       .from("profiles")
-      .insert({
+      .upsert({
         user_id: user.id,
         nickname,
-        display_name: nickname,
-        phone: null,
-        status: "active",
+        instagram_username: null,
+        avatar_url: null,
         onboarding_completed: false,
-      })
+        is_deleted: false,
+      }, { onConflict: "user_id" })
       .select(PROFILE_SELECT)
-      .single();
+      .single<ProfileRow>();
 
     if (profileError) {
+      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup profile insert failed: ${profileError.message}`);
+
       if (isDuplicateError(profileError)) {
         return apiError("Nickname is already in use.", "DUPLICATE_NICKNAME", 409);
       }
@@ -106,42 +169,49 @@ export async function POST(request: Request) {
       return apiError("Failed to create profile.", "SUPABASE_ERROR", 500);
     }
 
-    const startedAt = new Date().toISOString();
-    const { error: planError } = await serviceRoleClient.from("user_plans").insert({
-      user_id: user.id,
-      plan_code: "free",
-      status: "active",
-      started_at: startedAt,
-    });
+    const { data: plan, error: planError } = await serviceRoleClient
+      .from("user_plans")
+      .upsert({
+        user_id: user.id,
+        plan_name: "free",
+        monthly_recommendation_limit: 5,
+        monthly_recommendation_used: 0,
+      }, { onConflict: "user_id" })
+      .select(USER_PLAN_SELECT)
+      .single<UserPlanRow>();
 
     if (planError) {
+      await deleteAuthUserAfterSignupFailure(user.id, request, `Signup plan insert failed: ${planError.message}`);
       return apiError("Failed to create default plan.", "SUPABASE_ERROR", 500);
     }
 
-    const { error: creatorProfileError } = await serviceRoleClient
+    const { data: creatorProfile, error: creatorProfileError } = await serviceRoleClient
       .from("creator_profiles")
-      .insert({
+      .upsert({
         user_id: user.id,
-        category: null,
-        platforms: [],
-        goals: [],
-        onboarding_status: "not_started",
-      })
+        categories: [],
+        onboarding_completed: false,
+      }, { onConflict: "user_id" })
       .select(CREATOR_PROFILE_SELECT)
-      .single();
+      .single<CreatorProfileRow>();
 
     if (creatorProfileError) {
+      await deleteAuthUserAfterSignupFailure(
+        user.id,
+        request,
+        `Signup creator profile insert failed: ${creatorProfileError.message}`,
+      );
       return apiError("Failed to create creator profile.", "SUPABASE_ERROR", 500);
     }
 
     return apiSuccess(
       {
-        user: toPublicUser(user),
-        profile: toPublicProfile(profile),
+        user: toAuthUserPayload(user, profile, plan, creatorProfile),
+        authProvider: "supabase",
       },
       201,
     );
   } catch (error) {
-    return apiException(error);
+    return apiException(error, request);
   }
 }
