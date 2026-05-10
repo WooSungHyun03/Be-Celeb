@@ -3,7 +3,11 @@
 // Renders the login page and connects it to the auth API.
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+<<<<<<< HEAD
 import { useRouter } from "next/navigation";
+=======
+import { BrandLogo } from "@/components/common/BrandLogo";
+>>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
@@ -53,9 +57,8 @@ export default function LoginPage() {
     <div className="mx-auto flex min-h-[680px] max-w-7xl items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <Link className="mx-auto inline-flex items-center gap-2 text-base font-bold text-ink" href={ROUTES.home}>
-            <span className="flex size-9 items-center justify-center rounded-md bg-ink text-xs text-white">BC</span>
-            <span>BE CELEB</span>
+          <Link className="mx-auto inline-flex" href={ROUTES.home}>
+            <BrandLogo />
           </Link>
           <h1 className="mt-8 text-3xl font-bold tracking-tight text-ink">Login</h1>
           <p className="mt-3 text-sm leading-6 text-slate-500">Sign in to open your content dashboard.</p>

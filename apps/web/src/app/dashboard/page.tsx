@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import { PageHeader } from "@/components/common/PageHeader";
 import { GenerateRecommendationPanel } from "@/components/recommendation/GenerateRecommendationPanel";
 import { RecommendationList } from "@/components/recommendation/RecommendationList";
 import { TrendList } from "@/components/trend/TrendList";
@@ -19,16 +20,16 @@ const metrics = [
 export default function DashboardPage() {
   return (
     <div className="space-y-8">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <Badge tone="brand">오늘 업데이트 {formatDate(new Date().toISOString())}</Badge>
-          <h1 className="mt-3 text-4xl font-bold text-ink">대시보드</h1>
-          <p className="mt-3 text-base leading-7 text-slate-600">트렌드와 추천 상태를 한 화면에서 확인하세요.</p>
-        </div>
-        <Link href={ROUTES.recommendations} className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
-          추천 전체 보기
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow={<Badge tone="brand">오늘 업데이트 {formatDate(new Date().toISOString())}</Badge>}
+        title="대시보드"
+        description="트렌드와 추천 상태를 한 화면에서 확인하세요."
+        action={
+          <Link href={ROUTES.recommendations} className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+            추천 전체 보기
+          </Link>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-3">
         {metrics.map((metric) => (

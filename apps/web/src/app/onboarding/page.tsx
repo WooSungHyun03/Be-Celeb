@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
+import { PageHeader } from "@/components/common/PageHeader";
 import { Toast } from "@/components/common/Toast";
 import { CategoryStep } from "@/components/onboarding/CategoryStep";
 import { GoalStep } from "@/components/onboarding/GoalStep";
@@ -20,11 +21,11 @@ export default function OnboardingPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      <div>
-        <p className="text-sm font-semibold uppercase text-violet-700">Get started</p>
-        <h1 className="mt-3 text-4xl font-bold text-ink">개인 분석 시작</h1>
-        <p className="mt-3 text-base leading-7 text-slate-600">세 가지 선택만으로 계정 목표에 맞춘 트렌드와 콘텐츠 추천 화면을 구성합니다.</p>
-      </div>
+      <PageHeader
+        eyebrow={<p className="text-sm font-semibold uppercase text-violet-700">Get started</p>}
+        title="개인 분석 시작"
+        description="세 가지 선택만으로 계정 목표에 맞춘 트렌드와 콘텐츠 추천 화면을 구성합니다."
+      />
 
       <div className="space-y-3">
         <div className="flex items-center justify-between text-sm font-semibold">

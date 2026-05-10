@@ -1,18 +1,21 @@
 // Renders the profile page.
+import Link from "next/link";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { Input } from "@/components/common/Input";
+import { PageHeader } from "@/components/common/PageHeader";
 import { CATEGORIES } from "@/constants/categories";
 import { PLATFORMS } from "@/constants/platforms";
+import { ROUTES } from "@/constants/routes";
+import { mockRecommendations } from "@/mocks/mockRecommendations";
 
 export default function ProfilePage() {
+  const savedRecommendations = mockRecommendations.filter((item) => item.isSaved);
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-bold text-ink">마이페이지</h1>
-        <p className="mt-3 text-base leading-7 text-slate-600">계정 정보와 추천 설정을 관리합니다.</p>
-      </div>
+      <PageHeader title="마이페이지" description="계정 정보와 추천 설정을 관리합니다." />
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <Card title="프로필 정보">
           <div className="space-y-4">
@@ -23,6 +26,13 @@ export default function ProfilePage() {
           </div>
         </Card>
         <div className="space-y-4">
+          <Card title="저장한 콘텐츠">
+            <p className="text-3xl font-bold text-ink">{savedRecommendations.length}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">저장한 추천안과 나중에 다시 볼 콘텐츠 전략을 모아둡니다.</p>
+            <Link href={ROUTES.saved} className="mt-4 inline-flex min-h-10 items-center rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+              저장함 보기
+            </Link>
+          </Card>
           <Card title="추천 설정">
             <div className="space-y-4">
               <div>

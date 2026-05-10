@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { apiError, apiException, apiSuccess } from "@/app/api/_utils/api";
 import {
   CREATOR_PROFILE_SELECT,
@@ -23,6 +24,20 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+=======
+import { apiError, apiException, apiSuccess } from "@/lib/api/responses";
+import {
+  isInactiveStatus,
+  isValidEmail,
+  PROFILE_SELECT,
+  toPublicUser,
+  type ProfileRow,
+} from "@/lib/api/account";
+import { getStringField, readJsonObject } from "@/lib/api/request";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+>>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
 
 export async function POST(request: Request) {
   try {
@@ -39,6 +54,7 @@ export async function POST(request: Request) {
       return apiError("Email and password are required.", "VALIDATION_ERROR", 400);
     }
 
+<<<<<<< HEAD
     const provider = getAuthProvider();
 
     if (provider === "unavailable") {
@@ -69,12 +85,15 @@ export async function POST(request: Request) {
       }
     }
 
+=======
+>>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
     const supabase = await createSupabaseServerClient();
     const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
+<<<<<<< HEAD
     if (loginError || !loginData.user) {
       return apiError("Invalid email or password.", "UNAUTHORIZED", 401);
     }
@@ -115,5 +134,37 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return apiException(error, request);
+=======
+    if (loginError) {
+      return apiError("Invalid email or password.", "UNAUTHORIZED", 401);
+    }
+
+    const user = loginData.user;
+
+    if (!user) {
+      return apiError("Invalid email or password.", "UNAUTHORIZED", 401);
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select(PROFILE_SELECT)
+      .eq("user_id", user.id)
+      .maybeSingle<ProfileRow>();
+
+    if (profileError) {
+      return apiError("Failed to load profile.", "SUPABASE_ERROR", 500);
+    }
+
+    if (isInactiveStatus(profile?.status)) {
+      await supabase.auth.signOut();
+      return apiError("Account is inactive.", "FORBIDDEN", 403);
+    }
+
+    return apiSuccess({
+      user: toPublicUser(user),
+    });
+  } catch (error) {
+    return apiException(error);
+>>>>>>> d16f7371cbc515473b9a4164bc9decd97a69134b
   }
 }

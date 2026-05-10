@@ -2,6 +2,7 @@
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
+import { PageHeader } from "@/components/common/PageHeader";
 
 const plans = [
   {
@@ -28,11 +29,7 @@ const plans = [
 export default function PricingPage() {
   return (
     <div className="space-y-8">
-      <div className="text-center">
-        <Badge tone="brand">Pricing</Badge>
-        <h1 className="mt-3 text-4xl font-bold text-ink">가격제와 구독 플랜</h1>
-        <p className="mt-3 text-base text-slate-600">크리에이터의 현재 단계에 맞춰 가볍게 시작하고 필요한 만큼 확장하세요.</p>
-      </div>
+      <PageHeader align="center" eyebrow={<Badge tone="brand">Pricing</Badge>} title="가격제와 구독 플랜" description="크리에이터의 현재 단계에 맞춰 가볍게 시작하고 필요한 만큼 확장하세요." />
 
       <div className="grid gap-6 lg:grid-cols-3">
         {plans.map((plan) => (

@@ -1,5 +1,6 @@
 // Provides the global footer with product links and project messaging.
 import Link from "next/link";
+import { BrandLogo } from "@/components/common/BrandLogo";
 import { ROUTES } from "@/constants/routes";
 
 export function Footer() {
@@ -7,9 +8,8 @@ export function Footer() {
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 text-sm text-slate-500 sm:px-6 md:grid-cols-[1.2fr_1fr_auto] lg:px-8">
         <div>
-          <Link href={ROUTES.home} className="inline-flex items-center gap-2 font-bold text-ink">
-            <span className="flex size-8 items-center justify-center rounded-md bg-ink text-xs tracking-wide text-white">BC</span>
-            <span>BE CELEB</span>
+          <Link href={ROUTES.home}>
+            <BrandLogo size="sm" />
           </Link>
           <p className="mt-3 max-w-xl leading-6">트렌드와 아이템을 콘텐츠 아이디어로 연결하는 크리에이터 리서치 서비스입니다.</p>
           <p className="mt-4 text-xs text-slate-400">© 2026 BE CELEB. All rights reserved.</p>
