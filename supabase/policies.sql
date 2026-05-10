@@ -148,25 +148,36 @@ CREATE POLICY "not_found_logs_insert"
 ON public.not_found_logs FOR INSERT
 WITH CHECK (true);
 
-create policy "influencers_select_public"
-on public.influencers for select
-using (true);
+-- Influencers / reels: public mock analysis data.
+DROP POLICY IF EXISTS "influencers_select_public" ON public.influencers;
+DROP POLICY IF EXISTS "reels_select_public" ON public.reels;
 
-create policy "reels_select_public"
-on public.reels for select
-using (true);
+CREATE POLICY "influencers_select_public"
+ON public.influencers FOR SELECT
+USING (true);
 
-create policy "recommendation_requests_select_own"
-on public.recommendation_requests for select
-using (auth.uid() = user_id);
+CREATE POLICY "reels_select_public"
+ON public.reels FOR SELECT
+USING (true);
 
-create policy "recommendation_requests_insert_own"
-on public.recommendation_requests for insert
-with check (auth.uid() = user_id);
+-- Recommendation requests: users can create and read only their own requests.
+DROP POLICY IF EXISTS "recommendation_requests_select_own" ON public.recommendation_requests;
+DROP POLICY IF EXISTS "recommendation_requests_insert_own" ON public.recommendation_requests;
 
-create policy "recommendations_select_own"
-on public.recommendations for select
-using (auth.uid() = user_id);
+CREATE POLICY "recommendation_requests_select_own"
+ON public.recommendation_requests FOR SELECT
+USING (auth.uid() = user_id);
+
+CREATE POLICY "recommendation_requests_insert_own"
+ON public.recommendation_requests FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+-- Recommendations: users can read their own results. Insert/update is reserved for service role.
+DROP POLICY IF EXISTS "recommendations_select_own" ON public.recommendations;
+
+CREATE POLICY "recommendations_select_own"
+ON public.recommendations FOR SELECT
+USING (auth.uid() = user_id);
 
 
 -- Explicit grants for Supabase anon/authenticated roles.
@@ -175,5 +186,9 @@ GRANT SELECT ON public.products TO anon, authenticated;
 GRANT SELECT ON public.service_contents TO anon, authenticated;
 GRANT SELECT ON public.sample_recommendations TO anon, authenticated;
 GRANT SELECT ON public.strategy_articles TO anon, authenticated;
+GRANT SELECT ON public.influencers TO anon, authenticated;
+GRANT SELECT ON public.reels TO anon, authenticated;
+GRANT SELECT, INSERT ON public.recommendation_requests TO authenticated;
+GRANT SELECT ON public.recommendations TO authenticated;
 GRANT INSERT ON public.error_logs TO anon, authenticated;
 GRANT INSERT ON public.not_found_logs TO anon, authenticated;
