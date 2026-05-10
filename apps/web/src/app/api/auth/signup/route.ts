@@ -67,6 +67,10 @@ function getNicknameLookupFailureMessage(error: { code?: string; message?: strin
     return `Supabase service role key is not configured correctly.${codeSuffix}`;
   }
 
+  if (error.code === "PGRST125") {
+    return `Supabase URL is not configured correctly. NEXT_PUBLIC_SUPABASE_URL must be the project URL, not a REST endpoint.${codeSuffix}`;
+  }
+
   return `Failed to check nickname availability. Check Supabase environment variables and production schema.${codeSuffix}`;
 }
 
