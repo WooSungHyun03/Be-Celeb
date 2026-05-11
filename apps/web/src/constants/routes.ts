@@ -8,7 +8,7 @@ export const ROUTES = {
   onboarding: "/onboarding",
   dashboard: "/dashboard",
   trends: "/trends",
-  trendingItems: "/trending-items",
+  trendingItems: "/shop",
   recommendations: "/recommendations",
   saved: "/saved",
   pricing: "/pricing",

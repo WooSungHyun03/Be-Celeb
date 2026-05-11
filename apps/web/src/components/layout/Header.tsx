@@ -10,7 +10,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 const navItems = [
   { href: ROUTES.dashboard, label: "대시보드" },
   { href: ROUTES.trends, label: "트렌드" },
-  { href: ROUTES.trendingItems, label: "인기템" },
+  { href: ROUTES.trendingItems, label: "상점" },
   { href: ROUTES.recommendations, label: "추천" },
   { href: ROUTES.pricing, label: "요금" },
   { href: ROUTES.profile, label: "마이페이지" },

@@ -5,7 +5,7 @@ import { ROUTES } from "@/constants/routes";
 const sidebarItems = [
   { href: ROUTES.dashboard, label: "Overview" },
   { href: ROUTES.trends, label: "Trend research" },
-  { href: ROUTES.trendingItems, label: "Rising items" },
+  { href: ROUTES.trendingItems, label: "Shop" },
   { href: ROUTES.recommendations, label: "Strategy ideas" },
   { href: ROUTES.profile, label: "Profile & saved" },
 ];

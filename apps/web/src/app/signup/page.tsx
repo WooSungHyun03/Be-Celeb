@@ -74,7 +74,7 @@ export default function SignupPage() {
               <span className="whitespace-nowrap">콘텐츠 전략을 시작하세요</span>
             </h2>
             <p className="mt-5 max-w-sm text-sm font-medium leading-7 text-slate-600">
-              가입 후 관심 카테고리를 선택하면 트렌드, 인기템, 릴스 아이디어를 한 화면에서 확인할 수 있어요.
+              가입 후 관심 카테고리를 선택하면 트렌드, 상점, 릴스 아이디어를 한 화면에서 확인할 수 있어요.
             </p>
           </div>
           <div className="mb-8 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

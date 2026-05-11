@@ -18,7 +18,7 @@ export function Footer() {
           <p className="font-semibold text-ink">Product</p>
           <div className="mt-3 grid gap-2">
             <Link href={ROUTES.trends} className="hover:text-ink">트렌드</Link>
-            <Link href={ROUTES.trendingItems} className="hover:text-ink">인기템</Link>
+            <Link href={ROUTES.trendingItems} className="hover:text-ink">상점</Link>
             <Link href={ROUTES.recommendations} className="hover:text-ink">추천</Link>
             <Link href={ROUTES.pricing} className="hover:text-ink">요금</Link>
           </div>
