@@ -1,4 +1,4 @@
-﻿import { apiError, apiException, apiSuccess, logApiError } from "@/app/api/_utils/api";
+import { apiError, apiException, apiSuccess, logApiError } from "@/app/api/_utils/api";
 import {
   authErrorLooksLikeDuplicateEmail,
   CREATOR_PROFILE_SELECT,
@@ -45,6 +45,37 @@ async function deleteAuthUserAfterSignupFailure(userId: string, request: Request
     code: "SUPABASE_ERROR",
     message,
   });
+}
+
+function getNicknameLookupFailureMessage(error: { code?: string; message?: string }) {
+  const message = error.message?.toLowerCase() ?? "";
+  const codeSuffix = error.code ? ` Supabase code: ${error.code}.` : "";
+
+  if (error.code === "42P01" || message.includes("relation") || message.includes("does not exist")) {
+    return `Supabase profiles table is not ready in production.${codeSuffix}`;
+  }
+
+  if (error.code === "PGRST205") {
+    return `Supabase profiles table is missing from the production API schema cache. Apply schema.sql or reload the Supabase schema cache.${codeSuffix}`;
+  }
+
+  if (error.code === "42703" || message.includes("column")) {
+    return `Supabase profiles.nickname column is not ready in production.${codeSuffix}`;
+  }
+
+  if (error.code === "42501" || message.includes("permission denied")) {
+    return `Supabase profile lookup permission is not configured.${codeSuffix}`;
+  }
+
+  if (message.includes("invalid api key") || message.includes("jwt")) {
+    return `Supabase service role key is not configured correctly.${codeSuffix}`;
+  }
+
+  if (error.code === "PGRST125") {
+    return `Supabase URL is not configured correctly. NEXT_PUBLIC_SUPABASE_URL must be the project URL, not a REST endpoint.${codeSuffix}`;
+  }
+
+  return `Failed to check nickname availability. Check Supabase environment variables and production schema.${codeSuffix}`;
 }
 
 export async function POST(request: Request) {
@@ -122,7 +153,7 @@ export async function POST(request: Request) {
         message: `Signup nickname lookup failed: ${nicknameLookupError.message}`,
       });
 
-      return apiError("Failed to check nickname availability.", "SUPABASE_ERROR", 500);
+      return apiError(getNicknameLookupFailureMessage(nicknameLookupError), "SUPABASE_ERROR", 500);
     }
 
     if (existingNickname) {
