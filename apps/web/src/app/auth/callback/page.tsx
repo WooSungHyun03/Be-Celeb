@@ -17,12 +17,13 @@ export default async function AuthCallbackPage({ searchParams }: AuthCallbackPag
 
   return (
     <div className="mx-auto max-w-lg">
-      <Card title="Supabase 인증 확인">
+      <Card title="인증 확인">
         <div className="space-y-5">
           <AuthCallbackClient
             code={firstParam(params.code)}
             error={firstParam(params.error)}
             errorDescription={firstParam(params.error_description)}
+            nextPath={firstParam(params.next)}
           />
           <Link className="inline-flex rounded-md bg-ink px-4 py-2 text-sm font-medium text-white" href={ROUTES.dashboard}>
             대시보드로 이동

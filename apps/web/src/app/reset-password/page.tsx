@@ -1,6 +1,6 @@
 "use client";
 
-// Renders the password recovery page and sends reset email requests.
+// Lets a user set a new password after a Supabase recovery link is exchanged.
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/common/BrandLogo";
@@ -14,16 +14,9 @@ type ApiErrorResponse = {
   code?: string;
 };
 
-type ResetPasswordSuccessResponse = {
-  success: true;
-  data: {
-    emailSent?: boolean;
-    authProvider?: "supabase" | "json";
-  } | null;
-};
-
-export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
+export default function ResetPasswordPage() {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -32,31 +25,34 @@ export default function ForgotPasswordPage() {
     setStatus("loading");
     setMessage("");
 
+    if (password !== confirmPassword) {
+      setStatus("error");
+      setMessage("새 비밀번호가 서로 일치하지 않아요.");
+      return;
+    }
+
     try {
-      const response = await fetch("/api/auth/reset-password", {
-        method: "POST",
+      const response = await fetch("/api/auth/update-password", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ password }),
       });
       const payload: unknown = await response.json();
 
       if (!response.ok) {
         const error = payload as ApiErrorResponse;
         setStatus("error");
-        setMessage(error.message ?? "재설정 메일을 보내지 못했어요.");
+        setMessage(error.message ?? "비밀번호를 변경하지 못했어요.");
         return;
       }
 
-      const result = payload as ResetPasswordSuccessResponse;
       setStatus("success");
-      setMessage(
-        result.data?.authProvider === "json"
-          ? "개발용 JSON 인증에서는 메일 발송 없이 요청만 성공 처리됩니다."
-          : "가입 여부와 관계없이 입력한 이메일로 재설정 안내를 보냈어요.",
-      );
+      setPassword("");
+      setConfirmPassword("");
+      setMessage("비밀번호가 변경됐어요. 새 비밀번호로 로그인해 주세요.");
     } catch {
       setStatus("error");
-      setMessage("재설정 요청 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+      setMessage("비밀번호 변경 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
     }
   }
 
@@ -71,26 +67,17 @@ export default function ForgotPasswordPage() {
           <div>
             <p className="text-sm font-bold uppercase text-violet-700">Password Reset</p>
             <h2 className="mt-4 text-4xl font-black leading-tight tracking-tight">
-              안전하게 인증하고
+              새 비밀번호로
               <br />
-              새 비밀번호로 시작
+              안전하게 다시 시작
             </h2>
             <p className="mt-5 max-w-sm text-sm font-medium leading-7 text-slate-600">
-              가입 이메일로 재설정 안내를 보내고, 인증 링크는 제한된 시간 동안만 유효합니다.
+              재설정 링크 인증이 끝난 뒤 새 비밀번호를 저장합니다.
             </p>
           </div>
 
-          <div className="grid gap-3">
-            {[
-              ["인증 메일 발송", "가입 이메일로 재설정 링크를 보내요."],
-              ["보안 링크 확인", "링크는 제한 시간 후 자동 만료돼요."],
-              ["새 비밀번호 설정", "다시 로그인하고 서비스를 이어가요."],
-            ].map(([title, description]) => (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" key={title}>
-                <p className="text-sm font-black text-ink">{title}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-600">{description}</p>
-              </div>
-            ))}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 shadow-sm">
+            비밀번호는 최소 8자 이상으로 설정해 주세요.
           </div>
         </aside>
 
@@ -102,40 +89,49 @@ export default function ForgotPasswordPage() {
           </div>
 
           <div>
-            <span className="inline-flex rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">비밀번호 찾기</span>
-            <h1 className="mt-5 text-3xl font-black tracking-tight text-ink">재설정 링크를 보내드릴게요.</h1>
+            <span className="inline-flex rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
+              새 비밀번호 설정
+            </span>
+            <h1 className="mt-5 text-3xl font-black tracking-tight text-ink">새 비밀번호를 입력해 주세요.</h1>
             <p className="mt-3 text-sm leading-6 text-slate-500">
-              가입한 이메일 주소를 입력하면 비밀번호 재설정 안내를 받을 수 있어요.
+              재설정 링크 인증이 만료되었다면 비밀번호 찾기를 다시 요청해 주세요.
             </p>
           </div>
 
           <form className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6" onSubmit={handleSubmit}>
             <div className="space-y-4">
               <Input
-                autoComplete="email"
-                label="Email"
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
+                autoComplete="new-password"
+                label="New Password"
+                minLength={8}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="8자 이상"
                 required
-                type="email"
-                value={email}
+                type="password"
+                value={password}
+              />
+              <Input
+                autoComplete="new-password"
+                label="Confirm Password"
+                minLength={8}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="새 비밀번호 확인"
+                required
+                type="password"
+                value={confirmPassword}
               />
               {message ? (
-                <p className={`text-sm font-medium ${status === "error" ? "text-rose-600" : "text-slate-700"}`}>
+                <p className={`text-sm font-medium ${status === "success" ? "text-emerald-700" : "text-rose-600"}`}>
                   {message}
                 </p>
               ) : null}
               <Button
                 className="min-h-11 w-full bg-violet-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_12px_22px_rgba(124,58,237,0.20)] hover:bg-violet-700"
-                disabled={status === "loading"}
+                disabled={status === "loading" || status === "success"}
                 type="submit"
               >
-                {status === "loading" ? "발송 중..." : "재설정 안내 받기"}
+                {status === "loading" ? "저장 중..." : "새 비밀번호 저장"}
               </Button>
-            </div>
-
-            <div className="mt-5 rounded-xl border border-violet-100 bg-white px-4 py-3 text-xs leading-5 text-slate-500">
-              가입 여부는 노출하지 않습니다. 메일이 보이지 않는다면 스팸함을 확인해 주세요.
             </div>
           </form>
 
@@ -144,12 +140,8 @@ export default function ForgotPasswordPage() {
               로그인
             </Link>
             <span className="text-slate-300">|</span>
-            <Link href={ROUTES.findId} className="font-semibold text-ink hover:underline">
-              아이디 찾기
-            </Link>
-            <span className="text-slate-300">|</span>
-            <Link href={ROUTES.signup} className="font-semibold text-ink hover:underline">
-              회원가입
+            <Link href={ROUTES.forgotPassword} className="font-semibold text-ink hover:underline">
+              비밀번호 찾기 다시 요청
             </Link>
           </div>
         </section>

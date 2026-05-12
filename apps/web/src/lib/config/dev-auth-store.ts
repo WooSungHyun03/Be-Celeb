@@ -219,6 +219,12 @@ export async function getDevUserById(userId: string) {
   return store.users.find((user) => user.id === userId) ?? null;
 }
 
+export async function getDevUserByNickname(nicknameInput: string) {
+  const nickname = nicknameInput.trim();
+  const store = await readStore();
+  return store.users.find((user) => user.profile.nickname === nickname) ?? null;
+}
+
 export async function softDeleteDevUser(userId: string) {
   const store = await readStore();
   const user = store.users.find((candidate) => candidate.id === userId);

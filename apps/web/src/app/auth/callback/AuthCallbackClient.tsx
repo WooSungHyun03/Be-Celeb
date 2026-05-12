@@ -2,17 +2,28 @@
 
 // Exchanges Supabase email auth callback codes in the browser.
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type AuthCallbackClientProps = {
   code?: string;
   error?: string;
   errorDescription?: string;
+  nextPath?: string;
 };
 
-export function AuthCallbackClient({ code, error, errorDescription }: AuthCallbackClientProps) {
+function getSafeNextPath(nextPath: string | undefined) {
+  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
+    return null;
+  }
+
+  return nextPath;
+}
+
+export function AuthCallbackClient({ code, error, errorDescription, nextPath }: AuthCallbackClientProps) {
+  const router = useRouter();
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [message, setMessage] = useState("인증 상태를 확인하고 있습니다.");
+  const [message, setMessage] = useState("인증 상태를 확인하고 있어요.");
 
   useEffect(() => {
     async function exchangeSession() {
@@ -40,7 +51,13 @@ export function AuthCallbackClient({ code, error, errorDescription }: AuthCallba
         }
 
         setStatus("success");
-        setMessage("인증이 완료되었습니다. 대시보드로 이동할 수 있습니다.");
+        setMessage("인증이 완료됐어요. 잠시 후 이동합니다.");
+
+        const safeNextPath = getSafeNextPath(nextPath);
+
+        if (safeNextPath) {
+          router.replace(safeNextPath);
+        }
       } catch (exchangeError) {
         setStatus("error");
         setMessage(exchangeError instanceof Error ? exchangeError.message : "알 수 없는 인증 오류입니다.");
@@ -48,7 +65,7 @@ export function AuthCallbackClient({ code, error, errorDescription }: AuthCallba
     }
 
     void exchangeSession();
-  }, [code, error, errorDescription]);
+  }, [code, error, errorDescription, nextPath, router]);
 
   return (
     <div className="space-y-3">
