@@ -12,6 +12,11 @@
     "dev:api": "cd apps/api && uvicorn app.main:app --reload",
     "build:web": "npm --workspace apps/web run build",
     "lint:web": "npm --workspace apps/web run lint",
-    "type-check:web": "npm --workspace apps/web run type-check"
+    "type-check:web": "npm --workspace apps/web run type-check",
+    "db:link": "npx -y supabase@2.98.2 link",
+    "db:migration:new": "npx -y supabase@2.98.2 migration new",
+    "db:push": "npx -y supabase@2.98.2 db push",
+    "db:push:seed": "npx -y supabase@2.98.2 db push --include-seed",
+    "db:reset": "npx -y supabase@2.98.2 db reset"
   }
 }

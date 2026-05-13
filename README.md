@@ -274,11 +274,7 @@ Supabase Auth 설정:
   - `https://be-celeb.org/auth/callback`
   - `https://www.be-celeb.org/auth/callback`
 
-SQL 적용 순서:
-
-1. `supabase/schema.sql`
-2. `supabase/policies.sql`
-3. `supabase/seed.sql`
+DB 변경은 `supabase/migrations/`의 versioned migration으로 관리합니다. `main` 브랜치에 migration 변경이 push되면 `.github/workflows/supabase-db.yml`이 `supabase db push`를 실행합니다.
 
 자세한 내용은 `docs/supabase-setup.md`를 확인합니다.
 
