@@ -34,8 +34,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const redirectUrl = new URL("/api/auth/callback", request.url);
-    redirectUrl.searchParams.set("next", "/reset-password");
+    const redirectUrl = new URL("/api/auth/reset-password/callback", request.url);
 
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
