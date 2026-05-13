@@ -2,7 +2,6 @@ import { apiError, apiException, apiSuccess } from "@/app/api/_utils/api";
 import { isValidEmail } from "@/app/api/_utils/account";
 import { getStringField, readJsonObject } from "@/app/api/_utils/request";
 import { getAuthProvider, getAuthProviderUnavailableMessage } from "@/lib/config/auth-provider";
-import { getSiteUrlEnv } from "@/lib/config/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +34,12 @@ export async function POST(request: Request) {
       });
     }
 
-    const { siteUrl } = getSiteUrlEnv();
+    const redirectUrl = new URL("/api/auth/callback", request.url);
+    redirectUrl.searchParams.set("next", "/reset-password");
+
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent("/reset-password")}`,
+      redirectTo: redirectUrl.toString(),
     });
 
     if (error) {
