@@ -111,6 +111,13 @@ export function Header() {
                 <span aria-hidden="true">▦</span>
                 대시보드
               </Link>
+              <Link
+                href={ROUTES.logout}
+                className="hidden min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-ink shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md active:translate-y-0 sm:inline-flex"
+              >
+                <span aria-hidden="true">↪</span>
+                로그아웃
+              </Link>
             </>
           ) : (
             <>

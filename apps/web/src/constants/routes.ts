@@ -2,6 +2,7 @@
 export const ROUTES = {
   home: "/",
   login: "/login",
+  logout: "/logout",
   signup: "/signup",
   findId: "/find-id",
   forgotPassword: "/forgot-password",

@@ -15,13 +15,21 @@ type ApiErrorResponse = {
   code?: string;
 };
 
+type ApiSuccessResponse = {
+  success: true;
+  data?: {
+    email?: string;
+    emailVerificationRequired?: boolean;
+  };
+};
+
 export default function SignupPage() {
   const router = useRouter();
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -48,6 +56,14 @@ export default function SignupPage() {
         const error = payload as ApiErrorResponse;
         setStatus("error");
         setMessage(error.message ?? "회원가입에 실패했어요.");
+        return;
+      }
+
+      const success = payload as ApiSuccessResponse;
+
+      if (success.data?.emailVerificationRequired) {
+        setStatus("success");
+        setMessage(`${success.data.email ?? email} 주소로 인증 메일을 보냈어요. 메일함에서 인증을 완료해주세요.`);
         return;
       }
 
@@ -146,7 +162,11 @@ export default function SignupPage() {
                 type="password"
                 value={confirmPassword}
               />
-              {message ? <p className="text-sm font-medium text-rose-600">{message}</p> : null}
+              {message ? (
+                <p className={`text-sm font-medium ${status === "success" ? "text-violet-700" : "text-rose-600"}`}>
+                  {message}
+                </p>
+              ) : null}
               <Button
                 className="min-h-11 w-full bg-violet-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_12px_22px_rgba(124,58,237,0.20)] hover:bg-violet-700"
                 disabled={status === "loading"}

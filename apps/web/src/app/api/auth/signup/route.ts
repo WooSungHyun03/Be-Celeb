@@ -115,6 +115,8 @@ export async function POST(request: Request) {
           {
             user: toDevAuthUser(devUser),
             authProvider: "json",
+            emailVerificationRequired: false,
+            email,
           },
           201,
         );
@@ -262,6 +264,8 @@ export async function POST(request: Request) {
       {
         user: toAuthUserPayload(user, profile, plan, creatorProfile),
         authProvider: "supabase",
+        emailVerificationRequired: !signUpData.session,
+        email,
       },
       201,
     );
