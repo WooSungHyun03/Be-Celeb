@@ -1,6 +1,15 @@
 // Renders the polished landing page for Be Celeb.
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ROUTES } from "@/constants/routes";
+
+type HomePageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 const primaryLinkClass =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[linear-gradient(180deg,#8b5cf6_0%,#7c3aed_54%,#6d28d9_100%)] px-7 py-3 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-10px_18px_rgba(76,29,149,0.24),0_12px_22px_rgba(124,58,237,0.22)] transition hover:-translate-y-0.5 hover:bg-[linear-gradient(180deg,#9f7aea_0%,#7c3aed_54%,#5b21b6_100%)]";
@@ -498,7 +507,14 @@ function HeroDashboardPreview() {
   );
 }
 
-export default function HomePage() {
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const params = await searchParams;
+  const code = firstParam(params.code);
+
+  if (code) {
+    redirect(`/api/auth/reset-password/callback?code=${encodeURIComponent(code)}`);
+  }
+
   return (
     <div className="-mt-8 bg-white text-ink">
       <section className="relative overflow-hidden border-b border-slate-200 bg-white">
