@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { ROUTES } from "@/constants/routes";
-import { ApiClientError, apiFetch } from "@/lib/client/api";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type LogoutState = "loading" | "success" | "error";
 
@@ -19,7 +19,11 @@ export default function LogoutPage() {
   useEffect(() => {
     async function logout() {
       try {
-        await apiFetch("/api/auth/logout", { method: "POST" });
+        const { error } = await getSupabaseBrowserClient().auth.signOut();
+
+        if (error) {
+          throw new Error(error.message);
+        }
 
         setStatus("success");
         setMessage("로그아웃이 완료됐어요. 잠시 후 로그인 페이지로 이동합니다.");
@@ -29,16 +33,6 @@ export default function LogoutPage() {
           router.replace(ROUTES.login);
         }, 900);
       } catch (error) {
-        if (error instanceof ApiClientError && error.status === 401) {
-          setStatus("success");
-          setMessage("이미 로그아웃된 상태예요. 잠시 후 로그인 페이지로 이동합니다.");
-          router.refresh();
-          window.setTimeout(() => {
-            router.replace(ROUTES.login);
-          }, 900);
-          return;
-        }
-
         setStatus("error");
         setMessage(error instanceof Error ? error.message : "로그아웃에 실패했어요. 네트워크 상태를 확인해주세요.");
       }

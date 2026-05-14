@@ -27,8 +27,10 @@ Vercel에는 다음 값을 넣지 않는다.
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `LOCAL_LLM_API_KEY`
 - `CRON_SECRET`
+- `ADMIN_SECRET`
 
 이 값들은 브라우저 또는 Vercel UI 서버에서 필요하지 않다. dashboard 추천 요청은 Vercel `/api`가 아니라 `NEXT_PUBLIC_API_BASE_URL`의 Render API로 이동한다.
+Admin 콘솔(`/admin`)도 Render Backend의 `/api/admin/*`만 호출한다.
 
 ## Render Backend 환경변수
 
@@ -45,7 +47,10 @@ LOCAL_LLM_API_URL=https://llm-api.be-celeb.org/v1/chat/completions
 LOCAL_LLM_API_KEY=your-local-llm-key
 LOCAL_LLM_MODEL=local-model
 CRON_SECRET=your-cron-secret
+ADMIN_SECRET=your-admin-secret
 ```
+
+`ADMIN_SECRET`은 MVP admin passcode다. 운영자는 `/admin`에서 이 값을 입력하고, 프론트엔드는 `Authorization: Bearer <ADMIN_SECRET>`로 Render Backend에 전달한다. 장기 운영에서는 Supabase Auth admin role로 교체하는 것을 권장한다.
 
 선택 기능:
 
@@ -85,18 +90,21 @@ NEXT_PUBLIC_API_BASE_URL=https://api.be-celeb.org/api
 Render Backend가 `apps/api` FastAPI를 배포할 때도 Vercel Frontend와 호환되는 path를 제공한다.
 
 ```text
-POST /api/recommend-options
-POST /api/generate-content-plan
 POST /api/recommend-content
 POST /api/analyze-channel
+GET  /api/user/channel-settings
+PUT  /api/user/channel-settings
+DELETE /api/account
+GET  /api/admin/llm-prompts
 GET  /api/trends/popular-videos
 GET  /api/trends/keywords?range=daily|weekly|monthly
 ```
 
-Dashboard의 기본 추천 플로우는 2단계 API를 사용한다.
+Dashboard의 기본 추천 플로우는 1회 LLM 호출 API를 사용한다.
 
-1. `POST /api/recommend-options`: 채널 분석, 카테고리 선정, 인플루언서 영상 비교, 아이디어 3개 생성
-2. `POST /api/generate-content-plan`: 선택한 아이디어를 제목, 해시태그, 썸네일, hook, 콘티, 업로드 팁으로 확장
+1. `POST /api/recommend-content`: 채널 분석, 카테고리 선정, 인플루언서 영상 비교, active prompt 적용, 제목/해시태그/콘티를 한 번에 생성
+2. `GET/PUT /api/user/channel-settings`: 회원별 channel URL/category 저장 및 자동 불러오기
+3. `GET/POST/PATCH/DELETE /api/admin/llm-prompts`: admin active LLM prompt 관리
 
 기존 FastAPI route도 유지된다.
 
@@ -177,28 +185,20 @@ await fetch("/api/recommend-content");
 8. `Backend API request failed: 404`가 나면 Render Backend에 위 compatibility route가 배포됐는지 확인한다.
 9. `Missing required environment variable: YOUTUBE_API_KEY`가 나면 route는 정상 진입한 것이므로 Render Backend 서비스의 환경변수와 재배포 여부를 확인한다.
 
-curl 확인:
-
-```bash
-curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/recommend-options" \
-  -H "Content-Type: application/json" \
-  -d '{"channelUrl":"https://www.youtube.com/@example","category":"IT"}'
-```
-
-선택한 아이디어로 콘텐츠 계획 생성:
-
-```bash
-curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/generate-content-plan" \
-  -H "Content-Type: application/json" \
-  -d '{"analysisId":"analysis-id","option":{"optionId":"option-1","ideaTitle":"테스트 아이디어","format":"Shorts","summary":"테스트 요약"}}'
-```
-
-legacy 호환 endpoint 확인:
+추천 생성 curl 확인:
 
 ```bash
 curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/recommend-content" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
   -d '{"channelUrl":"https://www.youtube.com/@example","category":"IT"}'
+```
+
+회원별 채널 설정 확인:
+
+```bash
+curl "$NEXT_PUBLIC_API_BASE_URL/api/user/channel-settings" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 ```
 
 404가 아니고 추천 결과 또는 명확한 환경변수 오류가 나오면 path 연결은 정상이다.

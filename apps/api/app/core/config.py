@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     local_llm_api_url: str | None = "https://llm-api.be-celeb.org/v1/chat/completions"
     local_llm_api_key: str | None = None
     local_llm_model: str = "local-model"
+    admin_secret: str | None = None
+    cron_secret: str | None = None
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4-mini"
     resend_api_key: str | None = None

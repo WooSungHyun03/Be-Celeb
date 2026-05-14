@@ -139,11 +139,12 @@ async def save_channel_analysis(
     inferred_category: CreatorCategoryName,
     channel: YouTubeChannelAnalysis,
     recent_videos: list[YouTubeVideoAnalysis],
+    user_id: str | None = None,
 ) -> str:
     rows = await _post(
         "user_channel_analyses?select=id",
         {
-            "user_id": None,
+            "user_id": user_id,
             "channel_url": channel_url,
             "youtube_channel_id": channel.youtubeChannelId,
             "channel_title": channel.channelTitle,
@@ -242,3 +243,28 @@ async def save_content_plan(
         return None
     except Exception as error:
         return str(error)
+
+
+async def save_single_content_recommendation(
+    analysis_id: str,
+    user_id: str | None,
+    selected_category: CreatorCategoryName,
+    input_payload: dict[str, Any],
+    llm_response: dict[str, Any],
+) -> str | None:
+    try:
+        rows = await _post(
+            "content_recommendations?select=id",
+            {
+                "user_id": user_id,
+                "analysis_id": analysis_id,
+                "selected_category": selected_category,
+                "input_payload": input_payload,
+                "llm_response": llm_response,
+            },
+            "return=representation",
+        )
+        recommendation_id = rows[0].get("id") if isinstance(rows, list) and rows else None
+        return recommendation_id if isinstance(recommendation_id, str) else None
+    except Exception:
+        return None

@@ -30,7 +30,11 @@ def parse_llm_json_with_fallback(raw_text: str, fallback: dict[str, Any]) -> tup
         return fallback, str(error)
 
 
-async def call_local_llm(prompt: str, temperature: float = 0.65) -> str:
+async def call_local_llm(
+    prompt: str,
+    temperature: float = 0.65,
+    system_prompt: str = "You are Be-Celeb's Korean YouTube content strategist. Return valid JSON only.",
+) -> str:
     settings = get_settings()
 
     if not settings.local_llm_api_url:
@@ -51,7 +55,7 @@ async def call_local_llm(prompt: str, temperature: float = 0.65) -> str:
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are Be-Celeb's Korean YouTube content strategist. Return valid JSON only.",
+                        "content": system_prompt,
                     },
                     {
                         "role": "user",

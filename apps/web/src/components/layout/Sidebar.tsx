@@ -3,11 +3,10 @@ import Link from "next/link";
 import { ROUTES } from "@/constants/routes";
 
 const sidebarItems = [
-  { href: ROUTES.dashboard, label: "Overview" },
-  { href: ROUTES.trends, label: "Trend research" },
-  { href: ROUTES.trendingItems, label: "Shop" },
-  { href: ROUTES.recommendations, label: "Strategy ideas" },
-  { href: ROUTES.profile, label: "Profile & saved" },
+  { href: ROUTES.dashboard, label: "대시보드" },
+  { href: ROUTES.trends, label: "트렌드" },
+  { href: ROUTES.trendingItems, label: "상점" },
+  { href: ROUTES.profile, label: "계정 설정" },
 ];
 
 export function Sidebar() {

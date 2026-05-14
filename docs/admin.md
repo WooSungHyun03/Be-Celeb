@@ -1,0 +1,125 @@
+# Be-Celeb Admin 운영 가이드
+
+Be-Celeb admin은 운영자가 YouTube-only 서비스 데이터를 관리하기 위한 내부 콘솔이다.
+
+## 접속 방법
+
+- URL: `/admin`
+- 첫 화면에서 Render Backend의 `ADMIN_SECRET` 값을 입력한다.
+- 입력값은 브라우저 `sessionStorage`에 저장되고, admin API 요청마다 `Authorization: Bearer <ADMIN_SECRET>`로 전송된다.
+- 로그아웃 버튼을 누르면 sessionStorage 값이 제거된다.
+
+MVP 보호 방식이므로 운영 장기 구조에서는 Supabase Auth 사용자 role 또는 별도 admin role 테이블로 교체하는 것을 권장한다.
+
+## 서비스 구조
+
+```text
+Vercel Frontend /admin
+→ NEXT_PUBLIC_API_BASE_URL
+→ Render FastAPI /api/admin/*
+→ Supabase / YouTube API / Local LLM API
+```
+
+Vercel에는 서버 비밀키를 넣지 않는다. Supabase service role, YouTube API key, Local LLM key, `ADMIN_SECRET`은 Render Backend에만 설정한다.
+
+## 필요한 환경 변수
+
+Vercel Frontend:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://api.be-celeb.org
+```
+
+Render Backend:
+
+```env
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+YOUTUBE_API_KEY=
+LOCAL_LLM_API_URL=
+LOCAL_LLM_API_KEY=
+ADMIN_SECRET=
+CRON_SECRET=
+ALLOWED_ORIGINS=https://be-celeb.org,https://be-celeb.vercel.app,http://localhost:3000
+```
+
+## Admin에서 관리하는 데이터
+
+- `creator_categories`: 카테고리 목록 추가/수정/삭제
+- `influencer_channels`: 카테고리별 YouTube 채널 추가/수정/활성화/동기화/삭제
+- `influencer_videos`: 수집 영상 조회/태그 정규화/삭제
+- `collection_logs`: 수집 이력 조회/정리
+- `user_channel_analyses`: 사용자 채널 분석 이력 조회
+- `llm_prompt_templates`: 콘텐츠 추천에 사용할 active prompt 관리
+- `recommendation_options`: 과거 2단계 추천 옵션 이력 조회
+- `content_recommendations`: 최종 콘텐츠 계획 조회/삭제
+- `admin_audit_logs`: admin 작업 이력 저장
+
+## 인플루언서 채널 추가 방법
+
+1. `/admin` 접속 후 passcode 입력
+2. `인플루언서 채널` 섹션 이동
+3. 카테고리 선택
+4. YouTube 채널 URL 입력
+5. `채널 추가`
+6. `Sync` 버튼으로 YouTube API 기반 채널 제목, ID, 썸네일, 설명 동기화
+
+## 수동 수집 방법
+
+`수집 관리` 섹션에서 `지금 수동 수집 실행`을 누른다.
+
+백엔드 호출:
+
+```bash
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/admin/collect-now" \
+  -H "Authorization: Bearer $ADMIN_SECRET"
+```
+
+## 매일 자동 수집 시간
+
+- KST: 매일 06:00
+- UTC: 매일 21:00
+- cron: `0 21 * * *`
+
+GitHub Actions 또는 Render Cron은 기존 `CRON_SECRET` 기반 수집 endpoint를 호출한다. Admin의 `collect-now`는 운영자 수동 실행용이다.
+
+## 위험 작업
+
+`위험 작업 구역`에서 다음 작업을 실행할 수 있다.
+
+- 전체 또는 특정 카테고리의 `influencer_videos` 삭제
+- inactive `influencer_channels` 일괄 삭제
+- 전체 `collection_logs` 삭제
+
+두 작업 모두 확인 입력창에 `DELETE`를 정확히 입력해야 실행된다.
+
+## Backend Admin API
+
+모든 endpoint는 `ADMIN_SECRET` 검증이 필요하다.
+
+- `GET /api/admin/overview`
+- `GET /api/admin/categories`
+- `POST /api/admin/categories`
+- `PATCH /api/admin/categories/{category_id}`
+- `DELETE /api/admin/categories/{category_id}`
+- `GET /api/admin/influencer-channels`
+- `POST /api/admin/influencer-channels`
+- `PATCH /api/admin/influencer-channels/{channel_id}`
+- `DELETE /api/admin/influencer-channels/{channel_id}`
+- `POST /api/admin/influencer-channels/{channel_id}/sync`
+- `GET /api/admin/videos`
+- `GET /api/admin/videos/{video_id}`
+- `PATCH /api/admin/videos/{video_id}`
+- `DELETE /api/admin/videos/{video_id}`
+- `POST /api/admin/collect-now`
+- `GET /api/admin/collection-logs`
+- `GET /api/admin/analyses`
+- `GET /api/admin/recommendations`
+- `DELETE /api/admin/recommendations/{recommendation_id}`
+- `GET /api/admin/system-status`
+- `POST /api/admin/test-youtube`
+- `POST /api/admin/test-llm`
+- `POST /api/admin/danger/delete-videos-by-category`
+- `POST /api/admin/danger/delete-all-videos`
+- `POST /api/admin/danger/delete-all-collection-logs`
+- `POST /api/admin/danger/delete-inactive-channels`

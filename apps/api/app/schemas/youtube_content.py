@@ -170,6 +170,24 @@ class ContentPlanResponse(BaseModel):
     plan: ContentPlan
 
 
+class SingleContentRecommendation(ContentPlan):
+    reason: str
+    whyNotDuplicate: str
+
+
+class RecommendationResponseChannel(BaseModel):
+    youtubeChannelId: str
+    title: str
+    thumbnailUrl: str | None = None
+
+
+class SingleRecommendContentResponse(BaseModel):
+    analysisId: str
+    selectedCategory: CreatorCategoryName
+    channel: RecommendationResponseChannel
+    recommendation: SingleContentRecommendation
+
+
 class PopularTrendVideo(BaseModel):
     category: str
     youtubeVideoId: str

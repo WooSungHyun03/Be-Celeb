@@ -11,21 +11,27 @@ from app.schemas.youtube_content import (
     ContentPlanResponse,
     CreatorCategoryName,
     GenerateContentPlanOptionInput,
+    RecommendationResponseChannel,
     RecommendOptionsResponse,
     RecommendationOption,
     RecommendationOptionsChannel,
+    SingleContentRecommendation,
+    SingleRecommendContentResponse,
     StoryboardScene,
     YouTubeChannelAnalysis,
     YouTubeVideoAnalysis,
 )
+from app.services.account_service import save_user_channel_settings_metadata
 from app.services.database_service import (
     fetch_category_videos,
     fetch_channel_analysis,
     save_channel_analysis,
     save_content_plan,
     save_recommendation_options,
+    save_single_content_recommendation,
 )
 from app.services.llm_service import call_local_llm, parse_llm_json_with_fallback
+from app.services.prompt_template_service import get_active_prompt_template, render_prompt_template
 from app.services.youtube_content_service import CATEGORY_KEYWORDS, CREATOR_CATEGORIES
 from app.services.youtube_service import get_channel_info, get_recent_videos
 
@@ -288,6 +294,27 @@ def _fallback_plan(option: GenerateContentPlanOptionInput) -> ContentPlan:
     )
 
 
+def _fallback_single_recommendation(selected_category: CreatorCategoryName, influencer_videos: list[YouTubeVideoAnalysis]) -> SingleContentRecommendation:
+    seed = influencer_videos[0] if influencer_videos else None
+    title = f"{seed.title[:42]} 재해석" if seed and seed.title else f"{selected_category} 카테고리 신규 콘텐츠"
+    return SingleContentRecommendation(
+        title=title,
+        format="Shorts",
+        hashtags=["#YouTube", "#Shorts", "#BeCeleb", f"#{selected_category}"],
+        thumbnailIdea="결과 장면을 크게 배치하고 대비가 강한 짧은 문구를 얹습니다.",
+        targetAudience=f"{selected_category} 주제에 관심 있는 신규 시청자",
+        hook="첫 3초에 결과 또는 반전을 먼저 보여주고 이유를 빠르게 전개합니다.",
+        reason="카테고리 인플루언서 DB에서 반복되는 관심사를 내 채널 톤에 맞게 변형했습니다.",
+        whyNotDuplicate="최근 업로드 제목/설명/태그와 직접적인 키워드 중복을 피했습니다.",
+        storyboard=[
+            StoryboardScene(scene=1, duration="0-3s", description="결과 또는 갈등 상황을 먼저 보여줍니다.", caption="이게 가능할까?"),
+            StoryboardScene(scene=2, duration="3-12s", description="핵심 과정과 차별점을 빠르게 보여줍니다.", caption="핵심만 따라오세요"),
+            StoryboardScene(scene=3, duration="12-20s", description="시청자가 저장하거나 댓글을 남길 질문으로 마무리합니다.", caption="다음 편도 볼까요?"),
+        ],
+        uploadTips=["첫 화면에 결과를 배치하세요.", "해시태그는 3-5개로 제한하세요.", "댓글 질문으로 다음 편 소재를 유도하세요."],
+    )
+
+
 def _normalize_plan(raw: dict[str, Any], fallback: ContentPlan) -> ContentPlan:
     value = raw.get("plan") if isinstance(raw.get("plan"), dict) else raw
     if not isinstance(value, dict):
@@ -314,6 +341,142 @@ def _normalize_plan(raw: dict[str, Any], fallback: ContentPlan) -> ContentPlan:
         hook=value.get("hook") if isinstance(value.get("hook"), str) else fallback.hook,
         storyboard=storyboard or fallback.storyboard,
         uploadTips=[item for item in value.get("uploadTips", []) if isinstance(item, str)] if isinstance(value.get("uploadTips"), list) else fallback.uploadTips,
+    )
+
+
+def _normalize_single_recommendation(raw: dict[str, Any], fallback: SingleContentRecommendation) -> SingleContentRecommendation:
+    value = raw.get("recommendation") if isinstance(raw.get("recommendation"), dict) else raw
+    if not isinstance(value, dict):
+        return fallback
+    base_plan = _normalize_plan(value, fallback)
+    return SingleContentRecommendation(
+        **base_plan.model_dump(),
+        reason=value.get("reason") if isinstance(value.get("reason"), str) else fallback.reason,
+        whyNotDuplicate=value.get("whyNotDuplicate") if isinstance(value.get("whyNotDuplicate"), str) else fallback.whyNotDuplicate,
+    )
+
+
+def build_single_recommendation_prompt(
+    selected_category: CreatorCategoryName,
+    channel: YouTubeChannelAnalysis,
+    user_videos: list[YouTubeVideoAnalysis],
+    influencer_videos: list[YouTubeVideoAnalysis],
+) -> str:
+    schema = {
+        "recommendation": {
+            "title": "string",
+            "format": "string",
+            "hashtags": ["string"],
+            "thumbnailIdea": "string",
+            "targetAudience": "string",
+            "hook": "string",
+            "reason": "string",
+            "whyNotDuplicate": "string",
+            "storyboard": [
+                {
+                    "scene": 1,
+                    "duration": "0-3s",
+                    "description": "string",
+                    "caption": "string",
+                }
+            ],
+            "uploadTips": ["string"],
+        }
+    }
+    return json.dumps(
+        {
+            "schema": schema,
+            "selectedCategory": selected_category,
+            "userChannel": {
+                "youtubeChannelId": channel.youtubeChannelId,
+                "title": channel.channelTitle,
+                "description": channel.description[:1000],
+                "subscriberCount": channel.subscriberCount,
+                "videoCount": channel.videoCount,
+            },
+            "userRecentVideos": [_compact_video(video) for video in user_videos[:10]],
+            "categoryInfluencerVideos": [_compact_video(video) for video in influencer_videos[:24]],
+            "duplicateGuidelines": "Do not recommend content similar to the user's existing uploaded topics, titles, descriptions, or tags.",
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+async def create_single_content_recommendation(
+    channel_url: str,
+    category: str | None,
+    user_id: str | None = None,
+) -> SingleRecommendContentResponse:
+    selected_from_request = normalize_category(category)
+    if category and not selected_from_request:
+        raise BackendApiError(f"category must be one of: {', '.join(CREATOR_CATEGORIES)}.", 400, "VALIDATION_ERROR")
+
+    channel = await get_channel_info(channel_url)
+    recent_videos = await get_recent_videos(channel)
+    inferred_category = infer_category(channel, recent_videos)
+    selected_category = selected_from_request or inferred_category
+    influencer_videos = await fetch_category_videos(selected_category)
+    filtered_videos, duplicate_count = remove_duplicate_like_videos(recent_videos, influencer_videos)
+    fallback = _fallback_single_recommendation(selected_category, filtered_videos)
+    prompt_template = await get_active_prompt_template()
+    values = {
+        "selected_category": selected_category,
+        "user_channel": json.dumps(
+            {
+                "youtubeChannelId": channel.youtubeChannelId,
+                "title": channel.channelTitle,
+                "description": channel.description[:1000],
+                "subscriberCount": channel.subscriberCount,
+                "videoCount": channel.videoCount,
+            },
+            ensure_ascii=False,
+        ),
+        "user_recent_videos": json.dumps([_compact_video(video) for video in recent_videos[:10]], ensure_ascii=False),
+        "category_database_videos": json.dumps([_compact_video(video) for video in filtered_videos[:24]], ensure_ascii=False),
+        "duplicate_guidelines": "사용자가 이미 올린 영상의 제목, 설명, 태그와 유사한 주제는 추천하지 않는다.",
+    }
+    rendered_prompt = render_prompt_template(prompt_template["userPromptTemplate"], values)
+    raw_text = await call_local_llm(rendered_prompt, system_prompt=prompt_template["systemPrompt"])
+    raw_json, parse_error = parse_llm_json_with_fallback(raw_text, {"recommendation": fallback.model_dump()})
+    recommendation = _normalize_single_recommendation(raw_json, fallback)
+    analysis_id = await save_channel_analysis(
+        channel_url=channel_url,
+        requested_category=category,
+        selected_category=selected_category,
+        inferred_category=inferred_category,
+        channel=channel,
+        recent_videos=recent_videos,
+        user_id=user_id,
+    )
+    await save_single_content_recommendation(
+        analysis_id=analysis_id,
+        user_id=user_id,
+        selected_category=selected_category,
+        input_payload={
+            "channelUrl": channel_url,
+            "requestedCategory": category,
+            "selectedCategory": selected_category,
+            "inferredCategory": inferred_category,
+            "influencerVideosUsed": len(filtered_videos),
+            "duplicateVideosExcluded": duplicate_count,
+            "promptTemplateId": prompt_template.get("id"),
+            "llmParseError": parse_error,
+        },
+        llm_response={"recommendation": recommendation.model_dump(mode="json"), "raw": raw_json},
+    )
+    if user_id:
+        await save_user_channel_settings_metadata(user_id, channel_url, selected_category, channel)
+
+    return SingleRecommendContentResponse(
+        analysisId=analysis_id,
+        selectedCategory=selected_category,
+        channel=RecommendationResponseChannel(
+            youtubeChannelId=channel.youtubeChannelId,
+            title=channel.channelTitle,
+            thumbnailUrl=channel.thumbnailUrl,
+        ),
+        recommendation=recommendation,
     )
 
 

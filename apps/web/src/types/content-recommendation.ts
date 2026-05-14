@@ -72,7 +72,9 @@ export type ContentRecommendation = {
   targetAudience: string;
   hashtags: string[];
   thumbnailIdea: string;
+  hook?: string;
   storyboard: StoryboardScene[];
+  uploadTips?: string[];
 };
 
 export type LlmRecommendationResponse = {
@@ -136,4 +138,40 @@ export type GenerateContentPlanResponse = {
 export type GenerateContentPlanPayload = {
   analysisId: string;
   option: Pick<RecommendationOption, "optionId" | "ideaTitle" | "format" | "summary">;
+};
+
+export type SingleContentRecommendation = {
+  title: string;
+  format: string;
+  hashtags: string[];
+  thumbnailIdea: string;
+  targetAudience: string;
+  hook: string;
+  reason: string;
+  whyNotDuplicate: string;
+  storyboard: StoryboardScene[];
+  uploadTips: string[];
+};
+
+export type SingleRecommendContentResponse = {
+  analysisId: string;
+  selectedCategory: CreatorCategoryName;
+  channel: {
+    youtubeChannelId: string;
+    title: string;
+    thumbnailUrl: string | null;
+  };
+  recommendation: SingleContentRecommendation;
+};
+
+export type UserChannelSettings = {
+  id: string;
+  userId: string;
+  channelUrl: string;
+  category: CreatorCategoryName | string;
+  youtubeChannelId: string | null;
+  channelTitle: string | null;
+  channelThumbnailUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
 };

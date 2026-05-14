@@ -11,9 +11,7 @@ const navItems = [
   { href: ROUTES.dashboard, label: "대시보드" },
   { href: ROUTES.trends, label: "트렌드" },
   { href: ROUTES.trendingItems, label: "상점" },
-  { href: ROUTES.recommendations, label: "추천" },
   { href: ROUTES.pricing, label: "요금" },
-  { href: ROUTES.profile, label: "마이페이지" },
 ];
 
 function LoginIcon() {
@@ -99,17 +97,10 @@ export function Header() {
             <>
               <Link
                 href={ROUTES.profile}
-                className="hidden min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-ink shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md active:translate-y-0 sm:inline-flex"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-ink shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md active:translate-y-0"
               >
                 <span aria-hidden="true">♙</span>
-                마이페이지
-              </Link>
-              <Link
-                href={ROUTES.dashboard}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm shadow-violet-200 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-lg active:translate-y-0"
-              >
-                <span aria-hidden="true">▦</span>
-                대시보드
+                계정 설정
               </Link>
               <Link
                 href={ROUTES.logout}

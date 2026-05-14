@@ -8,15 +8,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-import { apiFetch } from "@/lib/client/api";
-
-type ApiSuccessResponse = {
-  success: true;
-  data?: {
-    email?: string;
-    emailVerificationRequired?: boolean;
-  };
-};
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -40,15 +32,36 @@ export default function SignupPage() {
     setStatus("loading");
 
     try {
-      const success = await apiFetch<ApiSuccessResponse>("/api/auth/signup", {
-        method: "POST",
-        body: JSON.stringify({ email, password, nickname }),
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { nickname },
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${ROUTES.dashboard}`,
+        },
       });
 
-      if (success.data?.emailVerificationRequired) {
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data.session) {
         setStatus("success");
-        setMessage(`${success.data.email ?? email} 주소로 인증 메일을 보냈어요. 메일함에서 인증을 완료해주세요.`);
+        setMessage(`${email} 주소로 인증 메일을 보냈어요. 메일함에서 인증을 완료해주세요.`);
         return;
+      }
+
+      if (data.user) {
+        await supabase.from("profiles").upsert(
+          {
+            user_id: data.user.id,
+            nickname,
+            onboarding_completed: false,
+            is_deleted: false,
+          },
+          { onConflict: "user_id" },
+        );
       }
 
       router.push(ROUTES.dashboard);

@@ -3,6 +3,7 @@
 // Exchanges Supabase email auth callback codes in the browser.
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ROUTES } from "@/constants/routes";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type AuthCallbackClientProps = {
@@ -55,9 +56,7 @@ export function AuthCallbackClient({ code, error, errorDescription, nextPath }: 
 
         const safeNextPath = getSafeNextPath(nextPath);
 
-        if (safeNextPath) {
-          router.replace(safeNextPath);
-        }
+        router.replace(safeNextPath ?? ROUTES.dashboard);
       } catch (exchangeError) {
         setStatus("error");
         setMessage(exchangeError instanceof Error ? exchangeError.message : "알 수 없는 인증 오류입니다.");

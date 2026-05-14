@@ -32,7 +32,7 @@ Be Celeb은 유튜브 크리에이터가 자신의 채널과 비슷한 카테고
 - AI: OpenAI Responses API
 - Deployment: Vercel, Render, Cloudflare
 
-Frontend는 `NEXT_PUBLIC_API_BASE_URL`을 통해 Render Backend API를 호출합니다. Vercel에는 `YOUTUBE_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LOCAL_LLM_API_KEY`를 넣지 않습니다. 자세한 배포 구조와 CORS 설정은 `docs/deployment.md`를 확인합니다.
+Frontend는 `NEXT_PUBLIC_API_BASE_URL`을 통해 Render Backend API를 호출합니다. Vercel에는 `YOUTUBE_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LOCAL_LLM_API_KEY`를 넣지 않습니다. 자세한 배포 구조와 CORS 설정은 `docs/deployment.md`를 확인합니다. 운영자 콘솔 사용 방법은 `docs/admin.md`, 추천 흐름은 `docs/recommendation-flow.md`를 확인합니다.
 
 ## 역할별 담당 디렉토리
 
@@ -308,10 +308,10 @@ Cloudflare는 DNS, 도메인 관리, Email Routing을 담당합니다.
 
 ## AI API 설정
 
-Next.js와 FastAPI 모두 서버 사이드에서만 AI API를 호출합니다. YouTube 추천 흐름의 로컬 LLM API도 Next.js API route에서만 호출합니다.
+FastAPI Backend만 Local LLM API를 호출합니다. YouTube 추천 흐름은 Render의 `POST /api/recommend-content`에서 1회 LLM 호출로 처리합니다.
 
-- Web route: `POST /api/ai/recommend`
-- FastAPI route: `POST /recommendations/generate`
+- FastAPI route: `POST /api/recommend-content`
+- Admin prompt route: `GET/POST/PATCH/DELETE /api/admin/llm-prompts`
 
 `OPENAI_API_KEY`가 없으면 API는 명확한 설정 오류를 반환합니다. 브라우저에는 key가 노출되지 않습니다.
 

@@ -1,15 +1,14 @@
 import type {
   ChannelAnalysisResult,
-  GenerateContentPlanPayload,
-  GenerateContentPlanResponse,
-  RecommendationApiResult,
-  RecommendOptionsResponse,
+  SingleRecommendContentResponse,
+  UserChannelSettings,
 } from "@/types/content-recommendation";
 import type {
   PopularVideosResponse,
   TrendKeywordsResponse,
   TrendKeywordRange,
 } from "@/types/youtube-trends";
+import { getAuthorizationHeaders } from "@/lib/client/auth";
 
 export type ApiSuccess<T> = {
   success: true;
@@ -148,29 +147,40 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 }
 
 export async function recommendContent(payload: RecommendContentPayload, signal?: AbortSignal) {
-  const response = await apiFetch<ApiSuccess<RecommendationApiResult>>("/api/recommend-content", {
+  const response = await apiFetch<ApiSuccess<SingleRecommendContentResponse>>("/api/recommend-content", {
     method: "POST",
     body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
     signal,
   });
 
   return response.data;
 }
 
-export async function recommendOptions(payload: RecommendContentPayload, signal?: AbortSignal) {
-  const response = await apiFetch<ApiSuccess<RecommendOptionsResponse>>("/api/recommend-options", {
-    method: "POST",
-    body: JSON.stringify(payload),
+export async function getUserChannelSettings(signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ settings: UserChannelSettings | null }>>("/api/user/channel-settings", {
+    headers: await getAuthorizationHeaders(),
     signal,
   });
 
-  return response.data;
+  return response.data.settings;
 }
 
-export async function generateContentPlan(payload: GenerateContentPlanPayload, signal?: AbortSignal) {
-  const response = await apiFetch<ApiSuccess<GenerateContentPlanResponse>>("/api/generate-content-plan", {
-    method: "POST",
+export async function updateUserChannelSettings(payload: RecommendContentPayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ settings: UserChannelSettings }>>("/api/user/channel-settings", {
+    method: "PUT",
     body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data.settings;
+}
+
+export async function deleteAccount(signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ deleted: true }>>("/api/account", {
+    method: "DELETE",
+    headers: await getAuthorizationHeaders(),
     signal,
   });
 

@@ -8,7 +8,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-import { apiFetch } from "@/lib/client/api";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,10 +23,14 @@ export default function LoginPage() {
     setMessage("");
 
     try {
-      await apiFetch("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
+      const { error } = await getSupabaseBrowserClient().auth.signInWithPassword({
+        email,
+        password,
       });
+
+      if (error) {
+        throw new Error("이메일 또는 비밀번호가 올바르지 않습니다.");
+      }
 
       router.push(ROUTES.dashboard);
       router.refresh();

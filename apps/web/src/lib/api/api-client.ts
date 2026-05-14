@@ -3,13 +3,11 @@ export {
   ApiClientError,
   analyzeChannel,
   apiFetch,
-  generateContentPlan,
   getApiBaseUrl,
   getApiUrl,
   getPopularVideos,
   getTrendKeywords,
   recommendContent,
-  recommendOptions,
 } from "@/lib/client/api";
 export type {
   AnalyzeChannelPayload,

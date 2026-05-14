@@ -1,7 +1,7 @@
 # Defines Next API-compatible routes served by the Render FastAPI backend.
 from typing import cast
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
 from fastapi.responses import JSONResponse
 
 from app.core.errors import BackendApiError
@@ -13,16 +13,16 @@ from app.schemas.youtube_content import (
     PopularVideosResponse,
     RecommendOptionsResponse,
     RecommendContentRequest,
-    RecommendationApiResult,
+    SingleRecommendContentResponse,
     TrendKeywordRange,
     TrendKeywordsResponse,
 )
-from app.services.recommendation_service import create_content_plan, create_recommendation_options
+from app.services.auth_service import access_token_from_authorization, get_user_from_access_token
+from app.services.recommendation_service import create_content_plan, create_recommendation_options, create_single_content_recommendation
 from app.services.youtube_content_service import (
     analyze_channel_for_recommendation,
     get_keyword_trends,
     get_popular_videos_by_category,
-    recommend_content,
 )
 from app.utils.response import ApiResponse
 
@@ -72,12 +72,14 @@ async def create_content_plan_route(
         return error_response(error)
 
 
-@router.post("/recommend-content", response_model=ApiResponse[RecommendationApiResult])
+@router.post("/recommend-content", response_model=ApiResponse[SingleRecommendContentResponse])
 async def create_content_recommendation(
     request: RecommendContentRequest,
-) -> ApiResponse[RecommendationApiResult] | JSONResponse:
+    authorization: str | None = Header(default=None),
+) -> ApiResponse[SingleRecommendContentResponse] | JSONResponse:
     try:
-        result = await recommend_content(request.channel_url, request.category)
+        user = await get_user_from_access_token(access_token_from_authorization(authorization))
+        result = await create_single_content_recommendation(request.channel_url, request.category, user.get("id") if user else None)
         return ApiResponse(success=True, data=result)
     except Exception as error:
         return error_response(error)
