@@ -10,6 +10,7 @@ import { Input } from "@/components/common/Input";
 import { Loading } from "@/components/common/Loading";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ROUTES } from "@/constants/routes";
+import { ApiClientError, apiFetch, type ApiSuccess } from "@/lib/client/api";
 
 type ProfilePayload = {
   user: {
@@ -36,17 +37,6 @@ type ProfilePayload = {
   authProvider: string;
 };
 
-type ApiSuccess<T> = {
-  success: true;
-  data: T;
-};
-
-type ApiFailure = {
-  success: false;
-  message?: string;
-  code?: string;
-};
-
 function getYoutubeChannelUrl(profile: ProfilePayload["profile"]) {
   return profile.youtubeChannelUrl ?? profile.youtube_channel_url ?? "";
 }
@@ -62,20 +52,6 @@ function getPlanUsage(plan: ProfilePayload["plan"]) {
   };
 }
 
-async function readApi<T>(response: Response) {
-  const payload = (await response.json().catch(() => null)) as ApiSuccess<T> | ApiFailure | null;
-
-  if (!payload) {
-    throw new Error("서버 응답을 읽지 못했습니다.");
-  }
-
-  if (!response.ok || !payload.success) {
-    throw new Error(payload.success === false ? payload.message ?? "요청에 실패했습니다." : "요청에 실패했습니다.");
-  }
-
-  return payload.data;
-}
-
 export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfilePayload | null>(null);
   const [nickname, setNickname] = useState("");
@@ -87,17 +63,8 @@ export default function ProfilePage() {
   useEffect(() => {
     let active = true;
 
-    fetch("/api/me")
-      .then(async (response) => {
-        if (response.status === 401) {
-          if (active) {
-            setStatus("unauthorized");
-          }
-          return null;
-        }
-
-        return readApi<ProfilePayload>(response);
-      })
+    apiFetch<ApiSuccess<ProfilePayload>>("/api/me")
+      .then((response) => response.data)
       .then((data) => {
         if (!active || !data) {
           return;
@@ -110,6 +77,11 @@ export default function ProfilePage() {
       })
       .catch((error) => {
         if (active) {
+          if (error instanceof ApiClientError && error.status === 401) {
+            setStatus("unauthorized");
+            return;
+          }
+
           setStatus("error");
           setMessage(error instanceof Error ? error.message : "프로필을 불러오지 못했습니다.");
         }
@@ -126,18 +98,18 @@ export default function ProfilePage() {
     setMessage("");
 
     try {
-      const data = await readApi<{ profile: ProfilePayload["profile"] }>(
-        await fetch("/api/me/profile", {
+      const data = await apiFetch<ApiSuccess<{ profile: ProfilePayload["profile"] }>>(
+        "/api/me/profile",
+        {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             nickname,
             youtube_channel_url: youtubeChannelUrl || null,
           }),
-        }),
+        },
       );
 
-      setProfile((current) => (current ? { ...current, profile: { ...current.profile, ...data.profile } } : current));
+      setProfile((current) => (current ? { ...current, profile: { ...current.profile, ...data.data.profile } } : current));
       setSaveStatus("success");
       setMessage("프로필이 저장되었습니다.");
     } catch (error) {

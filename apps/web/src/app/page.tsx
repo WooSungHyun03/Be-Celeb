@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ROUTES } from "@/constants/routes";
+import { getApiUrl } from "@/lib/client/api";
 
 type HomePageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -512,7 +513,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const code = firstParam(params.code);
 
   if (code) {
-    redirect(`/api/auth/reset-password/callback?code=${encodeURIComponent(code)}`);
+    redirect(getApiUrl(`/api/auth/reset-password/callback?code=${encodeURIComponent(code)}`));
   }
 
   return (

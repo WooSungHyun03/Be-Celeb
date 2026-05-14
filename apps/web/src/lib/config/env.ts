@@ -18,6 +18,10 @@ function normalizeSupabaseUrl(value: string) {
   return value.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/i, "");
 }
 
+function firstDefined(...values: Array<string | undefined>) {
+  return values.find((value) => value !== undefined && value !== "");
+}
+
 export function getPublicEnv() {
   return {
     siteUrl: requireValue("NEXT_PUBLIC_SITE_URL", process.env.NEXT_PUBLIC_SITE_URL),
@@ -45,9 +49,21 @@ export function getServerEnv() {
   };
 }
 
+export function getSupabaseAuthServerEnv() {
+  return {
+    supabaseUrl: normalizeSupabaseUrl(
+      requireValue("SUPABASE_URL", firstDefined(process.env.SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_URL)),
+    ),
+    supabaseAnonKey: requireValue(
+      "SUPABASE_ANON_KEY",
+      firstDefined(process.env.SUPABASE_ANON_KEY, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    ),
+  };
+}
+
 export function getSupabaseServerEnv() {
   return {
-    ...getSupabasePublicEnv(),
+    ...getSupabaseAuthServerEnv(),
     supabaseServiceRoleKey: requireValue("SUPABASE_SERVICE_ROLE_KEY", process.env.SUPABASE_SERVICE_ROLE_KEY),
   };
 }

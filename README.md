@@ -2,7 +2,7 @@
 
 Be Celeb은 유튜브 크리에이터가 자신의 채널과 비슷한 카테고리의 인플루언서 콘텐츠 패턴을 분석해 다음 영상 아이디어를 추천받는 AI 서비스입니다.
 
-이 저장소는 Next.js 웹앱, FastAPI 분석 서버, Supabase, Resend, OpenAI API를 실제 배포 환경에 연결할 수 있는 최소 구조를 제공합니다. API Key와 secret은 코드에 포함하지 않고 환경변수로만 주입합니다.
+이 저장소는 Next.js 웹앱, Render Backend API, Supabase, Resend, Local LLM API를 실제 배포 환경에 연결할 수 있는 최소 구조를 제공합니다. API Key와 secret은 코드에 포함하지 않고 환경변수로만 주입합니다.
 
 ## 배포 아키텍처
 
@@ -10,7 +10,7 @@ Be Celeb은 유튜브 크리에이터가 자신의 채널과 비슷한 카테고
 | --- | --- |
 | DNS / 도메인 / Email Routing | Cloudflare |
 | Web | Vercel + Next.js |
-| API | Render + FastAPI |
+| API | Render Backend API |
 | Auth / DB / Storage | Supabase |
 | Email 발송 | Resend |
 | AI 추천 | Local LLM API / OpenAI API |
@@ -21,17 +21,18 @@ Be Celeb은 유튜브 크리에이터가 자신의 채널과 비슷한 카테고
 | --- | --- |
 | `https://be-celeb.org` | Vercel Next.js production |
 | `https://www.be-celeb.org` | Vercel Next.js production |
-| `https://api.be-celeb.org` | Render FastAPI production |
+| `https://api.be-celeb.org` | Render Backend API production |
 
 ## 사용 스택
 
 - Frontend: Next.js, React, TypeScript, App Router, Tailwind CSS
-- Backend for Frontend: Next.js Route Handlers
-- Data API: FastAPI, Pydantic, OpenAI Python SDK
+- Backend API: Render-hosted Next.js Route Handlers, FastAPI legacy routes
 - Auth/Database/Storage: Supabase
 - Email: Resend
 - AI: OpenAI Responses API
 - Deployment: Vercel, Render, Cloudflare
+
+Frontend는 `NEXT_PUBLIC_API_BASE_URL`을 통해 Render Backend API를 호출합니다. Vercel에는 `YOUTUBE_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LOCAL_LLM_API_KEY`를 넣지 않습니다. 자세한 배포 구조와 CORS 설정은 `docs/deployment.md`를 확인합니다.
 
 ## 역할별 담당 디렉토리
 

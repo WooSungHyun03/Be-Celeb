@@ -4,8 +4,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function getFrontendUrl(requestUrl: URL, path: string) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
+  return new URL(path, siteUrl || requestUrl.origin);
+}
+
 function redirectWithError(requestUrl: URL, message: string) {
-  const fallbackUrl = new URL("/auth/callback", requestUrl.origin);
+  const fallbackUrl = getFrontendUrl(requestUrl, "/auth/callback");
   fallbackUrl.searchParams.set("error", "auth_callback_error");
   fallbackUrl.searchParams.set("error_description", message);
   return NextResponse.redirect(fallbackUrl);
@@ -32,5 +37,5 @@ export async function GET(request: Request) {
     return redirectWithError(requestUrl, error.message);
   }
 
-  return NextResponse.redirect(new URL("/reset-password", requestUrl.origin));
+  return NextResponse.redirect(getFrontendUrl(requestUrl, "/reset-password"));
 }

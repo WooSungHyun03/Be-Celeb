@@ -7,6 +7,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
+import { apiFetch } from "@/lib/client/api";
 
 type FindIdSuccessResponse = {
   success: true;
@@ -15,12 +16,6 @@ type FindIdSuccessResponse = {
     emailHint: string | null;
     nickname: string | null;
   };
-};
-
-type ApiErrorResponse = {
-  success: false;
-  message?: string;
-  code?: string;
 };
 
 export default function FindIdPage() {
@@ -34,21 +29,10 @@ export default function FindIdPage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/auth/find-id", {
+      const result = await apiFetch<FindIdSuccessResponse>("/api/auth/find-id", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nickname }),
       });
-      const payload: unknown = await response.json();
-
-      if (!response.ok) {
-        const error = payload as ApiErrorResponse;
-        setStatus("error");
-        setMessage(error.message ?? "계정을 찾지 못했어요.");
-        return;
-      }
-
-      const result = payload as FindIdSuccessResponse;
 
       if (result.data.found && result.data.emailHint) {
         setStatus("success");
@@ -58,9 +42,9 @@ export default function FindIdPage() {
 
       setStatus("success");
       setMessage("입력한 닉네임과 일치하는 계정을 찾지 못했어요.");
-    } catch {
+    } catch (error) {
       setStatus("error");
-      setMessage("계정 확인 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+      setMessage(error instanceof Error ? error.message : "계정 확인 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
     }
   }
 

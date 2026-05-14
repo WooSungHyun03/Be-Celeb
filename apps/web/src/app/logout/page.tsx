@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { ROUTES } from "@/constants/routes";
+import { ApiClientError, apiFetch } from "@/lib/client/api";
 
 type LogoutState = "loading" | "success" | "error";
 
@@ -18,13 +19,7 @@ export default function LogoutPage() {
   useEffect(() => {
     async function logout() {
       try {
-        const response = await fetch("/api/auth/logout", { method: "POST" });
-
-        if (!response.ok && response.status !== 401) {
-          setStatus("error");
-          setMessage("로그아웃에 실패했어요. 잠시 후 다시 시도해주세요.");
-          return;
-        }
+        await apiFetch("/api/auth/logout", { method: "POST" });
 
         setStatus("success");
         setMessage("로그아웃이 완료됐어요. 잠시 후 로그인 페이지로 이동합니다.");
@@ -33,9 +28,19 @@ export default function LogoutPage() {
         window.setTimeout(() => {
           router.replace(ROUTES.login);
         }, 900);
-      } catch {
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 401) {
+          setStatus("success");
+          setMessage("이미 로그아웃된 상태예요. 잠시 후 로그인 페이지로 이동합니다.");
+          router.refresh();
+          window.setTimeout(() => {
+            router.replace(ROUTES.login);
+          }, 900);
+          return;
+        }
+
         setStatus("error");
-        setMessage("로그아웃에 실패했어요. 네트워크 상태를 확인해주세요.");
+        setMessage(error instanceof Error ? error.message : "로그아웃에 실패했어요. 네트워크 상태를 확인해주세요.");
       }
     }
 

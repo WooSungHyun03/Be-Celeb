@@ -18,23 +18,13 @@ import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SkeletonCard } from "@/components/common/Loading";
+import { getPopularVideos, getTrendKeywords } from "@/lib/client/api";
 import type {
   PopularTrendVideo,
   PopularVideosResponse,
   TrendKeywordsResponse,
   TrendKeywordRange,
 } from "@/types/youtube-trends";
-
-type ApiSuccess<T> = {
-  success: true;
-  data: T;
-};
-
-type ApiFailure = {
-  success: false;
-  message?: string;
-  code?: string;
-};
 
 type AsyncState<T> = {
   status: "idle" | "loading" | "success" | "error";
@@ -56,21 +46,6 @@ function createInitialState<T>(): AsyncState<T> {
     data: null,
     error: null,
   };
-}
-
-async function fetchApi<T>(url: string, signal?: AbortSignal) {
-  const response = await fetch(url, { signal });
-  const payload = (await response.json().catch(() => null)) as ApiSuccess<T> | ApiFailure | null;
-
-  if (!payload) {
-    throw new Error("트렌드 데이터를 불러오지 못했습니다.");
-  }
-
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.success === false ? payload.message ?? "트렌드 데이터를 불러오지 못했습니다." : "트렌드 데이터를 불러오지 못했습니다.");
-  }
-
-  return payload.data;
 }
 
 function formatCompactNumber(value: number | null | undefined) {
@@ -413,7 +388,7 @@ export function YouTubeTrendsClient() {
     const controller = new AbortController();
 
     setPopularState({ status: "loading", data: null, error: null });
-    fetchApi<PopularVideosResponse>("/api/trends/popular-videos", controller.signal)
+    getPopularVideos(controller.signal)
       .then((data) => {
         setPopularState({ status: "success", data, error: null });
       })
@@ -434,7 +409,7 @@ export function YouTubeTrendsClient() {
     const controller = new AbortController();
 
     setKeywordState({ status: "loading", data: null, error: null });
-    fetchApi<TrendKeywordsResponse>(`/api/trends/keywords?range=${range}`, controller.signal)
+    getTrendKeywords(range, controller.signal)
       .then((data) => {
         setKeywordState({ status: "success", data, error: null });
       })

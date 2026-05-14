@@ -7,12 +7,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-
-type ApiErrorResponse = {
-  success: false;
-  message?: string;
-  code?: string;
-};
+import { apiFetch } from "@/lib/client/api";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -32,27 +27,18 @@ export default function ResetPasswordPage() {
     }
 
     try {
-      const response = await fetch("/api/auth/update-password", {
+      await apiFetch("/api/auth/update-password", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
-      const payload: unknown = await response.json();
-
-      if (!response.ok) {
-        const error = payload as ApiErrorResponse;
-        setStatus("error");
-        setMessage(error.message ?? "비밀번호를 변경하지 못했어요.");
-        return;
-      }
 
       setStatus("success");
       setPassword("");
       setConfirmPassword("");
       setMessage("비밀번호가 변경됐어요. 새 비밀번호로 로그인해 주세요.");
-    } catch {
+    } catch (error) {
       setStatus("error");
-      setMessage("비밀번호 변경 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+      setMessage(error instanceof Error ? error.message : "비밀번호 변경 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
     }
   }
 

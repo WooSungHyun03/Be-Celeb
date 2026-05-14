@@ -8,12 +8,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-
-type ApiErrorResponse = {
-  success: false;
-  message?: string;
-  code?: string;
-};
+import { apiFetch } from "@/lib/client/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,25 +23,16 @@ export default function LoginPage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/auth/login", {
+      await apiFetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const payload: unknown = await response.json();
-
-      if (!response.ok) {
-        const error = payload as ApiErrorResponse;
-        setStatus("error");
-        setMessage(error.message ?? "로그인에 실패했어요.");
-        return;
-      }
 
       router.push(ROUTES.dashboard);
       router.refresh();
-    } catch {
+    } catch (error) {
       setStatus("error");
-      setMessage("로그인에 실패했어요. 잠시 후 다시 시도해주세요.");
+      setMessage(error instanceof Error ? error.message : "로그인에 실패했어요. 잠시 후 다시 시도해주세요.");
     }
   }
 

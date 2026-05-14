@@ -2,12 +2,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-import { getSupabasePublicEnv, getSupabaseServerEnv } from "@/lib/config/env";
+import { getSupabaseAuthServerEnv, getSupabaseServerEnv } from "@/lib/config/env";
 
 let serviceRoleClient: SupabaseClient | null = null;
 
 export async function createSupabaseServerClient() {
-  const { supabaseAnonKey, supabaseUrl } = getSupabasePublicEnv();
+  const { supabaseAnonKey, supabaseUrl } = getSupabaseAuthServerEnv();
   const cookieStore = await cookies();
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {

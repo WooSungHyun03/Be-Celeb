@@ -6,19 +6,9 @@ import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { Input } from "@/components/common/Input";
 import { PageHeader } from "@/components/common/PageHeader";
+import { recommendContent } from "@/lib/client/api";
 import { CREATOR_CATEGORIES } from "@/lib/categories";
 import type { ContentRecommendation, RecommendationApiResult, YouTubeVideoAnalysis } from "@/types/content-recommendation";
-
-type ApiSuccess<T> = {
-  success: true;
-  data: T;
-};
-
-type ApiFailure = {
-  success: false;
-  message?: string;
-  code?: string;
-};
 
 const loadingStages = ["채널 분석 중", "카테고리 선정 중", "인플루언서 데이터 분석 중", "AI 추천 생성 중"];
 
@@ -191,23 +181,12 @@ export function DashboardRecommendationClient() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/recommend-content", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          channelUrl,
-          category: category || null,
-        }),
+      const data = await recommendContent({
+        channelUrl,
+        category: category || null,
       });
-      const payload = (await response.json()) as ApiSuccess<RecommendationApiResult> | ApiFailure;
 
-      if (!payload.success) {
-        throw new Error(payload.message ?? "추천 생성에 실패했습니다.");
-      }
-
-      setResult(payload.data);
+      setResult(data);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "추천 생성에 실패했습니다.");
     } finally {

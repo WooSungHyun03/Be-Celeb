@@ -7,12 +7,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-
-type ApiErrorResponse = {
-  success: false;
-  message?: string;
-  code?: string;
-};
+import { apiFetch } from "@/lib/client/api";
 
 type ResetPasswordSuccessResponse = {
   success: true;
@@ -33,30 +28,19 @@ export default function ForgotPasswordPage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/auth/reset-password", {
+      const result = await apiFetch<ResetPasswordSuccessResponse>("/api/auth/reset-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const payload: unknown = await response.json();
-
-      if (!response.ok) {
-        const error = payload as ApiErrorResponse;
-        setStatus("error");
-        setMessage(error.message ?? "재설정 메일을 보내지 못했어요.");
-        return;
-      }
-
-      const result = payload as ResetPasswordSuccessResponse;
       setStatus("success");
       setMessage(
         result.data?.authProvider === "json"
           ? "개발용 JSON 인증에서는 메일 발송 없이 요청만 성공 처리됩니다."
           : "가입 여부와 관계없이 입력한 이메일로 재설정 안내를 보냈어요.",
       );
-    } catch {
+    } catch (error) {
       setStatus("error");
-      setMessage("재설정 요청 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+      setMessage(error instanceof Error ? error.message : "재설정 요청 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
     }
   }
 

@@ -8,12 +8,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-
-type ApiErrorResponse = {
-  success: false;
-  message?: string;
-  code?: string;
-};
+import { apiFetch } from "@/lib/client/api";
 
 type ApiSuccessResponse = {
   success: true;
@@ -45,21 +40,10 @@ export default function SignupPage() {
     setStatus("loading");
 
     try {
-      const response = await fetch("/api/auth/signup", {
+      const success = await apiFetch<ApiSuccessResponse>("/api/auth/signup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, nickname }),
       });
-      const payload: unknown = await response.json();
-
-      if (!response.ok) {
-        const error = payload as ApiErrorResponse;
-        setStatus("error");
-        setMessage(error.message ?? "회원가입에 실패했어요.");
-        return;
-      }
-
-      const success = payload as ApiSuccessResponse;
 
       if (success.data?.emailVerificationRequired) {
         setStatus("success");
@@ -69,9 +53,9 @@ export default function SignupPage() {
 
       router.push(ROUTES.dashboard);
       router.refresh();
-    } catch {
+    } catch (error) {
       setStatus("error");
-      setMessage("회원가입에 실패했어요. 잠시 후 다시 시도해주세요.");
+      setMessage(error instanceof Error ? error.message : "회원가입에 실패했어요. 잠시 후 다시 시도해주세요.");
     }
   }
 

@@ -79,11 +79,11 @@ where channel_url = 'https://www.youtube.com/@somecreator';
 
 ## 필요한 환경 변수
 
-Next.js 서버 런타임에 설정합니다.
+Render Backend API 런타임에 설정합니다.
 
 ```txt
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 YOUTUBE_API_KEY=
 CRON_SECRET=
@@ -106,7 +106,7 @@ curl --fail-with-body -X POST "$DAILY_COLLECT_ENDPOINT" \
 Schedule: 0 21 * * *
 Timezone: UTC
 KST 기준: 매일 다음날 06:00
-DAILY_COLLECT_ENDPOINT=https://your-domain.com/api/cron/collect-daily-videos
+DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
 CRON_SECRET=your-secret
 ```
 
@@ -121,11 +121,7 @@ DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect
 CRON_SECRET=your-secret
 ```
 
-Next.js route가 Vercel에 배포되어 있다면 `DAILY_COLLECT_ENDPOINT`는 다음처럼 설정합니다.
-
-```txt
-DAILY_COLLECT_ENDPOINT=https://be-celeb.org/api/cron/collect-daily-videos
-```
+Vercel Frontend의 `/api` route는 원칙적으로 호출하지 않습니다. `DAILY_COLLECT_ENDPOINT`는 Render Backend API URL로 설정합니다.
 
 ## 수동 테스트
 
