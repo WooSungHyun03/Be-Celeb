@@ -25,7 +25,7 @@ class TrendSummary(BaseSchema):
     title: str = Field(..., description="트렌드 제목")
     description: str = Field(..., description="트렌드 상세 설명")
     category: str = Field(..., description="카테고리")
-    platforms: List[str] = Field(..., description="해당 플랫폼 (tiktok, instagram-reels 등)")
+    platforms: List[str] = Field(..., description="해당 플랫폼 (YouTube)")
     score: int = Field(..., description="트렌드 점수 (0-100)")
     growth_rate: int = Field(..., description="성장률 (%)")
     direction: str = Field(..., description="추세 (rising, stable, watch)")
@@ -39,11 +39,11 @@ class SampleRecommendation(BaseSchema):
     title: str = Field(..., description="추천 콘텐츠 제목")
     summary: str = Field(..., description="콘텐츠 요약")
     category: str = Field(..., description="카테고리")
-    platforms: List[str] = Field(..., description="추천 플랫폼")
+    platforms: List[str] = Field(..., description="추천 YouTube 형식")
     priority: str = Field(..., description="우선순위 (high, medium, low)")
     expected_score: int = Field(..., description="추천 적합도 점수")
     hook_text: str = Field(..., description="도입부 3초 후킹 멘트")
-    content_plan: List[str] = Field(..., description="릴스 영상 3단 구성안")
+    content_plan: List[str] = Field(..., description="Shorts 영상 3단 구성안")
     hashtags: List[str] = Field(..., description="추천 해시태그 목록")
     reason: str = Field(..., description="추천 이유")
     steps: List[str] = Field(..., description="실행 단계 가이드")
@@ -54,4 +54,5 @@ class SampleRecommendation(BaseSchema):
 class MainResponse(BaseSchema):
     stats: ServiceStats
     popular_trends: List[TrendSummary]
-    sample_recommendation: SampleRecommendation
+    sample_recommendation: Optional[SampleRecommendation] = None
+

@@ -3,20 +3,23 @@
     {
       "id": "profile-001",
       "displayName": "Be Celeb Creator",
-      "handle": "be_celeb_creator",
+      "youtubeChannelHandle": "be_celeb_creator",
       "primaryCategory": "ai-video",
-      "platforms": ["tiktok", "youtube-shorts"],
+      "platforms": ["youtube"],
       "goals": ["growth", "branding"],
-      "followerRange": "1K-10K"
+      "subscriberRange": "1K-10K"
     },
     {
       "id": "profile-002",
       "displayName": "Food Clip Lab",
-      "handle": "food_clip_lab",
+      "youtubeChannelHandle": "food_clip_lab",
       "primaryCategory": "mukbang",
-      "platforms": ["instagram-reels", "tiktok"],
+      "platforms": ["youtube"],
       "goals": ["growth", "community"],
-      "followerRange": "10K-50K"
+      "subscriberRange": "10K-50K"
     }
   ]
 }
+
+
+

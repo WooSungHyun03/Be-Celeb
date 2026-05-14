@@ -21,7 +21,7 @@ create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references auth.users(id) on delete cascade,
   nickname text,
-  instagram_username text,
+  youtube_channel_url text,
   avatar_url text,
   onboarding_completed boolean not null default false,
   is_deleted boolean not null default false,
@@ -42,15 +42,15 @@ alter table public.profiles alter column nickname set not null;
 create unique index if not exists profiles_nickname_unique_idx on public.profiles(nickname);
 create index if not exists idx_profiles_user_id on public.profiles(user_id);
 create index if not exists idx_profiles_nickname on public.profiles(nickname);
-create index if not exists idx_profiles_instagram_username on public.profiles(instagram_username);
+create index if not exists idx_profiles_youtube_channel_url on public.profiles(youtube_channel_url);
 
 -- 2. Creator profile / onboarding detail
 create table if not exists public.creator_profiles (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references auth.users(id) on delete cascade,
-  instagram_experience text,
+  youtube_experience text,
   categories text[] not null default '{}',
-  follower_range text,
+  subscriber_range text,
   upload_frequency text,
   content_goal text,
   preferred_style text,
@@ -159,7 +159,7 @@ create table if not exists public.influencers (
   category text not null,
   keywords text[] not null default '{}',
   hashtags text[] not null default '{}',
-  follower_count integer not null default 0,
+  subscriber_count integer not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -167,8 +167,8 @@ create unique index if not exists influencers_username_unique_idx on public.infl
 create index if not exists idx_influencers_category on public.influencers(category);
 create index if not exists idx_influencers_username on public.influencers(username);
 
--- 8. Reels
-create table if not exists public.reels (
+-- 8. Videos
+create table if not exists public.videos (
   id uuid primary key default gen_random_uuid(),
   influencer_id uuid not null references public.influencers(id) on delete cascade,
   title text not null,
@@ -183,11 +183,11 @@ create table if not exists public.reels (
   created_at timestamptz not null default now()
 );
 
-create unique index if not exists reels_title_influencer_unique_idx
-on public.reels(influencer_id, title);
+create unique index if not exists videos_title_influencer_unique_idx
+on public.videos(influencer_id, title);
 
-create index if not exists idx_reels_influencer_id on public.reels(influencer_id);
-create index if not exists idx_reels_topic on public.reels(topic);
+create index if not exists idx_videos_influencer_id on public.videos(influencer_id);
+create index if not exists idx_videos_topic on public.videos(topic);
 
 -- 9. Recommendation requests
 create table if not exists public.recommendation_requests (
@@ -411,7 +411,7 @@ begin
   insert into public.profiles (
     user_id,
     nickname,
-    instagram_username,
+    youtube_channel_url,
     avatar_url,
     onboarding_completed
   )
@@ -426,9 +426,9 @@ begin
 
   insert into public.creator_profiles (
     user_id,
-    instagram_experience,
+    youtube_experience,
     categories,
-    follower_range,
+    subscriber_range,
     upload_frequency,
     content_goal,
     preferred_style,
@@ -471,3 +471,4 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
+

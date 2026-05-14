@@ -4,14 +4,14 @@
       "id": "rule-001",
       "type": "category-fit",
       "category": "ai-video",
-      "description": "AI 영상 계정에는 제작 과정, before/after, 프롬프트 공개 포맷을 우선 추천한다.",
+      "description": "AI 영상 채널에는 제작 과정, before/after, 프롬프트 공개 포맷을 우선 추천한다.",
       "weight": 0.35
     },
     {
       "id": "rule-002",
       "type": "platform-fit",
-      "platform": "tiktok",
-      "description": "TikTok에서는 챌린지성과 반복 가능한 hook을 우선 평가한다.",
+      "platform": "youtube",
+      "description": "YouTube에서는 챌린지성과 반복 가능한 hook을 우선 평가한다.",
       "weight": 0.25
     },
     {

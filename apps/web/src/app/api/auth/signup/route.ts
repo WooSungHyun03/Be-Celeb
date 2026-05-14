@@ -197,7 +197,7 @@ export async function POST(request: Request) {
         {
           user_id: user.id,
           nickname,
-          instagram_username: null,
+          youtube_channel_url: null,
           avatar_url: null,
           onboarding_completed: false,
           is_deleted: false,
@@ -273,3 +273,4 @@ export async function POST(request: Request) {
     return apiException(error, request);
   }
 }
+

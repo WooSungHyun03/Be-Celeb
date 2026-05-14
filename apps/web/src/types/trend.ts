@@ -1,5 +1,5 @@
 // Defines trend-related TypeScript contracts for the web app.
-export type Platform = "instagram-reels" | "tiktok" | "youtube-shorts";
+export type Platform = "youtube";
 
 export type TrendCategory = "mukbang" | "ai-video" | "dance" | "beauty" | "fashion" | "daily";
 
@@ -18,3 +18,5 @@ export type Trend = {
   predictedPeak: string;
   createdAt: string;
 };
+
+

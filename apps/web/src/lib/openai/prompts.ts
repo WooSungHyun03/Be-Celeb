@@ -43,7 +43,7 @@ export const recommendationJsonSchema = {
 
 export function buildRecommendationPrompt(input: RecommendationPromptInput) {
   return [
-    "Be Celeb은 숏폼 SNS 콘텐츠 전략 추천 서비스다.",
+    "Be Celeb은 숏폼 YouTube 콘텐츠 전략 추천 서비스다.",
     "아래 입력을 바탕으로 한국어 JSON 추천 결과를 생성한다.",
     "출력은 반드시 제공된 JSON schema를 따라야 한다.",
     "",
@@ -52,3 +52,4 @@ export function buildRecommendationPrompt(input: RecommendationPromptInput) {
     `ruleBasedResult: ${JSON.stringify(input.ruleBasedResult)}`,
   ].join("\n");
 }
+

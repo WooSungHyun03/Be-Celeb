@@ -79,8 +79,8 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-xl">
-      <div className="mx-auto grid min-h-14 w-full max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 py-1.5 sm:px-6 lg:px-8">
-        <Link className="group justify-self-start transition duration-200 hover:-translate-y-0.5" href={ROUTES.home}>
+      <div className="mx-auto flex min-h-14 w-full max-w-7xl items-center justify-between gap-3 px-4 py-1.5 sm:px-6 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:gap-4 lg:px-8">
+        <Link className="group min-w-0 shrink-0 justify-self-start transition duration-200 hover:-translate-y-0.5" href={ROUTES.home}>
           <BrandLogo className="transition duration-200 group-hover:scale-[1.02]" size="sm" />
         </Link>
         <nav className="hidden h-14 items-stretch gap-8 justify-self-center text-sm font-bold text-ink lg:flex">
@@ -94,7 +94,7 @@ export function Header() {
             </Link>
           ))}
         </nav>
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-2">
           {isAuthenticated ? (
             <>
               <Link
@@ -139,7 +139,7 @@ export function Header() {
           )}
         </div>
       </div>
-      <nav className="mx-auto flex w-full max-w-7xl gap-5 overflow-x-auto px-4 pb-0 text-sm font-bold text-ink sm:px-6 lg:hidden lg:px-8">
+      <nav className="mx-auto flex w-full max-w-7xl gap-3 overflow-x-auto px-4 pb-0 text-xs font-bold text-ink sm:gap-5 sm:px-6 sm:text-sm lg:hidden lg:px-8">
         {navItems.map((item) => (
           <Link
             className="relative inline-flex min-h-10 shrink-0 items-center px-1 transition duration-200 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:scale-x-0 after:rounded-full after:bg-violet-600 after:transition-transform after:duration-200 hover:text-violet-700 hover:after:scale-x-100"

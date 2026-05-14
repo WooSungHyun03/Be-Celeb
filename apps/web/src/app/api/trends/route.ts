@@ -1,14 +1,12 @@
-// Returns mock trend data for frontend integration work.
 import { NextResponse } from "next/server";
-import { mockTrends } from "@/mocks/mockTrends";
 import type { ApiResponse } from "@/types/api";
 import type { Trend } from "@/types/trend";
 
 export function GET() {
-  // TODO: Replace with Supabase query or FastAPI aggregation response.
   const payload: ApiResponse<Trend[]> = {
     success: true,
-    data: mockTrends,
+    data: [],
+    message: "Legacy trend list data has been removed. Use /api/trends/popular-videos and /api/trends/keywords for live YouTube trend data.",
   };
 
   return NextResponse.json(payload);

@@ -1,41 +1,24 @@
-﻿"use client";
-
-// Simulates recommendation generation UI states until the API is connected.
-import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { ErrorState } from "@/components/common/ErrorState";
-import { Loading } from "@/components/common/Loading";
-import { Toast } from "@/components/common/Toast";
-
-type Status = "idle" | "loading" | "success" | "error";
+import { ROUTES } from "@/constants/routes";
 
 export function GenerateRecommendationPanel() {
-  const [status, setStatus] = useState<Status>("idle");
-
-  function handleGenerate() {
-    setStatus("loading");
-    window.setTimeout(() => {
-      setStatus("success");
-    }, 700);
-  }
-
   return (
     <Card className="bg-white">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-semibold text-violet-700">AI 추천 생성</p>
-          <h2 className="mt-1 text-lg font-semibold text-ink">현재 트렌드로 다음 콘텐츠 만들기</h2>
+          <h2 className="mt-1 text-lg font-semibold text-ink">YouTube 채널 링크로 다음 콘텐츠 만들기</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            실제 추천 생성은 채널 분석, 카테고리 추론, 인플루언서 영상 조회, LLM 추천 생성을 한 번에 처리하는 대시보드에서 실행합니다.
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handleGenerate} disabled={status === "loading"}>추천 생성</Button>
-          <Button variant="ghost" onClick={() => setStatus("error")}>상태 확인</Button>
+          <Link href={ROUTES.dashboard}>
+            <Button>대시보드에서 생성</Button>
+          </Link>
         </div>
-      </div>
-      <div className="mt-4">
-        {status === "loading" ? <Loading label="추천 결과를 생성하는 중입니다." /> : null}
-        {status === "success" ? <Toast message="추천 생성이 완료되었습니다. 아래 추천 목록을 확인하세요." /> : null}
-        {status === "error" ? <ErrorState title="추천 생성 실패" description="네트워크 상태 또는 API 설정을 확인해주세요." /> : null}
       </div>
     </Card>
   );

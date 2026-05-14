@@ -1,4 +1,4 @@
-﻿// Provides score helpers for trend and recommendation mock views.
+// Provides score helpers for trend and recommendation summary views.
 export function getScoreLabel(score: number) {
   if (score >= 85) {
     return "High";

@@ -1,4 +1,4 @@
-# Defines recommendation API routes for mock reads and OpenAI generation.
+# Defines recommendation API routes for live generation.
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import get_settings
@@ -9,7 +9,7 @@ from app.schemas.recommendation import (
 )
 from app.core.errors import MissingConfigurationError
 from app.services.openai_service import generate_openai_recommendation
-from app.services.rule_engine_service import calculate_rule_based_result, get_mock_recommendations
+from app.services.rule_engine_service import calculate_rule_based_result
 from app.utils.response import ApiResponse
 
 router = APIRouter(tags=["recommendations"])
@@ -17,14 +17,17 @@ router = APIRouter(tags=["recommendations"])
 
 @router.get("/recommendations", response_model=ApiResponse[list[Recommendation]])
 def list_recommendations() -> ApiResponse[list[Recommendation]]:
-    return ApiResponse(success=True, data=get_mock_recommendations())
+    return ApiResponse(
+        success=True,
+        data=[],
+        message="Stored recommendation listing is handled by the Next.js/Supabase layer.",
+    )
 
 
 @router.post("/recommendations/generate", response_model=ApiResponse[GeneratedRecommendationPayload])
 def generate_recommendation(
     request: RecommendationGenerateRequest,
 ) -> ApiResponse[GeneratedRecommendationPayload]:
-    # TODO: Add authentication, rate limiting, and request logging before production traffic.
     rule_result = calculate_rule_based_result(request)
 
     try:

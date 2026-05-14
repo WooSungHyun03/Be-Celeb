@@ -28,7 +28,7 @@ const categoryTabs = [
   { label: "조명", icon: "🔆" },
   { label: "마이크", icon: "🎙️" },
   { label: "삼각대 / 거치대", icon: "♜" },
-  { label: "릴스 촬영 소품", icon: "👜" },
+  { label: "Shorts 촬영 소품", icon: "👜" },
   { label: "편집 / 디자인 도구", icon: "🧰" },
 ];
 
@@ -79,7 +79,7 @@ const storeCategories: StoreCategory[] = [
     ],
   },
   {
-    title: "릴스 촬영 소품",
+    title: "Shorts 촬영 소품",
     icon: "👜",
     products: [
       { name: "배경 천", description: "다양한 컬러 & 사이즈", price: "₩35,000", badge: "인기", badgeTone: "bg-orange-500", icon: "▥", imageTone: "from-amber-50 to-stone-200" },
@@ -95,7 +95,7 @@ const storeCategories: StoreCategory[] = [
       { name: "영상 편집 앱 추천", description: "초보자도 쉬운 편집 앱", price: "₩0~ / 월", badge: "추천", badgeTone: "bg-pink-500", icon: "Pr", imageTone: "from-indigo-100 to-violet-300" },
       { name: "썸네일 디자인 툴", description: "템플릿으로 빠른 제작", price: "₩0~ / 월", badge: "인기", badgeTone: "bg-orange-500", icon: "Canva", imageTone: "from-cyan-100 to-blue-300" },
       { name: "자막 템플릿 팩", description: "숏폼 자막 스타일", price: "₩19,000", badge: "베스트", badgeTone: "bg-violet-600", icon: "T", imageTone: "from-violet-100 to-slate-300" },
-      { name: "릴스 아이디어 플래너", description: "콘텐츠 기획 & 일정 관리", price: "₩9,900", badge: "입문용", badgeTone: "bg-emerald-500", icon: "▦", imageTone: "from-pink-50 to-violet-100" },
+      { name: "Shorts 아이디어 플래너", description: "콘텐츠 기획 & 일정 관리", price: "₩9,900", badge: "입문용", badgeTone: "bg-emerald-500", icon: "▦", imageTone: "from-pink-50 to-violet-100" },
     ],
   },
 ];
@@ -215,7 +215,7 @@ export default function ShopPage() {
             <span aria-hidden="true" className="text-4xl leading-none text-violet-600">🛍️</span>
           </h1>
           <p className="mt-4 text-sm font-medium leading-6 text-slate-500">
-            릴스 제작에 필요한 장비와 도구를 한눈에 보고, 내 콘텐츠 스타일에 맞는 아이템을 찾아보세요.
+            Shorts 제작에 필요한 장비와 도구를 한눈에 보고, 내 콘텐츠 스타일에 맞는 아이템을 찾아보세요.
           </p>
         </div>
         <aside className="rounded-2xl border border-violet-100 bg-[linear-gradient(100deg,#f3e8ff_0%,#fff1f8_100%)] p-5 shadow-sm">
@@ -325,3 +325,4 @@ export default function ShopPage() {
     </div>
   );
 }
+

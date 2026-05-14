@@ -1,14 +1,12 @@
-// Returns mock recommendation data for frontend integration work.
 import { NextResponse } from "next/server";
-import { mockRecommendations } from "@/mocks/mockRecommendations";
 import type { ApiResponse } from "@/types/api";
 import type { Recommendation } from "@/types/recommendation";
 
 export function GET() {
-  // TODO: Replace with rule engine, Supabase, or FastAPI recommendation results.
   const payload: ApiResponse<Recommendation[]> = {
     success: true,
-    data: mockRecommendations,
+    data: [],
+    message: "Legacy recommendation list data has been removed. Use POST /api/recommend-content for live YouTube recommendations.",
   };
 
   return NextResponse.json(payload);

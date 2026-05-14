@@ -14,7 +14,7 @@ alter table public.strategy_articles enable row level security;
 alter table public.error_logs enable row level security;
 alter table public.not_found_logs enable row level security;
 alter table public.influencers enable row level security;
-alter table public.reels enable row level security;
+alter table public.videos enable row level security;
 alter table public.recommendation_requests enable row level security;
 alter table public.recommendations enable row level security;
 
@@ -148,16 +148,16 @@ CREATE POLICY "not_found_logs_insert"
 ON public.not_found_logs FOR INSERT
 WITH CHECK (true);
 
--- Influencers / reels: public mock analysis data.
+-- Influencers / videos: public mock analysis data.
 DROP POLICY IF EXISTS "influencers_select_public" ON public.influencers;
-DROP POLICY IF EXISTS "reels_select_public" ON public.reels;
+DROP POLICY IF EXISTS "videos_select_public" ON public.videos;
 
 CREATE POLICY "influencers_select_public"
 ON public.influencers FOR SELECT
 USING (true);
 
-CREATE POLICY "reels_select_public"
-ON public.reels FOR SELECT
+CREATE POLICY "videos_select_public"
+ON public.videos FOR SELECT
 USING (true);
 
 -- Recommendation requests: users can create and read only their own requests.
@@ -188,8 +188,10 @@ GRANT SELECT ON public.service_contents TO anon, authenticated;
 GRANT SELECT ON public.sample_recommendations TO anon, authenticated;
 GRANT SELECT ON public.strategy_articles TO anon, authenticated;
 GRANT SELECT ON public.influencers TO anon, authenticated;
-GRANT SELECT ON public.reels TO anon, authenticated;
+GRANT SELECT ON public.videos TO anon, authenticated;
 GRANT SELECT, INSERT ON public.recommendation_requests TO authenticated;
 GRANT SELECT ON public.recommendations TO authenticated;
 GRANT INSERT ON public.error_logs TO anon, authenticated;
 GRANT INSERT ON public.not_found_logs TO anon, authenticated;
+
+

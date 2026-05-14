@@ -1,4 +1,4 @@
-﻿// Provides a compact toast-like feedback message.
+// Provides a compact toast-like feedback message.
 import { cn } from "@/utils/cn";
 
 type ToastProps = {

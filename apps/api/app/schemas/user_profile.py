@@ -11,8 +11,10 @@ CreatorGoal = Literal["growth", "conversion", "branding", "community"]
 class UserProfile(BaseModel):
     id: str
     display_name: str
-    handle: str
+    youtube_channel_handle: str
     primary_category: TrendCategory
     platforms: list[Platform]
     goals: list[CreatorGoal]
-    follower_range: str
+    subscriber_range: str
+
+

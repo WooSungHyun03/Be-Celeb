@@ -2,18 +2,18 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { apiError } from "@/app/api/_utils/api";
 
 export const PROFILE_SELECT =
-  "user_id,nickname,instagram_username,avatar_url,onboarding_completed,is_deleted,deleted_at,created_at,updated_at";
+  "user_id,nickname,youtube_channel_url,avatar_url,onboarding_completed,is_deleted,deleted_at,created_at,updated_at";
 export const USER_PLAN_SELECT =
   "user_id,plan_name,monthly_recommendation_limit,monthly_recommendation_used,renews_at";
 export const CREATOR_PROFILE_SELECT =
-  "user_id,instagram_experience,categories,follower_range,upload_frequency,content_goal,preferred_style,onboarding_completed";
+  "user_id,youtube_experience,categories,subscriber_range,upload_frequency,content_goal,preferred_style,onboarding_completed";
 export const ADDRESS_SELECT =
   "id,user_id,recipient_name,phone,zipcode,address1,address2,is_default,created_at,updated_at";
 
 export type ProfileRow = {
   user_id: string;
   nickname: string;
-  instagram_username: string | null;
+  youtube_channel_url: string | null;
   avatar_url: string | null;
   onboarding_completed: boolean;
   is_deleted: boolean;
@@ -32,9 +32,9 @@ export type UserPlanRow = {
 
 export type CreatorProfileRow = {
   user_id: string;
-  instagram_experience: string | null;
+  youtube_experience: string | null;
   categories: string[] | null;
-  follower_range: string | null;
+  subscriber_range: string | null;
   upload_frequency: string | null;
   content_goal: string | null;
   preferred_style: string | null;
@@ -94,7 +94,7 @@ export function toPublicUser(user: User) {
 export function toAuthProfile(row: ProfileRow) {
   return {
     nickname: row.nickname,
-    instagram_username: row.instagram_username,
+    youtube_channel_url: row.youtube_channel_url,
     avatar_url: row.avatar_url,
     onboarding_completed: row.onboarding_completed,
     is_deleted: row.is_deleted,
@@ -113,9 +113,9 @@ export function toAuthPlan(row: UserPlanRow) {
 
 export function toAuthCreatorProfile(row: CreatorProfileRow) {
   return {
-    instagram_experience: row.instagram_experience,
+    youtube_experience: row.youtube_experience,
     categories: row.categories ?? [],
-    follower_range: row.follower_range,
+    subscriber_range: row.subscriber_range,
     upload_frequency: row.upload_frequency,
     content_goal: row.content_goal,
     preferred_style: row.preferred_style,
@@ -142,7 +142,7 @@ export function toPublicProfile(row: ProfileRow) {
   return {
     userId: row.user_id,
     nickname: row.nickname,
-    instagramUsername: row.instagram_username,
+    youtubeChannelUrl: row.youtube_channel_url,
     avatarUrl: row.avatar_url,
     onboardingCompleted: row.onboarding_completed,
     isDeleted: row.is_deleted,
@@ -171,9 +171,9 @@ export function toPublicOnboarding(row: CreatorProfileRow | null) {
 
   return {
     userId: row.user_id,
-    instagramExperience: row.instagram_experience,
+    youtubeExperience: row.youtube_experience,
     categories: row.categories ?? [],
-    followerRange: row.follower_range,
+    subscriberRange: row.subscriber_range,
     uploadFrequency: row.upload_frequency,
     contentGoal: row.content_goal,
     preferredStyle: row.preferred_style,
@@ -246,3 +246,4 @@ export async function requireActiveUser(supabase: SupabaseClient) {
     profile,
   };
 }
+

@@ -1,10 +1,5 @@
 # Provides rule-based scoring for recommendation generation.
-from app.repositories.recommendation_repository import list_mock_recommendations
-from app.schemas.recommendation import Recommendation, RecommendationGenerateRequest, RuleBasedRecommendationResult
-
-
-def get_mock_recommendations() -> list[Recommendation]:
-    return list_mock_recommendations()
+from app.schemas.recommendation import RecommendationGenerateRequest, RuleBasedRecommendationResult
 
 
 def calculate_rule_based_result(request: RecommendationGenerateRequest) -> RuleBasedRecommendationResult:
@@ -18,7 +13,7 @@ def calculate_rule_based_result(request: RecommendationGenerateRequest) -> RuleB
 
     notes = [
         "Base score combines profile category, platform coverage, and trend data count.",
-        "TODO: Replace this deterministic starter with data-design/rule-base.json backed scoring.",
+        "Deterministic starter score; production scoring can be backed by data-design/rule-base.json.",
     ]
 
     return RuleBasedRecommendationResult(

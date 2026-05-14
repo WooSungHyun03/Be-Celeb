@@ -1,4 +1,4 @@
-﻿// Provides loading and skeleton placeholders for async UI states.
+// Provides loading and skeleton placeholders for async UI states.
 import { cn } from "@/utils/cn";
 
 type LoadingProps = {

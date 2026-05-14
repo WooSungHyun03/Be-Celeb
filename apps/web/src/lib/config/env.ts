@@ -65,6 +65,20 @@ export function getOpenAiEnv() {
   };
 }
 
+export function getYouTubeEnv() {
+  return {
+    apiKey: requireValue("YOUTUBE_API_KEY", process.env.YOUTUBE_API_KEY),
+  };
+}
+
+export function getLocalLlmEnv() {
+  return {
+    apiUrl: requireValue("LOCAL_LLM_API_URL", process.env.LOCAL_LLM_API_URL),
+    apiKey: process.env.LOCAL_LLM_API_KEY,
+    model: process.env.LOCAL_LLM_MODEL ?? "local-model",
+  };
+}
+
 export function getResendEnv() {
   return {
     apiKey: requireValue("RESEND_API_KEY", process.env.RESEND_API_KEY),

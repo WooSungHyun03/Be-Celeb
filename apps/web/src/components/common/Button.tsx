@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // Provides a reusable button skeleton for interactive UI controls.
 import type { ButtonHTMLAttributes } from "react";

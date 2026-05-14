@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-// Renders onboarding steps for platform, category, and goal selection.
+// Renders onboarding steps for YouTube channel, category, and goal selection.
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/common/Button";
@@ -15,7 +15,7 @@ import { ROUTES } from "@/constants/routes";
 export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [completed, setCompleted] = useState(false);
-  const steps = ["플랫폼", "카테고리", "목표"];
+  const steps = ["YouTube 채널", "카테고리", "목표"];
   const totalSteps = steps.length;
   const progressPercent = ((currentStep + 1) / totalSteps) * 100;
 
@@ -24,7 +24,7 @@ export default function OnboardingPage() {
       <PageHeader
         eyebrow={<p className="text-sm font-semibold uppercase text-violet-700">Get started</p>}
         title="개인 분석 시작"
-        description="세 가지 선택만으로 계정 목표에 맞춘 트렌드와 콘텐츠 추천 화면을 구성합니다."
+        description="세 가지 선택만으로 YouTube 채널 목표에 맞춘 트렌드와 콘텐츠 추천 화면을 구성합니다."
       />
 
       <div className="space-y-3">
@@ -66,3 +66,4 @@ export default function OnboardingPage() {
     </div>
   );
 }
+

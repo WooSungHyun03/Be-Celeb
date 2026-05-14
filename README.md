@@ -1,6 +1,6 @@
 # Be Celeb
 
-Be Celeb은 인스타그램 릴스, 틱톡, 유튜브 쇼츠 같은 숏폼 SNS 트렌드를 분석하고, 사용자 계정 유형에 맞는 콘텐츠 전략을 추천하는 웹서비스입니다.
+Be Celeb은 유튜브 크리에이터가 자신의 채널과 비슷한 카테고리의 인플루언서 콘텐츠 패턴을 분석해 다음 영상 아이디어를 추천받는 AI 서비스입니다.
 
 이 저장소는 Next.js 웹앱, FastAPI 분석 서버, Supabase, Resend, OpenAI API를 실제 배포 환경에 연결할 수 있는 최소 구조를 제공합니다. API Key와 secret은 코드에 포함하지 않고 환경변수로만 주입합니다.
 
@@ -13,7 +13,7 @@ Be Celeb은 인스타그램 릴스, 틱톡, 유튜브 쇼츠 같은 숏폼 SNS �
 | API | Render + FastAPI |
 | Auth / DB / Storage | Supabase |
 | Email 발송 | Resend |
-| AI 추천 | OpenAI API |
+| AI 추천 | Local LLM API / OpenAI API |
 
 ## 도메인 구조
 
@@ -41,7 +41,7 @@ Be Celeb은 인스타그램 릴스, 틱톡, 유튜브 쇼츠 같은 숏폼 SNS �
 | --- | --- | --- |
 | Frontend | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/features/`, `apps/web/src/utils/`, `apps/web/src/types/`, `apps/web/src/constants/`, `apps/web/public/` | `apps/web/src/app/api/`, `apps/web/src/lib/`, `apps/api/`, `supabase/` |
 | Backend | `apps/api/`, `apps/web/src/app/api/`, `apps/web/src/lib/supabase/`, `apps/web/src/lib/openai/`, `apps/web/src/lib/resend/`, `apps/web/src/lib/config/`, `supabase/` | `apps/web/src/components/`, 화면 페이지 디렉토리, `data-design/` |
-| Data/Design | `data-design/`, `apps/web/src/mocks/`, `apps/web/src/constants/`, `apps/api/app/mocks/`, `packages/shared/constants/` | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/app/api/`, `apps/api/app/services/`, `supabase/schema.sql` |
+| Data/Design | `data-design/`, `apps/web/src/constants/`, `packages/shared/constants/` | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/app/api/`, `apps/api/app/services/`, `supabase/schema.sql` |
 
 자세한 역할별 파일 목록은 `docs/role-guide.md`와 `docs/role-task-list.md`를 확인합니다.
 
@@ -54,7 +54,7 @@ Be Celeb은 인스타그램 릴스, 틱톡, 유튜브 쇼츠 같은 숏폼 SNS �
 - `main`과 `develop`에는 직접 push하지 않습니다.
 - Pull Request를 통해서만 merge합니다.
 - 같은 페이지를 두 명이 동시에 수정하지 않습니다.
-- mock data 구조 변경 시 Frontend/Backend 모두에게 알립니다.
+- 샘플 데이터 구조 변경 시 Frontend/Backend 모두에게 알립니다.
 - API response 형식 변경 시 `docs/api-contract.md`를 먼저 수정합니다.
 
 자세한 규칙은 `docs/git-conflict-prevention.md`를 확인합니다.
@@ -102,7 +102,7 @@ Data/Design 예시:
 
 ```bash
 git checkout -b feature/data-rulebase
-git add data-design apps/web/src/mocks apps/web/src/constants
+git add data-design apps/web/src/constants
 git commit -m "data: add rulebase and sample trends"
 git push origin feature/data-rulebase
 ```
@@ -178,7 +178,7 @@ Frontend:
 - Header, Sidebar/Navbar, Footer, Button, Card, Input, Badge
 - Loading, Empty, Error 상태 UI
 - 추천 생성/저장/복사 버튼 UI
-- 카테고리/플랫폼 필터와 추천 결과 표시 UI
+- 카테고리/YouTube 형식 필터와 추천 결과 표시 UI
 
 Backend:
 
@@ -193,7 +193,7 @@ Backend:
 Data/Design:
 
 - 트렌드 카테고리
-- 플랫폼 목록
+- YouTube 형식 목록
 - 룰베이스 추천 규칙
 - 샘플 트렌드와 사용자 프로필
 - 서비스 문구, 온보딩 질문, 추천 결과 예시 문구
@@ -278,6 +278,12 @@ DB 변경은 `supabase/migrations/`의 versioned migration으로 관리합니다
 
 자세한 내용은 `docs/supabase-setup.md`를 확인합니다.
 
+## 매일 YouTube 인플루언서 영상 수집
+
+카테고리별 인플루언서 채널은 Supabase `influencer_channels.channel_url`에 입력합니다. `POST /api/cron/collect-daily-videos`가 매일 KST 06:00(UTC 21:00)에 최근 24시간 업로드 영상을 YouTube API로 조회해 `influencer_videos`에 upsert합니다.
+
+자동 실행은 Render Cron Job 또는 `.github/workflows/collect-daily-videos.yml`로 설정합니다. 자세한 입력 SQL, 환경 변수, 수동 테스트 방법은 `docs/daily-collection.md`를 확인합니다.
+
 ## Resend 설정
 
 - 발신 주소: `no-reply@be-celeb.org`
@@ -299,9 +305,9 @@ Cloudflare는 DNS, 도메인 관리, Email Routing을 담당합니다.
 
 자세한 내용은 `docs/cloudflare-setup.md`를 확인합니다.
 
-## OpenAI API 설정
+## AI API 설정
 
-Next.js와 FastAPI 모두 서버 사이드에서만 OpenAI API를 호출합니다.
+Next.js와 FastAPI 모두 서버 사이드에서만 AI API를 호출합니다. YouTube 추천 흐름의 로컬 LLM API도 Next.js API route에서만 호출합니다.
 
 - Web route: `POST /api/ai/recommend`
 - FastAPI route: `POST /recommendations/generate`
@@ -318,6 +324,11 @@ NEXT_PUBLIC_API_BASE_URL=https://api.be-celeb.org
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+YOUTUBE_API_KEY=
+LOCAL_LLM_API_URL=https://llm-api.be-celeb.org/v1/chat/completions
+LOCAL_LLM_API_KEY=
+LOCAL_LLM_MODEL=local-model
+CRON_SECRET=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.4-mini
 RESEND_API_KEY=
@@ -356,13 +367,14 @@ API_BASE_URL=https://api.be-celeb.org
 - `/health`가 실패하면 Render Start Command와 `PORT` 사용 여부를 확인합니다.
 - Supabase 인증 redirect가 실패하면 Site URL과 Redirect URLs를 확인합니다.
 - Resend 발송이 실패하면 도메인 인증과 `RESEND_FROM_EMAIL`의 verified domain 여부를 확인합니다.
-- OpenAI 추천이 실패하면 `OPENAI_API_KEY`, `OPENAI_MODEL`, 계정 billing/rate limit을 확인합니다.
+- AI 추천이 실패하면 `YOUTUBE_API_KEY`, `LOCAL_LLM_API_URL`, `LOCAL_LLM_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL` 설정을 확인합니다.
 - `api.be-celeb.org` TLS 또는 routing 문제가 생기면 Cloudflare DNS record를 `DNS only`로 바꿔 확인합니다.
 
 ## 보안 원칙
 
 - `OPENAI_API_KEY`는 클라이언트에 노출하지 않습니다.
 - `SUPABASE_SERVICE_ROLE_KEY`는 클라이언트에 노출하지 않습니다.
+- `YOUTUBE_API_KEY`와 `LOCAL_LLM_API_KEY`는 서버 route handler에서만 사용합니다.
 - `RESEND_API_KEY`는 클라이언트에 노출하지 않습니다.
 - `NEXT_PUBLIC_` 접두사는 공개 가능한 값에만 사용합니다.
 - `.env`와 `.env.local`은 Git에 커밋하지 않습니다.

@@ -5,8 +5,9 @@ export type SharedCreatorGoal = "growth" | "conversion" | "branding" | "communit
 
 export type SharedUserProfile = {
   id: string;
-  handle: string;
+  youtubeChannelHandle: string;
   primaryCategory: SharedTrendCategory;
   platforms: SharedPlatform[];
   goals: SharedCreatorGoal[];
 };
+

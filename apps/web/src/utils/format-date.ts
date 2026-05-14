@@ -1,4 +1,4 @@
-// Formats dates consistently across mock pages.
+// Formats dates consistently across pages.
 export function formatDate(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",

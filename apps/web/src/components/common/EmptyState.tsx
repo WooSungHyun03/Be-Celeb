@@ -1,4 +1,4 @@
-// Provides a reusable empty state for mock pages.
+// Provides a reusable empty state for pages.
 import type { ReactNode } from "react";
 
 type EmptyStateProps = {

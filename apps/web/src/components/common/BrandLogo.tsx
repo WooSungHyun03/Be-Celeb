@@ -15,7 +15,7 @@ const markSizeClasses: Record<NonNullable<BrandLogoProps["size"]>, string> = {
 
 export function BrandLogo({ showText = true, size = "md", className }: BrandLogoProps) {
   return (
-    <span className={cn("inline-flex items-center gap-2 font-bold text-ink", className)}>
+    <span className={cn("inline-flex items-center gap-2 whitespace-nowrap font-bold text-ink", className)}>
       <img alt="BE CELEB" className={cn("shrink-0 object-contain", markSizeClasses[size])} src="/android-icon-192x192.png" />
       {showText ? <span className="tracking-wide">BE CELEB</span> : null}
     </span>

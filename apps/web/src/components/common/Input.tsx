@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // Provides a reusable labeled input for auth and onboarding placeholders.
 import type { InputHTMLAttributes } from "react";

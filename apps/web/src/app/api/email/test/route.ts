@@ -1,5 +1,5 @@
 // Sends a test email through Resend using server-side environment variables.
-import { NextResponse } from "next/server";
+import { apiError, apiSuccess } from "@/app/api/_utils/api";
 import { MissingEnvironmentVariableError, getResendEnv } from "@/lib/config/env";
 import { getResendClient } from "@/lib/resend/client";
 
@@ -12,15 +12,27 @@ function isTestEmailRequest(value: unknown): value is TestEmailRequest {
   return typeof value === "object" && value !== null;
 }
 
+function isAuthorized(request: Request) {
+  const secret = process.env.CRON_SECRET;
+
+  if (!secret) {
+    return false;
+  }
+
+  return request.headers.get("authorization") === `Bearer ${secret}` || request.headers.get("x-cron-secret") === secret;
+}
+
 export async function POST(request: Request) {
-  // TODO: Protect this endpoint with admin auth before production use.
-  // TODO: Add rate limiting before exposing this endpoint to public traffic.
   try {
+    if (!isAuthorized(request)) {
+      return apiError("Unauthorized email test request.", "UNAUTHORIZED", 401);
+    }
+
     const body: unknown = await request.json();
     const input = isTestEmailRequest(body) ? body : {};
 
     if (!input.to) {
-      return NextResponse.json({ error: "Missing required field: to" }, { status: 400 });
+      return apiError("Missing required field: to", "VALIDATION_ERROR", 400);
     }
 
     const { fromEmail } = getResendEnv();
@@ -32,7 +44,7 @@ export async function POST(request: Request) {
       text: "Be Celeb Resend connection test succeeded.",
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       status: "sent",
       data,
     });
@@ -40,12 +52,6 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Unknown email sending error.";
     const status = error instanceof MissingEnvironmentVariableError ? 500 : 502;
 
-    return NextResponse.json(
-      {
-        error: message,
-        service: "resend",
-      },
-      { status },
-    );
+    return apiError(message, "INTERNAL_SERVER_ERROR", status);
   }
 }

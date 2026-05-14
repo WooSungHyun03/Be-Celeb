@@ -5,17 +5,17 @@ import { cn } from "@/utils/cn";
 
 type InfluencerCardProps = {
   name: string;
-  handle?: string;
+  channelHandle?: string;
   avatarUrl?: string;
   category?: string;
-  followers?: string;
+  subscribers?: string;
   engagement?: string;
   tags?: string[];
   href?: string;
   className?: string;
 };
 
-export function InfluencerCard({ name, handle, avatarUrl, category, followers, engagement, tags = [], href, className }: InfluencerCardProps) {
+export function InfluencerCard({ name, channelHandle, avatarUrl, category, subscribers, engagement, tags = [], href, className }: InfluencerCardProps) {
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -36,13 +36,13 @@ export function InfluencerCard({ name, handle, avatarUrl, category, followers, e
         <div className="min-w-0 flex-1">
           {category ? <p className="text-xs font-semibold uppercase text-violet-700">{category}</p> : null}
           <h3 className="mt-1 truncate text-lg font-bold text-ink">{name}</h3>
-          {handle ? <p className="text-sm text-slate-500">{handle}</p> : null}
+          {channelHandle ? <p className="text-sm text-slate-500">{channelHandle}</p> : null}
         </div>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-xl bg-slate-50 p-3">
-          <p className="text-xs font-semibold text-slate-500">Followers</p>
-          <p className="mt-1 text-lg font-bold text-ink">{followers ?? "-"}</p>
+          <p className="text-xs font-semibold text-slate-500">subscribers</p>
+          <p className="mt-1 text-lg font-bold text-ink">{subscribers ?? "-"}</p>
         </div>
         <div className="rounded-xl bg-slate-50 p-3">
           <p className="text-xs font-semibold text-slate-500">Engagement</p>
@@ -69,3 +69,5 @@ export function InfluencerCard({ name, handle, avatarUrl, category, followers, e
 
   return <article className={cn("rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", className)}>{content}</article>;
 }
+
+

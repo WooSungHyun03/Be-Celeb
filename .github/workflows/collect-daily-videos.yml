@@ -1,0 +1,33 @@
+name: Collect Daily YouTube Videos
+
+on:
+  schedule:
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: Trigger daily collector
+    runs-on: ubuntu-latest
+    env:
+      DAILY_COLLECT_ENDPOINT: ${{ secrets.DAILY_COLLECT_ENDPOINT }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Check secrets
+        run: |
+          missing=0
+          for name in DAILY_COLLECT_ENDPOINT CRON_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not configured in GitHub Actions secrets."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Call daily YouTube collector
+        run: |
+          curl --fail-with-body -X POST "$DAILY_COLLECT_ENDPOINT" \
+            -H "Authorization: Bearer $CRON_SECRET"

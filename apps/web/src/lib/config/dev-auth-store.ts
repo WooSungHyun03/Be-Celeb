@@ -19,7 +19,7 @@ export type DevUserRecord = {
   passwordHash: string;
   profile: {
     nickname: string;
-    instagram_username: string | null;
+    youtube_channel_url: string | null;
     avatar_url: string | null;
     onboarding_completed: boolean;
     is_deleted: boolean;
@@ -32,9 +32,9 @@ export type DevUserRecord = {
     renews_at: string | null;
   };
   creator_profile: {
-    instagram_experience: string | null;
+    youtube_experience: string | null;
     categories: string[];
-    follower_range: string | null;
+    subscriber_range: string | null;
     upload_frequency: string | null;
     content_goal: string | null;
     preferred_style: string | null;
@@ -166,7 +166,7 @@ export async function createDevUser(input: { email: string; password: string; ni
     passwordHash: await hashPassword(input.password),
     profile: {
       nickname,
-      instagram_username: null,
+      youtube_channel_url: null,
       avatar_url: null,
       onboarding_completed: false,
       is_deleted: false,
@@ -179,9 +179,9 @@ export async function createDevUser(input: { email: string; password: string; ni
       renews_at: null,
     },
     creator_profile: {
-      instagram_experience: null,
+      youtube_experience: null,
       categories: [],
-      follower_range: null,
+      subscriber_range: null,
       upload_frequency: null,
       content_goal: null,
       preferred_style: null,
@@ -275,3 +275,4 @@ export function clearDevAuthCookie(response: NextResponse) {
     maxAge: 0,
   });
 }
+

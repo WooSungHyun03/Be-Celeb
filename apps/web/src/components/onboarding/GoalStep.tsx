@@ -1,7 +1,7 @@
-﻿// Renders the creator goal selection step for onboarding.
+// Renders the creator goal selection step for onboarding.
 const goals = [
-  { label: "성장", description: "조회수와 팔로워 증가를 우선합니다." },
-  { label: "브랜딩", description: "계정의 메시지와 톤을 선명하게 만듭니다." },
+  { label: "성장", description: "조회수와 구독자 증가를 우선합니다." },
+  { label: "브랜딩", description: "채널의 메시지와 톤을 선명하게 만듭니다." },
   { label: "커뮤니티", description: "댓글, 저장, 공유 같은 참여를 높입니다." },
   { label: "수익화", description: "광고, 협찬, 상품 판매 연결을 준비합니다." },
 ];
@@ -29,3 +29,6 @@ export function GoalStep() {
     </section>
   );
 }
+
+
+

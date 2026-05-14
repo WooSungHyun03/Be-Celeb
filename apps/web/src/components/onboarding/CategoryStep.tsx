@@ -1,4 +1,4 @@
-﻿// Renders the account category selection step for onboarding.
+// Renders the channel category selection step for onboarding.
 import { CATEGORIES } from "@/constants/categories";
 
 export function CategoryStep() {
@@ -6,7 +6,7 @@ export function CategoryStep() {
     <section className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-ink">2단계: 콘텐츠 카테고리</h2>
-        <p className="mt-2 text-sm text-slate-500">계정의 주제와 가장 가까운 카테고리를 골라주세요.</p>
+        <p className="mt-2 text-sm text-slate-500">채널의 주제와 가장 가까운 카테고리를 골라주세요.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {CATEGORIES.map((category, index) => (
@@ -24,3 +24,4 @@ export function CategoryStep() {
     </section>
   );
 }
+

@@ -14,7 +14,7 @@ insert into public.trends (
   'GRWM 숏폼',
   'content',
   'beauty',
-  '준비 과정을 빠르게 보여주는 릴스 트렌드',
+  '준비 과정을 빠르게 보여주는 Shorts 트렌드',
   92,
   array['GRWM', '데일리', '메이크업'],
   array['#GRWM', '#데일리룩'],
@@ -107,7 +107,7 @@ insert into public.products (
   18900,
   null,
   null,
-  '릴스와 쇼츠 촬영용 기본 장비',
+  'YouTube Shorts 촬영용 기본 장비',
   true
 ),
 (
@@ -169,7 +169,7 @@ insert into public.service_contents (
 (
   'creator_growth',
   '크리에이터 성장 전략을 제공합니다',
-  '계정 성향에 맞는 업로드 주제와 훅 문장을 제안합니다.',
+  '채널 성향에 맞는 업로드 주제와 훅 문장을 제안합니다.',
   4,
   true
 )
@@ -254,7 +254,7 @@ insert into public.strategy_articles (
   'trend-keyword-selection',
   '트렌드 키워드 고르는 기준',
   'trend',
-  '조회수보다 계정 카테고리와의 적합도를 우선하는 전략입니다.',
+  '조회수보다 채널 카테고리와의 적합도를 우선하는 전략입니다.',
   null,
   '모든 트렌드를 따라가기보다 자신의 카테고리와 연결 가능한 키워드를 선택해야 합니다.',
   true
@@ -287,13 +287,13 @@ insert into public.influencers (
   category,
   keywords,
   hashtags,
-  follower_count
+  subscriber_count
 ) values
 (
   'daily_mood.creator',
   'lifestyle',
   array['일상', '감성', '브이로그'],
-  array['#일상', '#브이로그', '#감성릴스'],
+  array['#일상', '#브이로그', '#감성Shorts'],
   125000
 ),
 (
@@ -328,15 +328,15 @@ on conflict (username) do update set
   category = excluded.category,
   keywords = excluded.keywords,
   hashtags = excluded.hashtags,
-  follower_count = excluded.follower_count;
+  subscriber_count = excluded.subscriber_count;
 
 
 
 -- =========================================================
--- 7. Reels Seed Data
--- mock 릴스 분석 데이터
+-- 7. Videos Seed Data
+-- mock YouTube 영상 분석 데이터
 -- =========================================================
-insert into public.reels (
+insert into public.videos (
   influencer_id,
   title,
   topic,
@@ -382,3 +382,6 @@ on conflict (influencer_id, title) do update set
   likes = excluded.likes,
   comments = excluded.comments,
   saves = excluded.saves;
+
+
+

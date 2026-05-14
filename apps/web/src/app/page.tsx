@@ -27,12 +27,12 @@ const heroStats = [
 const sidebarItems = ["개요", "추천", "트렌드 분석", "키워드", "해시태그", "인플루언서", "전략 가이드"];
 
 const insightCards = [
-  { icon: "spark", title: "맞춤 콘텐츠 추천", description: "내 계정 성향에 맞는 릴스 아이디어를 추천받으세요.", tone: "violet" },
+  { icon: "spark", title: "맞춤 콘텐츠 추천", description: "내 채널 성향에 맞는 Shorts 아이디어를 추천받으세요.", tone: "violet" },
   { icon: "trend", title: "트렌드 분석", description: "지금 뜨는 주제와 반응 좋은 패턴을 빠르게 파악하세요.", tone: "pink" },
   { icon: "search", title: "키워드 분석", description: "어떤 키워드가 잘 먹히는지 그래프로 확인하세요.", tone: "orange" },
   { icon: "hash", title: "해시태그 인사이트", description: "도달률을 높일 해시태그를 찾아보세요.", tone: "violet" },
-  { icon: "people", title: "유사 인플루언서 찾기", description: "나와 비슷한 계정의 성공 패턴을 참고하세요.", tone: "blue" },
-  { icon: "book", title: "릴스 전략 가이드", description: "기획부터 업로드까지 실전 전략을 확인하세요.", tone: "green" },
+  { icon: "people", title: "유사 인플루언서 찾기", description: "나와 비슷한 채널의 성공 패턴을 참고하세요.", tone: "blue" },
+  { icon: "book", title: "Shorts 전략 가이드", description: "기획부터 업로드까지 실전 전략을 확인하세요.", tone: "green" },
 ];
 
 const popularTags = [
@@ -44,26 +44,26 @@ const popularTags = [
 ];
 
 const platformStats = [
-  { label: "틱톡", value: "32%", color: "bg-violet-500" },
-  { label: "인스타그램", value: "28%", color: "bg-pink-500" },
-  { label: "동영상플랫폼", value: "21%", color: "bg-orange-400" },
+  { label: "YouTube Shorts", value: "32%", color: "bg-violet-500" },
+  { label: "YouTube", value: "28%", color: "bg-pink-500" },
+  { label: "Long-form", value: "21%", color: "bg-orange-400" },
   { label: "라이프스타일", value: "12%", color: "bg-sky-500" },
-  { label: "뷰티 녹색뷰", value: "7%", color: "bg-emerald-500" },
+  { label: "뷰티 리뷰", value: "7%", color: "bg-emerald-500" },
 ];
 
 const risingTopics = [
-  { label: "5월 릴스 루틴", icon: "🔥" },
+  { label: "5월 Shorts 루틴", icon: "🔥" },
   { label: "크리에이터의 AI 툴", icon: "🔥" },
   { label: "여름 뷰티 챌린지", icon: "↗" },
   { label: "디지털 디톡스", icon: "↗" },
   { label: "부업 아이디어", icon: "↗" },
 ];
 
-const reelRecommendations = [
+const videoRecommendations = [
   {
     title: "30분 만에 콘텐츠 기획하는 방법",
     image: "desk",
-    badge: "추천 릴스",
+    badge: "추천 Shorts",
     creator: "콘텐츠 메이커",
     stats: "예상 도달 12.4K",
     tags: ["루틴", "생산성", "기획"],
@@ -71,15 +71,15 @@ const reelRecommendations = [
   {
     title: "콘텐츠 크리에이터의 하루",
     image: "studio",
-    badge: "추천 릴스",
-    creator: "릴스 분석 계정",
+    badge: "추천 Shorts",
+    creator: "Shorts 분석 채널",
     stats: "참여율 9.8%",
     tags: ["브이로그", "성장", "일상"],
   },
   {
     title: "시간을 아껴주는 필수 앱 5가지",
     image: "phone",
-    badge: "추천 릴스",
+    badge: "추천 Shorts",
     creator: "생산성 크리에이터",
     stats: "저장률 높음",
     tags: ["앱추천", "꿀팁", "생산성"],
@@ -191,7 +191,7 @@ function TrendInsightSection() {
               <h3 className="text-sm font-extrabold text-ink">키워드 분석</h3>
               <div className="flex gap-2 text-[11px] font-bold text-slate-500">
                 <span className="rounded-md border border-slate-200 px-2.5 py-1">최근 30일</span>
-                <span className="rounded-md border border-slate-200 px-2.5 py-1">릴스</span>
+                <span className="rounded-md border border-slate-200 px-2.5 py-1">Shorts</span>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-5 text-[11px] font-bold text-slate-500">
@@ -303,7 +303,7 @@ function GrowthIcon({ type }: { type: string }) {
   );
 }
 
-function ReelThumbnail({ type }: { type: string }) {
+function VideoThumbnail({ type }: { type: string }) {
   return (
     <div className="relative h-[112px] w-[78px] shrink-0 overflow-hidden rounded-xl bg-slate-100 shadow-inner">
       {type === "desk" ? (
@@ -338,11 +338,11 @@ function ReelThumbnail({ type }: { type: string }) {
   );
 }
 
-function ReelRecommendationCard({ item }: { item: (typeof reelRecommendations)[number] }) {
+function VideoRecommendationCard({ item }: { item: (typeof videoRecommendations)[number] }) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-100 transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex gap-3">
-        <ReelThumbnail type={item.image} />
+        <VideoThumbnail type={item.image} />
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-start justify-between gap-2">
             <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-extrabold text-violet-600">{item.badge}</span>
@@ -364,13 +364,13 @@ function ReelRecommendationCard({ item }: { item: (typeof reelRecommendations)[n
   );
 }
 
-function ReelGrowthSection() {
+function VideoGrowthSection() {
   return (
     <section className="border-b border-slate-100 bg-white">
       <div className="mx-auto max-w-7xl px-4 pb-14 sm:px-6 lg:px-8">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[22px] font-black tracking-tight text-ink">나에게 맞는 릴스 추천</h2>
+            <h2 className="text-[22px] font-black tracking-tight text-ink">나에게 맞는 Shorts 추천</h2>
             <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
               내 관심사와 최근 트렌드를 바탕으로 추천받은 콘텐츠 아이디어
             </p>
@@ -381,8 +381,8 @@ function ReelGrowthSection() {
         </div>
 
         <div className="grid gap-3 lg:grid-cols-3">
-          {reelRecommendations.map((item) => (
-            <ReelRecommendationCard item={item} key={item.title} />
+          {videoRecommendations.map((item) => (
+            <VideoRecommendationCard item={item} key={item.title} />
           ))}
         </div>
 
@@ -392,7 +392,7 @@ function ReelGrowthSection() {
               더 똑똑하게
               <br />
               <span className="whitespace-nowrap">
-                <span className="bg-[linear-gradient(90deg,#7c3aed_0%,#ec4899_100%)] bg-clip-text text-transparent">인스타그램을 성장</span>시키세요
+                <span className="bg-[linear-gradient(90deg,#7c3aed_0%,#ec4899_100%)] bg-clip-text text-transparent">YouTube을 성장</span>시키세요
               </span>
             </h2>
             <p className="mt-4 max-w-md text-sm font-medium leading-6 text-slate-500">
@@ -446,7 +446,7 @@ function HeroDashboardPreview() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-base font-extrabold text-ink">다시 오신 걸 환영해요, Alex</p>
-              <p className="mt-1 text-xs font-medium text-slate-500">당신의 릴스 성장을 위한 트렌드 브리핑입니다.</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">당신의 Shorts 성장을 위한 트렌드 브리핑입니다.</p>
             </div>
             <span className="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-500">2024년 5월 12일 - 5월 18일</span>
           </div>
@@ -479,12 +479,12 @@ function HeroDashboardPreview() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-extrabold text-ink">추천 릴스 아이디어</p>
+              <p className="text-sm font-extrabold text-ink">추천 Shorts 아이디어</p>
               <div className="mt-3 flex gap-3">
                 <div className="h-20 w-16 shrink-0 rounded-xl bg-[linear-gradient(135deg,#ddd6fe,#fbcfe8)]" />
                 <div className="min-w-0">
                   <p className="text-sm font-extrabold leading-5 text-ink">내 삶을 담는 콘텐츠 메이커 되기</p>
-                  <p className="mt-2 text-[11px] leading-4 text-slate-500">일상 장면도 빠르게 릴스로 바꿔보세요.</p>
+                  <p className="mt-2 text-[11px] leading-4 text-slate-500">일상 장면도 빠르게 Shorts로 바꿔보세요.</p>
                   <div className="mt-3 flex items-center gap-2">
                     <AvatarStack />
                     <span className="text-[11px] font-bold text-slate-400">+8K</span>
@@ -495,7 +495,7 @@ function HeroDashboardPreview() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {["#브이로그", "#제품리뷰", "#감성루틴", "#릴스아이디어"].map((tag) => (
+            {["#브이로그", "#제품리뷰", "#감성루틴", "#Shorts아이디어"].map((tag) => (
               <span className="rounded-full bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700" key={tag}>
                 {tag}
               </span>
@@ -524,15 +524,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <h1 className="relative max-w-2xl text-4xl font-black leading-[1.15] tracking-normal text-ink sm:text-5xl lg:text-[3.05rem]">
                 인플루언서 트렌드로
                 <br />
-                <span className="whitespace-nowrap">맞춤 릴스 아이디어를</span>
+                <span className="whitespace-nowrap">맞춤 Shorts 아이디어를</span>
                 <br />
                 <span className="inline-block bg-[linear-gradient(90deg,#7c3aed_0%,#a855f7_35%,#ff3fb4_100%)] bg-clip-text [font-family:Pretendard,Inter,ui-sans-serif,system-ui,sans-serif] font-black text-transparent">
                   추천받으세요
                 </span>
               </h1>
               <p className="text-[14px] font-medium leading-[1.65] text-[#64748b]">
-                <span className="block">Be Celeb은 비슷한 인스타그램 크리에이터의</span>
-                <span className="block">최근 릴스 패턴을 분석해, 다음에 올리면 좋을</span>
+                <span className="block">Be Celeb은 비슷한 YouTube 크리에이터의</span>
+                <span className="block">최근 Shorts 패턴을 분석해, 다음에 올리면 좋을</span>
                 <span className="block">콘텐츠 아이디어를 추천합니다.</span>
               </p>
             </div>
@@ -561,7 +561,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </section>
 
       <TrendInsightSection />
-      <ReelGrowthSection />
+      <VideoGrowthSection />
     </div>
   );
 }
+
+
+

@@ -1,4 +1,4 @@
-// Provides a reusable card container for repeated mock UI sections.
+// Provides a reusable card container for repeated UI sections.
 import type { ReactNode } from "react";
 import { cn } from "@/utils/cn";
 

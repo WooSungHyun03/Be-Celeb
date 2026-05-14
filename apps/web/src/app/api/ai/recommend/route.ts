@@ -1,5 +1,4 @@
-// Generates content recommendations through the server-side OpenAI API.
-import { NextResponse } from "next/server";
+import { apiError, apiSuccess } from "@/app/api/_utils/api";
 import { MissingEnvironmentVariableError, getOpenAiEnv } from "@/lib/config/env";
 import { getOpenAiClient } from "@/lib/openai/client";
 import { buildRecommendationPrompt, recommendationJsonSchema } from "@/lib/openai/prompts";
@@ -47,6 +46,11 @@ function isAiRecommendation(value: unknown): value is AiRecommendation {
 export async function POST(request: Request) {
   try {
     const body: unknown = await request.json();
+
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return apiError("Request body must be a JSON object.", "VALIDATION_ERROR", 400);
+    }
+
     const input = isRecommendRequest(body) ? body : {};
     const userProfile = input.userProfile ?? {};
     const trendData = input.trendData ?? [];
@@ -76,13 +80,10 @@ export async function POST(request: Request) {
     const parsed: unknown = JSON.parse(response.output_text);
 
     if (!isAiRecommendation(parsed)) {
-      return NextResponse.json(
-        { error: "OpenAI returned an unexpected recommendation shape." },
-        { status: 502 },
-      );
+      return apiError("OpenAI returned an unexpected recommendation shape.", "INTERNAL_SERVER_ERROR", 502);
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       recommendation: parsed,
       model,
     });
@@ -90,12 +91,6 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Unknown AI recommendation error.";
     const status = error instanceof MissingEnvironmentVariableError ? 500 : 502;
 
-    return NextResponse.json(
-      {
-        error: message,
-        service: "openai",
-      },
-      { status },
-    );
+    return apiError(message, "INTERNAL_SERVER_ERROR", status);
   }
 }

@@ -1,4 +1,4 @@
-﻿// Provides a compact status/category badge component.
+// Provides a compact status/category badge component.
 import type { ReactNode } from "react";
 import { cn } from "@/utils/cn";
 

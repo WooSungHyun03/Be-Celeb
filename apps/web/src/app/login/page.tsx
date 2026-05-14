@@ -65,7 +65,7 @@ export default function LoginPage() {
               바로 이어서 확인하세요
             </h2>
             <p className="mt-5 max-w-sm text-sm font-medium leading-7 text-slate-600">
-              저장한 추천 콘텐츠와 대시보드를 한 번에 확인하고, 다음 릴스 아이디어를 빠르게 정리하세요.
+              저장한 추천 콘텐츠와 대시보드를 한 번에 확인하고, 다음 Shorts 아이디어를 빠르게 정리하세요.
             </p>
           </div>
           <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -145,3 +145,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

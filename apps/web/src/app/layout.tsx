@@ -5,8 +5,8 @@ import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 
 export const metadata: Metadata = {
-  title: "Be Celeb | SNS 트렌드 전략 추천",
-  description: "크리에이터를 위한 SNS 트렌드 분석과 콘텐츠 추천 서비스",
+  title: "Be Celeb | YouTube 트렌드 전략 추천",
+  description: "크리에이터를 위한 YouTube 트렌드 분석과 콘텐츠 추천 서비스",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -36,3 +36,4 @@ export default function RootLayout({ children }: RootLayoutProps) {
     </html>
   );
 }
+

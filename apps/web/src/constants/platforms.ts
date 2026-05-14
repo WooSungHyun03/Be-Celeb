@@ -1,4 +1,4 @@
-// Lists supported short-form SNS platforms for mock analysis.
+// Lists the single supported YouTube platform for analysis.
 import type { Platform } from "@/types/trend";
 
 export type PlatformDefinition = {
@@ -6,8 +6,4 @@ export type PlatformDefinition = {
   label: string;
 };
 
-export const PLATFORMS: PlatformDefinition[] = [
-  { id: "instagram-reels", label: "Instagram Reels" },
-  { id: "tiktok", label: "TikTok" },
-  { id: "youtube-shorts", label: "YouTube Shorts" },
-];
+export const PLATFORMS: PlatformDefinition[] = [{ id: "youtube", label: "YouTube" }];

@@ -12,7 +12,7 @@ import { createSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_PROFILE_FIELDS = new Set(["nickname", "instagram_username", "avatar_url"]);
+const ALLOWED_PROFILE_FIELDS = new Set(["nickname", "youtube_channel_url", "avatar_url"]);
 
 function hasOnlyAllowedFields(body: JsonObject) {
   return Object.keys(body).every((field) => ALLOWED_PROFILE_FIELDS.has(field));
@@ -31,9 +31,9 @@ export async function PATCH(request: Request) {
     }
 
     const nickname = getOptionalStringField(body, "nickname");
-    const instagramUsername = getOptionalStringField(body, "instagram_username");
+    const youtubeChannelUrl = getOptionalStringField(body, "youtube_channel_url");
     const avatarUrl = getOptionalStringField(body, "avatar_url");
-    const updatePayload: Partial<Pick<ProfileRow, "nickname" | "instagram_username" | "avatar_url">> = {};
+    const updatePayload: Partial<Pick<ProfileRow, "nickname" | "youtube_channel_url" | "avatar_url">> = {};
 
     if (nickname !== undefined) {
       if (!nickname || !isValidNickname(nickname)) {
@@ -43,8 +43,8 @@ export async function PATCH(request: Request) {
       updatePayload.nickname = nickname;
     }
 
-    if (instagramUsername !== undefined) {
-      updatePayload.instagram_username = instagramUsername;
+    if (youtubeChannelUrl !== undefined) {
+      updatePayload.youtube_channel_url = youtubeChannelUrl;
     }
 
     if (avatarUrl !== undefined) {
@@ -99,3 +99,4 @@ export async function PATCH(request: Request) {
     return apiException(error, request);
   }
 }
+

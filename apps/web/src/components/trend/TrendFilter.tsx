@@ -1,4 +1,4 @@
-﻿// Renders category and platform filters for trend discovery.
+// Renders category and YouTube target filters for trend discovery.
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
 import { CATEGORIES } from "@/constants/categories";
@@ -20,9 +20,9 @@ export function TrendFilter() {
           </div>
         </div>
         <div>
-          <p className="mb-3 text-sm font-semibold text-slate-700">플랫폼</p>
+          <p className="mb-3 text-sm font-semibold text-slate-700">대상 채널</p>
           <div className="flex flex-wrap gap-2">
-            <Badge tone="info">전체 플랫폼</Badge>
+            <Badge tone="info">YouTube 전체</Badge>
             {PLATFORMS.map((platform) => (
               <button key={platform.id} className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-sky-50 hover:text-sky-700">
                 {platform.label}
@@ -34,3 +34,4 @@ export function TrendFilter() {
     </Card>
   );
 }
+

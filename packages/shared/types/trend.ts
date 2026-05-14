@@ -1,5 +1,5 @@
 // Defines shared trend contracts for frontend and backend coordination.
-export type SharedPlatform = "instagram-reels" | "tiktok" | "youtube-shorts";
+export type SharedPlatform = "youtube";
 
 export type SharedTrendCategory = "mukbang" | "ai-video" | "dance" | "beauty" | "fashion" | "daily";
 
@@ -10,3 +10,5 @@ export type SharedTrend = {
   platforms: SharedPlatform[];
   score: number;
 };
+
+
