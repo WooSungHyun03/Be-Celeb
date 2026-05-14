@@ -1,4 +1,10 @@
-import type { ChannelAnalysisResult, RecommendationApiResult } from "@/types/content-recommendation";
+import type {
+  ChannelAnalysisResult,
+  GenerateContentPlanPayload,
+  GenerateContentPlanResponse,
+  RecommendationApiResult,
+  RecommendOptionsResponse,
+} from "@/types/content-recommendation";
 import type {
   PopularVideosResponse,
   TrendKeywordsResponse,
@@ -70,6 +76,16 @@ function getFailureMessage(payload: unknown, fallback: string) {
     }
   }
 
+  if (typeof payload === "object" && payload !== null && "detail" in payload) {
+    const detail = (payload as { detail?: unknown }).detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    if (Array.isArray(detail) && detail.length > 0) {
+      return "요청 값이 올바르지 않습니다.";
+    }
+  }
+
   return fallback;
 }
 
@@ -133,6 +149,26 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
 export async function recommendContent(payload: RecommendContentPayload, signal?: AbortSignal) {
   const response = await apiFetch<ApiSuccess<RecommendationApiResult>>("/api/recommend-content", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function recommendOptions(payload: RecommendContentPayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<RecommendOptionsResponse>>("/api/recommend-options", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function generateContentPlan(payload: GenerateContentPlanPayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<GenerateContentPlanResponse>>("/api/generate-content-plan", {
     method: "POST",
     body: JSON.stringify(payload),
     signal,

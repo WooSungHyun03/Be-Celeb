@@ -12,5 +12,5 @@ def list_trends() -> ApiResponse[list[Trend]]:
     return ApiResponse(
         success=True,
         data=[],
-        message="Live YouTube trend data is served by /api/trends/popular-videos and /api/trends/keywords in the Next.js app.",
+        message="Live YouTube trend data is served by /api/trends/popular-videos and /api/trends/keywords.",
     )

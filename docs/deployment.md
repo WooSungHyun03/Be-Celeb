@@ -64,6 +64,49 @@ Frontend API client는 `apps/web/src/lib/client/api.ts`에 있다.
 - `apiFetch("/api/...")`는 내부에서 Render Backend URL과 결합한다.
 - 예: `/api/recommend-content` → `https://your-render-backend.onrender.com/api/recommend-content`
 - `NEXT_PUBLIC_API_BASE_URL`이 없으면 `NEXT_PUBLIC_API_BASE_URL is not configured` 에러를 표시한다.
+- `NEXT_PUBLIC_API_BASE_URL`에는 `/api`를 붙이지 않는다.
+
+올바른 값:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://api.be-celeb.org
+```
+
+잘못된 값:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://api.be-celeb.org/api
+```
+
+잘못된 값은 `https://api.be-celeb.org/api/api/recommend-content`처럼 중복 path를 만들 수 있다.
+
+## Render Backend API Paths
+
+Render Backend가 `apps/api` FastAPI를 배포할 때도 Vercel Frontend와 호환되는 path를 제공한다.
+
+```text
+POST /api/recommend-options
+POST /api/generate-content-plan
+POST /api/recommend-content
+POST /api/analyze-channel
+GET  /api/trends/popular-videos
+GET  /api/trends/keywords?range=daily|weekly|monthly
+```
+
+Dashboard의 기본 추천 플로우는 2단계 API를 사용한다.
+
+1. `POST /api/recommend-options`: 채널 분석, 카테고리 선정, 인플루언서 영상 비교, 아이디어 3개 생성
+2. `POST /api/generate-content-plan`: 선택한 아이디어를 제목, 해시태그, 썸네일, hook, 콘티, 업로드 팁으로 확장
+
+기존 FastAPI route도 유지된다.
+
+```text
+GET  /health
+GET  /trends
+GET  /recommendations
+POST /recommendations/generate
+GET  /api/v1/main
+```
 
 로컬 개발 예시:
 
@@ -129,8 +172,36 @@ await fetch("/api/recommend-content");
 3. `/dashboard`에서 추천 생성을 실행한다.
 4. 요청 URL이 `https://your-render-backend.onrender.com/api/recommend-content`인지 확인한다.
 5. 요청 URL이 `https://be-celeb.org/api/recommend-content`이면 잘못된 배포다.
-6. CORS 오류가 나면 Render의 `ALLOWED_ORIGINS`에 현재 Vercel origin을 추가하고 재배포한다.
-7. `Missing required environment variable: YOUTUBE_API_KEY`가 나면 Render Backend 서비스의 환경변수와 재배포 여부를 확인한다.
+6. 요청 URL이 `https://api.be-celeb.org/api/api/recommend-content`이면 `NEXT_PUBLIC_API_BASE_URL`에서 `/api`를 제거한다.
+7. CORS 오류가 나면 Render의 `ALLOWED_ORIGINS`에 현재 Vercel origin을 추가하고 재배포한다.
+8. `Backend API request failed: 404`가 나면 Render Backend에 위 compatibility route가 배포됐는지 확인한다.
+9. `Missing required environment variable: YOUTUBE_API_KEY`가 나면 route는 정상 진입한 것이므로 Render Backend 서비스의 환경변수와 재배포 여부를 확인한다.
+
+curl 확인:
+
+```bash
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/recommend-options" \
+  -H "Content-Type: application/json" \
+  -d '{"channelUrl":"https://www.youtube.com/@example","category":"IT"}'
+```
+
+선택한 아이디어로 콘텐츠 계획 생성:
+
+```bash
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/generate-content-plan" \
+  -H "Content-Type: application/json" \
+  -d '{"analysisId":"analysis-id","option":{"optionId":"option-1","ideaTitle":"테스트 아이디어","format":"Shorts","summary":"테스트 요약"}}'
+```
+
+legacy 호환 endpoint 확인:
+
+```bash
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/recommend-content" \
+  -H "Content-Type: application/json" \
+  -d '{"channelUrl":"https://www.youtube.com/@example","category":"IT"}'
+```
+
+404가 아니고 추천 결과 또는 명확한 환경변수 오류가 나오면 path 연결은 정상이다.
 
 ## Cron
 

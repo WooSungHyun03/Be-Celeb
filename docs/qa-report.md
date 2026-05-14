@@ -29,6 +29,8 @@ Be Celeb 웹 앱과 FastAPI 앱을 YouTube 전용 서비스 기준으로 점검�
 - `GET /api/trends`
 - `GET /api/trends/keywords`
 - `GET /api/trends/popular-videos`
+- `POST /api/recommend-options`
+- `POST /api/generate-content-plan`
 - `POST /api/cron/collect-daily-videos`
 - `POST /api/collect-daily-videos`
 - `POST /api/ai/recommend`

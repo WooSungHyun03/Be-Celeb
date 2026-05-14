@@ -93,3 +93,47 @@ export type RecommendationApiResult = ChannelAnalysisResult & {
     error: string | null;
   };
 };
+
+export type RecommendationOption = {
+  optionId: string;
+  ideaTitle: string;
+  format: string;
+  summary: string;
+  reason: string;
+  whyNotDuplicate: string;
+  expectedAudience: string;
+};
+
+export type RecommendOptionsResponse = {
+  analysisId: string;
+  selectedCategory: CreatorCategoryName;
+  inferredCategory: CreatorCategoryName | null;
+  channel: {
+    youtubeChannelId: string;
+    title: string;
+    thumbnailUrl: string | null;
+  };
+  options: RecommendationOption[];
+};
+
+export type ContentPlan = {
+  title: string;
+  format: string;
+  hashtags: string[];
+  thumbnailIdea: string;
+  targetAudience: string;
+  hook: string;
+  storyboard: StoryboardScene[];
+  uploadTips: string[];
+};
+
+export type GenerateContentPlanResponse = {
+  analysisId: string;
+  selectedOptionId: string;
+  plan: ContentPlan;
+};
+
+export type GenerateContentPlanPayload = {
+  analysisId: string;
+  option: Pick<RecommendationOption, "optionId" | "ideaTitle" | "format" | "summary">;
+};
