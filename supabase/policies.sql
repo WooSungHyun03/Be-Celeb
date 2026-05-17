@@ -17,7 +17,8 @@ alter table public.influencers enable row level security;
 alter table public.reels enable row level security;
 alter table public.recommendation_requests enable row level security;
 alter table public.recommendations enable row level security;
-
+alter table public.youtube_videos enable row level security;
+alter table public.product_keyword_matches enable row level security;
 
 
 -- profiles
@@ -180,6 +181,21 @@ ON public.recommendations FOR SELECT
 USING (auth.uid() = user_id);
 
 
+-- YouTube Trend Collection Policies
+
+drop policy if exists "youtube_videos_select_public" on public.youtube_videos;
+
+create policy "youtube_videos_select_public"
+on public.youtube_videos for select
+using (true);
+
+drop policy if exists "product_keyword_matches_select_public"
+on public.product_keyword_matches;
+
+create policy "product_keyword_matches_select_public"
+on public.product_keyword_matches for select
+using (true);
+
 -- Explicit grants for Supabase anon/authenticated roles.
 
 GRANT SELECT ON public.trends TO anon, authenticated;
@@ -193,3 +209,5 @@ GRANT SELECT, INSERT ON public.recommendation_requests TO authenticated;
 GRANT SELECT ON public.recommendations TO authenticated;
 GRANT INSERT ON public.error_logs TO anon, authenticated;
 GRANT INSERT ON public.not_found_logs TO anon, authenticated;
+grant select on public.youtube_videos to anon, authenticated;
+grant select on public.product_keyword_matches to anon, authenticated;

@@ -219,6 +219,59 @@ on public.recommendations(user_id);
 create index if not exists idx_recommendations_request_id
 on public.recommendations(request_id);
 
+
+-- YouTube Trend Collection
+
+alter table public.trends
+add column if not exists source text not null default 'manual';
+
+alter table public.trends
+add column if not exists source_video_id text;
+
+create index if not exists idx_trends_source
+on public.trends(source);
+
+create table if not exists public.youtube_videos (
+  id uuid primary key default gen_random_uuid(),
+  youtube_video_id text not null unique,
+  title text not null,
+  channel_title text,
+  category text,
+  description text,
+  thumbnail_url text,
+  tags text[] not null default '{}',
+  published_at timestamptz,
+  view_count bigint not null default 0,
+  like_count bigint not null default 0,
+  comment_count bigint not null default 0,
+  trend_score integer not null default 0,
+  collected_at timestamptz not null default now()
+);
+
+create index if not exists idx_youtube_videos_category
+on public.youtube_videos(category);
+
+create index if not exists idx_youtube_videos_trend_score
+on public.youtube_videos(trend_score desc);
+
+create index if not exists idx_youtube_videos_published_at
+on public.youtube_videos(published_at desc);
+
+create table if not exists public.product_keyword_matches (
+  id uuid primary key default gen_random_uuid(),
+  keyword text not null,
+  product_id uuid not null references public.products(id) on delete cascade,
+  score integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (keyword, product_id)
+);
+
+create index if not exists idx_product_keyword_matches_keyword
+on public.product_keyword_matches(keyword);
+
+create index if not exists idx_product_keyword_matches_product_id
+on public.product_keyword_matches(product_id);
+
 -- 11. Addresses
 create table if not exists public.addresses (
   id uuid primary key default gen_random_uuid(),

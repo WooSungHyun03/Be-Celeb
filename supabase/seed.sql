@@ -382,3 +382,106 @@ on conflict (influencer_id, title) do update set
   likes = excluded.likes,
   comments = excluded.comments,
   saves = excluded.saves;
+
+
+  -- =========================================================
+-- YouTube Mock Videos Seed Data
+-- 무료 API 연동 전 화면/추천 테스트용 mock 데이터
+-- =========================================================
+
+insert into public.youtube_videos (
+  youtube_video_id,
+  title,
+  channel_title,
+  category,
+  description,
+  thumbnail_url,
+  tags,
+  published_at,
+  view_count,
+  like_count,
+  comment_count,
+  trend_score
+)
+values
+(
+  'yt_grwm_001',
+  '요즘 유행하는 5분 GRWM 메이크업',
+  'Beauty Shortform',
+  'beauty',
+  '짧은 시간 안에 완성하는 데일리 메이크업 루틴',
+  null,
+  array['GRWM', '메이크업', '데일리'],
+  now() - interval '2 days',
+  720000,
+  54000,
+  1200,
+  95
+),
+(
+  'yt_homecafe_001',
+  '자취방 홈카페 감성 세팅',
+  'Home Cafe Life',
+  'living',
+  '작은 방에서도 가능한 홈카페 아이템 추천',
+  null,
+  array['홈카페', '자취', '감성'],
+  now() - interval '3 days',
+  410000,
+  26000,
+  700,
+  82
+),
+(
+  'yt_fashion_001',
+  '봄 미니멀룩 코디 5가지',
+  'Minimal Look',
+  'fashion',
+  '기본템으로 완성하는 미니멀 데일리룩',
+  null,
+  array['미니멀룩', '패션', '코디'],
+  now() - interval '1 day',
+  530000,
+  38000,
+  900,
+  88
+)
+on conflict (youtube_video_id) do update set
+  title = excluded.title,
+  channel_title = excluded.channel_title,
+  category = excluded.category,
+  description = excluded.description,
+  thumbnail_url = excluded.thumbnail_url,
+  tags = excluded.tags,
+  published_at = excluded.published_at,
+  view_count = excluded.view_count,
+  like_count = excluded.like_count,
+  comment_count = excluded.comment_count,
+  trend_score = excluded.trend_score,
+  collected_at = now();
+
+
+-- Product Keyword Match Seed Data
+-- YouTube 키워드와 상품 추천 연결
+
+insert into public.product_keyword_matches (
+  keyword,
+  product_id,
+  score
+)
+select
+  m.keyword,
+  p.id,
+  m.score
+from (
+  values
+  ('GRWM', '틴트 립밤', 95),
+  ('메이크업', '틴트 립밤', 90),
+  ('홈카페', '미니 LED 조명', 88),
+  ('자취', '데스크 정리함', 80),
+  ('코디', '데일리 크로스백', 85),
+  ('촬영', '무선 삼각대', 92)
+) as m(keyword, product_name, score)
+join public.products p on p.name = m.product_name
+on conflict (keyword, product_id) do update set
+  score = excluded.score;
