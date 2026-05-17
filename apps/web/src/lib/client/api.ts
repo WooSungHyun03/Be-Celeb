@@ -5,6 +5,8 @@ import type {
   UserChannelSettings,
 } from "@/types/content-recommendation";
 import type {
+  CombinedTrendsResponse,
+  NaverTrendKeywordsResponse,
   PopularVideosResponse,
   TrendKeywordsResponse,
   TrendKeywordRange,
@@ -217,6 +219,24 @@ export async function getPopularVideos(signal?: AbortSignal) {
 
 export async function getTrendKeywords(range: TrendKeywordRange, signal?: AbortSignal) {
   const response = await apiFetch<ApiSuccess<TrendKeywordsResponse>>(`/api/trends/keywords?range=${range}`, {
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function getNaverTrendKeywords(category: string, range: TrendKeywordRange, signal?: AbortSignal) {
+  const query = new URLSearchParams({ category, range });
+  const response = await apiFetch<ApiSuccess<NaverTrendKeywordsResponse>>(`/api/trends/naver-keywords?${query.toString()}`, {
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function getCombinedTrends(category: string, range: TrendKeywordRange, signal?: AbortSignal) {
+  const query = new URLSearchParams({ category, range });
+  const response = await apiFetch<ApiSuccess<CombinedTrendsResponse>>(`/api/trends/combined?${query.toString()}`, {
     signal,
   });
 

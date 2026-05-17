@@ -8,6 +8,7 @@ import { AdminAuthGate } from "@/components/admin/AdminAuthGate";
 import { AdminLayout, type AdminSection } from "@/components/admin/AdminLayout";
 import { InfluencerChannelManager } from "@/components/admin/InfluencerChannelManager";
 import { LLMPromptManager } from "@/components/admin/LLMPromptManager";
+import { NaverKeywordGroupManager } from "@/components/admin/NaverKeywordGroupManager";
 import { OverviewCards } from "@/components/admin/OverviewCards";
 import { RecommendationManager } from "@/components/admin/RecommendationManager";
 import { SystemStatusPanel } from "@/components/admin/SystemStatusPanel";
@@ -23,6 +24,8 @@ import {
   listCollectionLogs,
   listInfluencerChannels,
   listLLMPrompts,
+  listNaverCollectionLogs,
+  listNaverKeywordGroups,
   listRecommendations,
   listVideos,
 } from "@/lib/api/admin";
@@ -31,6 +34,8 @@ import type {
   AdminCategory,
   AdminCollectionLog,
   AdminInfluencerChannel,
+  AdminNaverCollectionLog,
+  AdminNaverKeywordGroup,
   AdminOverview,
   AdminPromptTemplate,
   AdminRecommendation,
@@ -45,6 +50,8 @@ type AdminData = {
   channels: AdminInfluencerChannel[];
   videos: AdminVideo[];
   logs: AdminCollectionLog[];
+  naverGroups: AdminNaverKeywordGroup[];
+  naverLogs: AdminNaverCollectionLog[];
   analyses: AdminAnalysis[];
   recommendations: AdminRecommendation[];
   options: AdminRecommendationOption[];
@@ -58,6 +65,8 @@ const initialData: AdminData = {
   channels: [],
   videos: [],
   logs: [],
+  naverGroups: [],
+  naverLogs: [],
   analyses: [],
   recommendations: [],
   options: [],
@@ -86,6 +95,8 @@ export function AdminClient() {
         channelsResult,
         videosResult,
         logsResult,
+        naverGroupsResult,
+        naverLogsResult,
         analysesResult,
         recommendationsResult,
         promptsResult,
@@ -96,6 +107,8 @@ export function AdminClient() {
         listInfluencerChannels({ limit: 100 }),
         listVideos({ limit: 100 }),
         listCollectionLogs({ limit: 50 }),
+        listNaverKeywordGroups(),
+        listNaverCollectionLogs({ limit: 20 }),
         listAnalyses({ limit: 50 }),
         listRecommendations({ limit: 50 }),
         listLLMPrompts(),
@@ -108,6 +121,8 @@ export function AdminClient() {
         channels: channelsResult.channels,
         videos: videosResult.videos,
         logs: logsResult.logs,
+        naverGroups: naverGroupsResult.groups,
+        naverLogs: naverLogsResult.logs,
         analyses: analysesResult.analyses,
         recommendations: recommendationsResult.contentRecommendations,
         options: recommendationsResult.recommendationOptions,
@@ -161,6 +176,14 @@ export function AdminClient() {
           <VideoDataManager categories={data.categories} channels={data.channels} videos={data.videos} {...sharedProps} />
         ) : null}
         {activeSection === "collection" ? <CollectionManager logs={data.logs} {...sharedProps} /> : null}
+        {activeSection === "naver" ? (
+          <NaverKeywordGroupManager
+            categories={data.categories}
+            groups={data.naverGroups}
+            logs={data.naverLogs}
+            {...sharedProps}
+          />
+        ) : null}
         {activeSection === "recommendations" ? (
           <RecommendationManager
             analyses={data.analyses}

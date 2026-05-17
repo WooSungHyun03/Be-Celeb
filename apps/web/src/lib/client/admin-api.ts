@@ -5,6 +5,9 @@ import type {
   AdminCollectionLog,
   AdminCollectionSummary,
   AdminInfluencerChannel,
+  AdminNaverCollectionLog,
+  AdminNaverCollectionSummary,
+  AdminNaverKeywordGroup,
   AdminOverview,
   AdminPromptTemplate,
   AdminRecommendation,
@@ -41,6 +44,16 @@ type AdminCreateChannelPayload = {
 };
 
 type AdminUpdateChannelPayload = Partial<AdminCreateChannelPayload>;
+
+export type AdminNaverKeywordGroupPayload = {
+  categoryId?: string | null;
+  categoryName: string;
+  title: string;
+  keywords: string[];
+  isActive?: boolean;
+};
+
+export type AdminNaverKeywordGroupUpdatePayload = Partial<AdminNaverKeywordGroupPayload>;
 
 type AdminApiResponse<T> = {
   success: true;
@@ -186,6 +199,42 @@ export function collectNow() {
 export function listCollectionLogs(params?: AdminListParams) {
   return adminData<{ logs: AdminCollectionLog[]; limit: number; offset: number }>(
     `/api/admin/collection-logs${toQuery(params)}`,
+  );
+}
+
+export function listNaverKeywordGroups(params?: Pick<AdminListParams, "categoryId" | "isActive"> & { category?: string }) {
+  return adminData<{ groups: AdminNaverKeywordGroup[] }>(`/api/admin/naver-keyword-groups${toQuery(params)}`);
+}
+
+export function createNaverKeywordGroup(payload: AdminNaverKeywordGroupPayload) {
+  return adminData<{ group: AdminNaverKeywordGroup }>("/api/admin/naver-keyword-groups", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateNaverKeywordGroup(groupId: string, payload: AdminNaverKeywordGroupUpdatePayload) {
+  return adminData<{ group: AdminNaverKeywordGroup }>(`/api/admin/naver-keyword-groups/${groupId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteNaverKeywordGroup(groupId: string) {
+  return adminData<{ deleted: number }>(`/api/admin/naver-keyword-groups/${groupId}`, {
+    method: "DELETE",
+  });
+}
+
+export function collectNaverTrendsNow() {
+  return adminData<AdminNaverCollectionSummary>("/api/admin/collect-naver-trends", {
+    method: "POST",
+  });
+}
+
+export function listNaverCollectionLogs(params?: Pick<AdminListParams, "limit" | "offset">) {
+  return adminData<{ logs: AdminNaverCollectionLog[]; limit: number; offset: number }>(
+    `/api/admin/naver-collection-logs${toQuery(params)}`,
   );
 }
 

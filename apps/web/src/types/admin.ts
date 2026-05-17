@@ -81,6 +81,41 @@ export type AdminCollectionSummary = {
   errors: Array<Record<string, unknown>>;
 };
 
+export type AdminNaverKeywordGroup = {
+  id: string;
+  categoryId: string | null;
+  categoryName: string;
+  title: string;
+  keywords: string[];
+  isActive: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type AdminNaverCollectionLog = {
+  id: string;
+  job_name: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  summary: Record<string, unknown>;
+  error_message: string | null;
+  created_at: string;
+};
+
+export type AdminNaverCollectionSummary = {
+  ok: boolean;
+  scheduledTime: string;
+  collectedAt: string;
+  startDate: string;
+  endDate: string;
+  timeUnit: string;
+  categoriesChecked: number;
+  groupsChecked: number;
+  pointsUpserted: number;
+  errors: Array<Record<string, unknown>>;
+};
+
 export type AdminAnalysis = {
   id: string;
   channel_url: string;

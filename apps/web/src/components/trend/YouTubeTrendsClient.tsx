@@ -18,8 +18,10 @@ import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SkeletonCard } from "@/components/common/Loading";
-import { getPopularVideos, getTrendKeywords } from "@/lib/api/trends";
+import { getCombinedTrends, getNaverTrendKeywords, getPopularVideos, getTrendKeywords } from "@/lib/api/trends";
 import type {
+  CombinedTrendsResponse,
+  NaverTrendKeywordsResponse,
   PopularTrendVideo,
   PopularVideosResponse,
   TrendKeywordsResponse,
@@ -39,6 +41,8 @@ const rangeOptions: Array<{ id: TrendKeywordRange; label: string; caption: strin
 ];
 
 const chartColors = ["#7c3aed", "#2563eb", "#059669", "#ea580c", "#db2777"];
+const naverChartColors = ["#059669", "#2563eb", "#ea580c", "#7c3aed", "#be123c"];
+const beCelebCategories = ["게임", "운동", "IT", "노래", "OTT", "일상", "뷰티", "스터디", "코미디", "먹방", "춤"];
 
 function createInitialState<T>(): AsyncState<T> {
   return {
@@ -75,6 +79,16 @@ function formatDate(value: string) {
 
 function formatMetricLabel(value: unknown) {
   return formatCompactNumber(typeof value === "number" ? value : Number(value));
+}
+
+function formatRatio(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "-";
+  }
+
+  return new Intl.NumberFormat("ko-KR", {
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 function EmptyState({ title, description }: { title: string; description: string }) {
@@ -376,13 +390,220 @@ function KeywordsSection({
   );
 }
 
+function CategorySelect({ value, onChange }: { value: string; onChange: (category: string) => void }) {
+  return (
+    <label className="text-sm font-semibold text-slate-700">
+      <span className="sr-only">Naver 카테고리</span>
+      <select
+        className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        {beCelebCategories.map((category) => (
+          <option key={category} value={category}>
+            {category}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function NaverKeywordCharts({ data }: { data: NaverTrendKeywordsResponse }) {
+  if (data.topKeywords.length === 0) {
+    return (
+      <EmptyState
+        title="아직 네이버 트렌드 수집 데이터가 없습니다."
+        description="관리자 수동 수집 또는 daily collector를 확인하세요."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[0.75fr_1.25fr]">
+        <Card title="Naver Top Keywords">
+          <div className="space-y-3">
+            {data.topKeywords.map((item, index) => (
+              <div className="flex items-center justify-between gap-3" key={item.keyword}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-xs font-bold text-emerald-700">
+                    {index + 1}
+                  </span>
+                  <span className="truncate text-sm font-semibold text-ink">{item.keyword}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-slate-700">{formatRatio(item.ratio)}</p>
+                  <p className={item.trendDelta >= 0 ? "text-xs font-semibold text-emerald-700" : "text-xs font-semibold text-rose-600"}>
+                    {item.trendDelta >= 0 ? "+" : ""}
+                    {formatRatio(item.trendDelta)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card title="Naver keyword ratio">
+          <div className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800">
+            ratio는 절대 검색량이 아니라 Naver DataLab이 제공하는 상대 검색 추이 지표입니다.
+          </div>
+          <div className="h-80 min-w-0">
+            <ResponsiveContainer height="100%" width="100%">
+              <LineChart data={data.series} margin={{ bottom: 8, left: 0, right: 12, top: 8 }}>
+                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="period" tick={{ fontSize: 11 }} tickMargin={8} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatRatio(Number(value))} width={42} />
+                <Tooltip formatter={(value, name) => [formatRatio(Number(value)), String(name)]} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {data.seriesKeywords.map((keyword, index) => (
+                  <Line
+                    activeDot={{ r: 5 }}
+                    dataKey={keyword}
+                    dot={false}
+                    key={keyword}
+                    stroke={naverChartColors[index % naverChartColors.length]}
+                    strokeWidth={2.4}
+                    type="monotone"
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function CombinedTrendSection({ state, onRetry }: { state: AsyncState<CombinedTrendsResponse>; onRetry: () => void }) {
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight text-ink">YouTube + Naver 결합 트렌드</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          YouTube 업로드 패턴과 네이버 검색 관심도를 결합한 한국 트렌드 지표
+        </p>
+      </div>
+
+      {state.status === "loading" || state.status === "idle" ? <KeywordSkeleton /> : null}
+      {state.status === "error" ? <ErrorState message={state.error ?? "결합 트렌드 데이터를 불러오지 못했습니다."} onRetry={onRetry} /> : null}
+      {state.status === "success" && state.data?.combined.keywords.length === 0 ? (
+        <EmptyState
+          title="결합할 트렌드 데이터가 없습니다."
+          description="YouTube 영상 태그와 Naver trend daily points가 쌓이면 Top 10 결합 점수가 표시됩니다."
+        />
+      ) : null}
+      {state.status === "success" && state.data && state.data.combined.keywords.length > 0 ? (
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <Card title="Combined keyword score Top 10">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="border-y border-slate-200 bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Keyword</th>
+                    <th className="px-3 py-2 text-right">Score</th>
+                    <th className="px-3 py-2 text-right">YouTube tags</th>
+                    <th className="px-3 py-2 text-right">YouTube views</th>
+                    <th className="px-3 py-2 text-right">Naver ratio</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {state.data.combined.keywords.map((item) => (
+                    <tr key={item.keyword}>
+                      <td className="px-3 py-3 font-semibold text-ink">{item.keyword}</td>
+                      <td className="px-3 py-3 text-right font-bold text-emerald-700">{formatRatio(item.score)}</td>
+                      <td className="px-3 py-3 text-right">{formatCompactNumber(item.youtubeCount)}</td>
+                      <td className="px-3 py-3 text-right">{formatCompactNumber(item.youtubeViews)}</td>
+                      <td className="px-3 py-3 text-right">{formatRatio(item.naverRatio)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <div className="space-y-4">
+            <Card title="YouTube top tags">
+              <div className="space-y-2">
+                {state.data.youtube.topTags.slice(0, 8).map((tag) => (
+                  <div className="flex items-center justify-between gap-3 text-sm" key={tag.keyword}>
+                    <span className="truncate font-semibold text-ink">#{tag.keyword}</span>
+                    <span className="shrink-0 text-slate-500">{tag.count}회 · {formatCompactNumber(tag.views)}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <Card title="Naver top keywords">
+              <div className="space-y-2">
+                {state.data.naver.topKeywords.slice(0, 8).map((keyword) => (
+                  <div className="flex items-center justify-between gap-3 text-sm" key={keyword.keyword}>
+                    <span className="truncate font-semibold text-ink">{keyword.keyword}</span>
+                    <span className="shrink-0 text-slate-500">{formatRatio(keyword.ratio)}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function NaverTrendsSection({
+  category,
+  range,
+  naverState,
+  combinedState,
+  onCategoryChange,
+  onRangeChange,
+  onRetry,
+}: {
+  category: string;
+  range: TrendKeywordRange;
+  naverState: AsyncState<NaverTrendKeywordsResponse>;
+  combinedState: AsyncState<CombinedTrendsResponse>;
+  onCategoryChange: (category: string) => void;
+  onRangeChange: (range: TrendKeywordRange) => void;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-ink">네이버 검색 트렌드</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Naver DataLab 통합검색어 트렌드 API의 카테고리별 상대 ratio를 표시합니다.</p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <CategorySelect onChange={onCategoryChange} value={category} />
+            <RangeTabs onChange={onRangeChange} range={range} />
+          </div>
+        </div>
+
+        {naverState.status === "loading" || naverState.status === "idle" ? <KeywordSkeleton /> : null}
+        {naverState.status === "error" ? <ErrorState message={naverState.error ?? "네이버 트렌드 데이터를 불러오지 못했습니다."} onRetry={onRetry} /> : null}
+        {naverState.status === "success" && naverState.data ? <NaverKeywordCharts data={naverState.data} /> : null}
+      </section>
+
+      <CombinedTrendSection onRetry={onRetry} state={combinedState} />
+    </div>
+  );
+}
+
 export function YouTubeTrendsClient() {
   const [popularState, setPopularState] = useState<AsyncState<PopularVideosResponse>>(() => createInitialState());
   const [keywordState, setKeywordState] = useState<AsyncState<TrendKeywordsResponse>>(() => createInitialState());
+  const [naverState, setNaverState] = useState<AsyncState<NaverTrendKeywordsResponse>>(() => createInitialState());
+  const [combinedState, setCombinedState] = useState<AsyncState<CombinedTrendsResponse>>(() => createInitialState());
   const [range, setRange] = useState<TrendKeywordRange>("daily");
+  const [naverRange, setNaverRange] = useState<TrendKeywordRange>("daily");
+  const [naverCategory, setNaverCategory] = useState("IT");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [popularReloadKey, setPopularReloadKey] = useState(0);
   const [keywordReloadKey, setKeywordReloadKey] = useState(0);
+  const [naverReloadKey, setNaverReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -426,12 +647,54 @@ export function YouTubeTrendsClient() {
     return () => controller.abort();
   }, [keywordReloadKey, range]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    setNaverState({ status: "loading", data: null, error: null });
+    getNaverTrendKeywords(naverCategory, naverRange, controller.signal)
+      .then((data) => {
+        setNaverState({ status: "success", data, error: null });
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setNaverState({
+            status: "error",
+            data: null,
+            error: error instanceof Error ? error.message : "네이버 트렌드 데이터를 불러오지 못했어요.",
+          });
+        }
+      });
+
+    return () => controller.abort();
+  }, [naverCategory, naverRange, naverReloadKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    setCombinedState({ status: "loading", data: null, error: null });
+    getCombinedTrends(naverCategory, naverRange, controller.signal)
+      .then((data) => {
+        setCombinedState({ status: "success", data, error: null });
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setCombinedState({
+            status: "error",
+            data: null,
+            error: error instanceof Error ? error.message : "결합 트렌드 데이터를 불러오지 못했어요.",
+          });
+        }
+      });
+
+    return () => controller.abort();
+  }, [naverCategory, naverRange, naverReloadKey]);
+
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow={<Badge tone="brand">YouTube only</Badge>}
-        title="YouTube Trends"
-        description="카테고리별 인기 영상과 태그 기반 급상승 키워드를 확인하세요."
+        eyebrow={<Badge tone="brand">YouTube + Naver</Badge>}
+        title="Trends"
+        description="카테고리별 인기 영상, YouTube 태그, Naver 검색 관심도를 함께 확인하세요."
       />
 
       <PopularVideosSection
@@ -446,6 +709,16 @@ export function YouTubeTrendsClient() {
         onRetry={() => setKeywordReloadKey((current) => current + 1)}
         range={range}
         state={keywordState}
+      />
+
+      <NaverTrendsSection
+        category={naverCategory}
+        combinedState={combinedState}
+        naverState={naverState}
+        onCategoryChange={setNaverCategory}
+        onRangeChange={setNaverRange}
+        onRetry={() => setNaverReloadKey((current) => current + 1)}
+        range={naverRange}
       />
     </div>
   );

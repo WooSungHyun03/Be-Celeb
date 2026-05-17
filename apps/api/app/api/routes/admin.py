@@ -7,7 +7,16 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
-from app.core.errors import BackendApiError
+from app.core.errors import AppException
+from app.domains.trends.schemas import NaverKeywordGroupPayload, NaverKeywordGroupUpdatePayload
+from app.domains.trends.service import (
+    collect_naver_trends,
+    create_naver_keyword_group,
+    delete_naver_keyword_group,
+    list_naver_collection_logs,
+    list_naver_keyword_groups,
+    update_naver_keyword_group,
+)
 from app.schemas.admin import (
     CategoryPayload,
     CategoryUpdatePayload,
@@ -60,7 +69,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 def admin_error_response(error: Exception) -> JSONResponse:
-    if isinstance(error, BackendApiError):
+    if isinstance(error, AppException):
         return JSONResponse(
             status_code=error.status_code,
             content={"success": False, "message": str(error), "code": error.code},
@@ -247,6 +256,69 @@ async def collection_logs(
 ) -> ApiResponse[Any] | JSONResponse:
     try:
         return ApiResponse(success=True, data=await list_admin_collection_logs(status, limit, offset))
+    except Exception as error:
+        return admin_error_response(error)
+
+
+@router.get("/naver-keyword-groups", response_model=None)
+async def naver_keyword_groups(
+    category: str | None = None,
+    is_active: bool | None = Query(default=None, alias="isActive"),
+    _: None = AdminAuth,
+) -> ApiResponse[Any] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await list_naver_keyword_groups(category, is_active))
+    except Exception as error:
+        return admin_error_response(error)
+
+
+@router.post("/naver-keyword-groups", response_model=None)
+async def create_naver_keyword_group_route(
+    payload: NaverKeywordGroupPayload,
+    _: None = AdminAuth,
+) -> ApiResponse[Any] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await create_naver_keyword_group(payload.model_dump(by_alias=False)))
+    except Exception as error:
+        return admin_error_response(error)
+
+
+@router.patch("/naver-keyword-groups/{group_id}", response_model=None)
+async def update_naver_keyword_group_route(
+    group_id: str,
+    payload: NaverKeywordGroupUpdatePayload,
+    _: None = AdminAuth,
+) -> ApiResponse[Any] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await update_naver_keyword_group(group_id, payload.model_dump(by_alias=False, exclude_unset=True)))
+    except Exception as error:
+        return admin_error_response(error)
+
+
+@router.delete("/naver-keyword-groups/{group_id}", response_model=None)
+async def delete_naver_keyword_group_route(group_id: str, _: None = AdminAuth) -> ApiResponse[Any] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await delete_naver_keyword_group(group_id))
+    except Exception as error:
+        return admin_error_response(error)
+
+
+@router.post("/collect-naver-trends", response_model=None)
+async def collect_naver_now(_: None = AdminAuth) -> ApiResponse[Any] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await collect_naver_trends())
+    except Exception as error:
+        return admin_error_response(error)
+
+
+@router.get("/naver-collection-logs", response_model=None)
+async def naver_collection_logs(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    _: None = AdminAuth,
+) -> ApiResponse[Any] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await list_naver_collection_logs(limit, offset))
     except Exception as error:
         return admin_error_response(error)
 

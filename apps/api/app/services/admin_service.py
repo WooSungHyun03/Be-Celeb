@@ -743,6 +743,8 @@ async def get_admin_system_status() -> AdminSystemStatus:
         "SUPABASE_URL": bool(settings.supabase_url),
         "SUPABASE_SERVICE_ROLE_KEY": bool(settings.supabase_service_role_key),
         "YOUTUBE_API_KEY": bool(settings.youtube_api_key),
+        "NAVER_CLIENT_ID": bool(settings.naver_client_id),
+        "NAVER_CLIENT_SECRET": bool(settings.naver_client_secret),
         "LOCAL_LLM_API_URL": bool(settings.local_llm_api_url),
         "LOCAL_LLM_API_KEY": bool(settings.local_llm_api_key),
         "ADMIN_SECRET": bool(settings.admin_secret),

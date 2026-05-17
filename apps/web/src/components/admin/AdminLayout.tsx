@@ -10,6 +10,7 @@ export type AdminSection =
   | "channels"
   | "videos"
   | "collection"
+  | "naver"
   | "recommendations"
   | "prompts"
   | "system"
@@ -21,6 +22,7 @@ const sections: Array<{ id: AdminSection; label: string }> = [
   { id: "channels", label: "인플루언서 채널" },
   { id: "videos", label: "영상 데이터" },
   { id: "collection", label: "수집 관리" },
+  { id: "naver", label: "Naver Keyword Groups" },
   { id: "recommendations", label: "추천/분석" },
   { id: "prompts", label: "LLM Prompts" },
   { id: "system", label: "시스템" },

@@ -1,8 +1,9 @@
 # Shared datetime helpers.
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
+UTC = timezone.utc
 KST = timezone(timedelta(hours=9), name="KST")
 
 

@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     )
     supabase_service_role_key: str | None = None
     youtube_api_key: str | None = None
+    naver_client_id: str | None = None
+    naver_client_secret: str | None = None
     local_llm_api_url: str | None = "https://llm-api.be-celeb.org/v1/chat/completions"
     local_llm_api_key: str | None = None
     local_llm_model: str = "local-model"

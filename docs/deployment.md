@@ -43,6 +43,8 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 YOUTUBE_API_KEY=your-youtube-api-key
+NAVER_CLIENT_ID=your-naver-client-id
+NAVER_CLIENT_SECRET=your-naver-client-secret
 LOCAL_LLM_API_URL=https://llm-api.be-celeb.org/v1/chat/completions
 LOCAL_LLM_API_KEY=your-local-llm-key
 LOCAL_LLM_MODEL=local-model
@@ -90,6 +92,12 @@ DELETE /api/account
 GET  /api/admin/llm-prompts
 GET  /api/trends/popular-videos
 GET  /api/trends/keywords?range=daily|weekly|monthly
+GET  /api/trends/naver-keywords?category=IT&range=daily|weekly|monthly
+GET  /api/trends/combined?category=IT&range=daily|weekly|monthly
+POST /api/cron/collect-naver-trends
+GET/POST/PATCH/DELETE /api/admin/naver-keyword-groups
+POST /api/admin/collect-naver-trends
+GET  /api/admin/naver-collection-logs
 ```
 
 Dashboard의 기본 추천 플로우는 1회 LLM 호출 API와 결과 조회 API를 사용한다.
@@ -98,6 +106,53 @@ Dashboard의 기본 추천 플로우는 1회 LLM 호출 API와 결과 조회 API
 2. `GET /api/recommendations/{recommendation_id}`: 새로고침 가능한 결과 페이지에서 제목, 추천 이유, 해시태그, 상세 콘티 조회
 3. `GET/PUT /api/user/channel-settings`: 회원별 channel URL/category 저장 및 자동 불러오기
 4. `GET/POST/PATCH/DELETE /api/admin/llm-prompts`: admin active LLM prompt 관리
+
+## Naver DataLab 검색 트렌드
+
+Backend는 Naver DataLab `통합검색어 트렌드 API`를 사용해 한국 검색 관심도를 하루 1회 수집한다.
+
+```text
+POST https://openapi.naver.com/v1/datalab/search
+```
+
+요청 header:
+
+```text
+X-Naver-Client-Id: NAVER_CLIENT_ID
+X-Naver-Client-Secret: NAVER_CLIENT_SECRET
+Content-Type: application/json
+```
+
+수집 기준:
+
+- KST 매일 06:00, UTC 매일 21:00
+- `timeUnit=date`
+- 최근 30일 기준 `startDate/endDate`
+- `naver_trend_keyword_groups`의 active keyword group만 호출
+- 일부 category/group batch가 실패해도 나머지 수집은 계속 진행
+- 수집 결과와 실패 요약은 `naver_trend_collection_logs`에 저장
+
+저장 테이블:
+
+- `naver_trend_keyword_groups`: category별 keyword group 관리 테이블. Admin에서 CRUD 및 active toggle 가능
+- `naver_trend_daily_points`: `group_id + period + time_unit` 기준 upsert되는 daily ratio
+- `naver_trend_collection_logs`: Naver 수집 job 상태와 summary/error 기록
+
+`ratio`는 절대 검색량이 아니다. Naver DataLab이 요청 기간과 keyword group 기준으로 제공하는 상대 검색 추이 값이며, trends 화면에서도 상대 지표로만 표시한다.
+
+기본 keyword group seed는 migration `supabase/migrations/20260517002000_naver_datalab_trends.sql`에 포함되어 있다. 기본 카테고리는 다음 11개다.
+
+```txt
+게임, 운동, IT, 노래, OTT, 일상, 뷰티, 스터디, 코미디, 먹방, 춤
+```
+
+Trends 페이지는 기존 YouTube 인기 영상/태그 집계를 유지하고, 아래에 Naver 검색 트렌드와 결합 트렌드를 추가한다. 결합 점수는 keyword 단위로 다음 값을 정규화해 계산한다.
+
+```text
+combinedScore = normalizedYoutubeTagCount * 0.4
+  + normalizedYoutubeViews * 0.3
+  + normalizedNaverRatio * 0.3
+```
 
 기존 health/main route도 유지된다.
 
@@ -193,10 +248,11 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/user/channel-settings" \
 
 ## Cron
 
-Daily YouTube collection도 Render Backend API를 호출한다.
+Daily YouTube collection과 Daily Naver trends collection은 Render Backend API를 호출한다.
 
 ```env
 DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
+DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
 CRON_SECRET=your-cron-secret
 ```
 
@@ -207,3 +263,27 @@ Schedule:
 ```
 
 UTC 21:00은 KST 매일 06:00이다.
+
+GitHub Actions repository secrets:
+
+```txt
+DAILY_COLLECT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-daily-videos
+DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
+CRON_SECRET=your-cron-secret
+```
+
+수동 Naver 수집 확인:
+
+```bash
+curl --fail-with-body -X POST "$NEXT_PUBLIC_API_BASE_URL/api/cron/collect-naver-trends" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+저장 확인:
+
+```sql
+select category_name, keyword_group_title, period, ratio
+from public.naver_trend_daily_points
+order by period desc
+limit 20;
+```
