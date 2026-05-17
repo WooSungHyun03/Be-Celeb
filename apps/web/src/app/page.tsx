@@ -512,7 +512,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const code = firstParam(params.code);
 
   if (code) {
-    redirect(`/auth/callback?code=${encodeURIComponent(code)}&next=/reset-password`);
+    redirect(`/api/auth/reset-password/callback?code=${encodeURIComponent(code)}`);
   }
 
   return (

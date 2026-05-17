@@ -7,7 +7,11 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+
+type ApiErrorResponse = {
+  success: false;
+  message?: string;
+};
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -20,13 +24,17 @@ export default function ForgotPasswordPage() {
     setMessage("");
 
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?next=/reset-password`;
-      const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email, {
-        redirectTo,
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
       });
-      if (error) {
-        throw error;
+
+      if (!response.ok) {
+        const payload = (await response.json()) as ApiErrorResponse;
+        throw new Error(payload.message ?? "Failed to send reset password email.");
       }
+
       setStatus("success");
       setMessage("가입 여부와 관계없이 입력한 이메일로 재설정 안내를 보냈어요.");
     } catch (error) {
