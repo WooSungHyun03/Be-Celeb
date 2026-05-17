@@ -20,6 +20,13 @@ class ServiceStats(BaseSchema):
     active_trends_count: int = Field(..., description="실시간 분석 중인 트렌드 수")
 
 # 인기 트렌드 요약
+class ServiceContent(BaseSchema):
+    section: str = Field(..., description="메인 페이지 섹션 키")
+    title: str = Field(..., description="서비스 소개 제목")
+    description: str = Field(..., description="서비스 소개 설명")
+    sort_order: int = Field(default=0, description="노출 순서")
+
+
 class TrendSummary(BaseSchema):
     id: str = Field(..., description="트렌드 고유 ID")
     title: str = Field(..., description="트렌드 제목")
@@ -53,6 +60,7 @@ class SampleRecommendation(BaseSchema):
 # 메인 페이지 종합 응답 규격
 class MainResponse(BaseSchema):
     stats: ServiceStats
+    service_contents: List[ServiceContent] = Field(default_factory=list)
     popular_trends: List[TrendSummary]
     sample_recommendation: Optional[SampleRecommendation] = None
 

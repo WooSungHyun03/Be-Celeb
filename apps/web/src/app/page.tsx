@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ROUTES } from "@/constants/routes";
+import { getMainPageData, type MainPageData } from "@/lib/api/main";
 
 type HomePageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -59,7 +60,16 @@ const risingTopics = [
   { label: "부업 아이디어", icon: "↗" },
 ];
 
-const videoRecommendations = [
+type VideoRecommendationItem = {
+  title: string;
+  image: string;
+  badge: string;
+  creator: string;
+  stats: string;
+  tags: string[];
+};
+
+const videoRecommendations: VideoRecommendationItem[] = [
   {
     title: "30분 만에 콘텐츠 기획하는 방법",
     image: "desk",
@@ -85,6 +95,121 @@ const videoRecommendations = [
     tags: ["앱추천", "꿀팁", "생산성"],
   },
 ];
+
+const dynamicWidths = ["w-full", "w-4/5", "w-3/5", "w-1/2", "w-2/5"];
+const dynamicColors = ["bg-violet-500", "bg-pink-500", "bg-amber-400", "bg-blue-500", "bg-emerald-500"];
+const dynamicIcons = ["spark", "trend", "search", "hash", "people", "book"];
+const dynamicTones = ["violet", "pink", "orange", "violet", "blue", "green"];
+const dynamicImages = ["desk", "studio", "phone"];
+
+function formatCompactValue(value: number) {
+  return new Intl.NumberFormat("ko-KR", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function cleanTag(value: string) {
+  const tag = value.trim();
+  if (!tag) {
+    return "";
+  }
+
+  return tag.startsWith("#") ? tag : `#${tag}`;
+}
+
+function getHeroStats(mainData: MainPageData | null) {
+  if (!mainData) {
+    return heroStats;
+  }
+
+  const topTrendScore = mainData.popularTrends[0]?.score ?? 0;
+
+  return [
+    { label: "누적 사용자", value: formatCompactValue(mainData.stats.totalUsers), change: "live" },
+    { label: "추천 생성", value: formatCompactValue(mainData.stats.totalRecommendations), change: "DB" },
+    { label: "활성 트렌드", value: formatCompactValue(mainData.stats.activeTrendsCount), change: "now" },
+    { label: "상위 점수", value: topTrendScore ? `${topTrendScore}` : "-", change: topTrendScore ? "score" : "-" },
+  ];
+}
+
+function getInsightCards(mainData: MainPageData | null) {
+  const contents = mainData?.serviceContents ?? [];
+
+  if (contents.length === 0) {
+    return insightCards;
+  }
+
+  return contents.slice(0, 6).map((item, index) => ({
+    icon: dynamicIcons[index % dynamicIcons.length],
+    title: item.title,
+    description: item.description,
+    tone: dynamicTones[index % dynamicTones.length],
+  }));
+}
+
+function getPopularTags(mainData: MainPageData | null) {
+  const trends = mainData?.popularTrends ?? [];
+
+  if (trends.length === 0) {
+    return popularTags;
+  }
+
+  return trends.slice(0, 5).map((trend, index) => ({
+    label: cleanTag(trend.tags[0] ?? trend.title),
+    value: `${trend.score}점`,
+    width: dynamicWidths[index % dynamicWidths.length],
+    color: dynamicColors[index % dynamicColors.length],
+  }));
+}
+
+function getRisingTopics(mainData: MainPageData | null) {
+  const trends = mainData?.popularTrends ?? [];
+
+  if (trends.length === 0) {
+    return risingTopics;
+  }
+
+  return trends.slice(0, 5).map((trend) => ({
+    label: trend.title,
+    icon: trend.direction === "rising" ? "↑" : trend.direction === "stable" ? "→" : "•",
+  }));
+}
+
+function getVideoRecommendations(mainData: MainPageData | null): VideoRecommendationItem[] {
+  const sample = mainData?.sampleRecommendation;
+  const trendItems = mainData?.popularTrends ?? [];
+
+  if (!sample && trendItems.length === 0) {
+    return videoRecommendations;
+  }
+
+  const items: VideoRecommendationItem[] = [];
+
+  if (sample) {
+    items.push({
+      title: sample.title,
+      image: "desk",
+      badge: "추천 샘플",
+      creator: sample.category,
+      stats: `${sample.expectedScore}점`,
+      tags: sample.hashtags.map((tag) => tag.replace(/^#/, "")).slice(0, 3),
+    });
+  }
+
+  trendItems.slice(0, 3).forEach((trend, index) => {
+    items.push({
+      title: trend.title,
+      image: dynamicImages[(index + 1) % dynamicImages.length],
+      badge: trend.direction === "rising" ? "급상승" : "트렌드",
+      creator: trend.category,
+      stats: `${trend.growthRate}% 성장`,
+      tags: trend.tags.map((tag) => tag.replace(/^#/, "")).slice(0, 3),
+    });
+  });
+
+  return [...items, ...videoRecommendations].slice(0, 3);
+}
 
 const growthCards = [
   {
@@ -171,12 +296,16 @@ function FeatureIcon({ type, tone }: { type: string; tone: string }) {
   );
 }
 
-function TrendInsightSection() {
+function TrendInsightSection({ mainData }: { mainData: MainPageData | null }) {
+  const cards = getInsightCards(mainData);
+  const tagItems = getPopularTags(mainData);
+  const topicItems = getRisingTopics(mainData);
+
   return (
     <section className="border-b border-slate-100 bg-white">
       <div className="mx-auto max-w-7xl px-4 pb-12 pt-2 sm:px-6 lg:px-8">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          {insightCards.map((card) => (
+          {cards.map((card) => (
             <article className="min-h-[142px] rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm shadow-slate-100" key={card.title}>
               <FeatureIcon tone={card.tone} type={card.icon} />
               <h3 className="mt-4 text-sm font-extrabold text-ink">{card.title}</h3>
@@ -219,7 +348,7 @@ function TrendInsightSection() {
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
             <h3 className="text-sm font-extrabold text-ink">인기 해시태그</h3>
             <div className="mt-4 space-y-3">
-              {popularTags.map((tag) => (
+              {tagItems.map((tag) => (
                 <div key={tag.label}>
                   <div className="mb-1 flex justify-between text-[11px] font-bold">
                     <span className="text-violet-700">{tag.label}</span>
@@ -250,7 +379,7 @@ function TrendInsightSection() {
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
             <h3 className="text-sm font-extrabold text-ink">인기 주제</h3>
             <div className="mt-4 space-y-3">
-              {risingTopics.map((topic) => (
+              {topicItems.map((topic) => (
                 <div className="flex items-center justify-between text-xs font-bold" key={topic.label}>
                   <span className="text-slate-600">{topic.label}</span>
                   <span className={topic.icon === "🔥" ? "text-orange-500" : "text-emerald-500"}>{topic.icon}</span>
@@ -338,7 +467,7 @@ function VideoThumbnail({ type }: { type: string }) {
   );
 }
 
-function VideoRecommendationCard({ item }: { item: (typeof videoRecommendations)[number] }) {
+function VideoRecommendationCard({ item }: { item: VideoRecommendationItem }) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-100 transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex gap-3">
@@ -364,7 +493,10 @@ function VideoRecommendationCard({ item }: { item: (typeof videoRecommendations)
   );
 }
 
-function VideoGrowthSection() {
+function VideoGrowthSection({ mainData }: { mainData: MainPageData | null }) {
+  const recommendationItems = getVideoRecommendations(mainData);
+  const sample = mainData?.sampleRecommendation;
+
   return (
     <section className="border-b border-slate-100 bg-white">
       <div className="mx-auto max-w-7xl px-4 pb-14 sm:px-6 lg:px-8">
@@ -381,7 +513,7 @@ function VideoGrowthSection() {
         </div>
 
         <div className="grid gap-3 lg:grid-cols-3">
-          {videoRecommendations.map((item) => (
+          {recommendationItems.map((item) => (
             <VideoRecommendationCard item={item} key={item.title} />
           ))}
         </div>
@@ -396,7 +528,7 @@ function VideoGrowthSection() {
               </span>
             </h2>
             <p className="mt-4 max-w-md text-sm font-medium leading-6 text-slate-500">
-              데이터 기반 인사이트로 더 좋은 콘텐츠를 만들고, 맞는 타겟에게 도달하고, 꾸준히 성장하세요.
+              {sample?.reason ?? "데이터 기반 인사이트로 더 좋은 콘텐츠를 만들고, 맞는 타겟에게 도달하고, 꾸준히 성장하세요."}
             </p>
             <Link className={`${primaryLinkClass} mt-5`} href={ROUTES.onboarding}>
               지금 시작하기 <span aria-hidden="true">→</span>
@@ -424,7 +556,15 @@ function VideoGrowthSection() {
   );
 }
 
-function HeroDashboardPreview() {
+function HeroDashboardPreview({ mainData }: { mainData: MainPageData | null }) {
+  const stats = getHeroStats(mainData);
+  const topTrend = mainData?.popularTrends[0];
+  const sample = mainData?.sampleRecommendation;
+  const previewTags = (topTrend?.tags.length ? topTrend.tags : ["#브이로그", "#제품리뷰", "#감성루틴", "#Shorts아이디어"])
+    .map(cleanTag)
+    .filter(Boolean)
+    .slice(0, 4);
+
   return (
     <div className="relative rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80">
       <div className="grid gap-4 lg:grid-cols-[92px_1fr]">
@@ -452,7 +592,7 @@ function HeroDashboardPreview() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            {heroStats.map((stat) => (
+            {stats.map((stat) => (
               <div className="rounded-2xl border border-slate-200 bg-white p-3" key={stat.label}>
                 <p className="text-[11px] font-bold text-slate-500">{stat.label}</p>
                 <div className="mt-2 flex items-end gap-2">
@@ -466,8 +606,8 @@ function HeroDashboardPreview() {
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-extrabold text-ink">트렌드 개요</p>
-                <span className="text-[11px] font-bold text-slate-400">상승률 96%</span>
+                <p className="text-sm font-extrabold text-ink">{topTrend?.title ?? "트렌드 개요"}</p>
+                <span className="text-[11px] font-bold text-slate-400">{topTrend ? `점수 ${topTrend.score}` : "상승률 96%"}</span>
               </div>
               <svg className="h-32 w-full" role="img" viewBox="0 0 280 120">
                 <path d="M8 96 C38 42 55 86 82 54 S128 76 150 41 S196 82 220 45 S252 32 272 16" fill="none" stroke="#8b5cf6" strokeLinecap="round" strokeWidth="4" />
@@ -483,11 +623,13 @@ function HeroDashboardPreview() {
               <div className="mt-3 flex gap-3">
                 <div className="h-20 w-16 shrink-0 rounded-xl bg-[linear-gradient(135deg,#ddd6fe,#fbcfe8)]" />
                 <div className="min-w-0">
-                  <p className="text-sm font-extrabold leading-5 text-ink">내 삶을 담는 콘텐츠 메이커 되기</p>
-                  <p className="mt-2 text-[11px] leading-4 text-slate-500">일상 장면도 빠르게 Shorts로 바꿔보세요.</p>
+                  <p className="text-sm font-extrabold leading-5 text-ink">{sample?.title ?? "내 삶을 담는 콘텐츠 메이커 되기"}</p>
+                  <p className="mt-2 text-[11px] leading-4 text-slate-500">{sample?.summary ?? "일상 장면도 빠르게 Shorts로 바꿔보세요."}</p>
                   <div className="mt-3 flex items-center gap-2">
                     <AvatarStack />
-                    <span className="text-[11px] font-bold text-slate-400">+8K</span>
+                    <span className="text-[11px] font-bold text-slate-400">
+                      {sample ? `${sample.expectedScore}점` : "+8K"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -495,7 +637,7 @@ function HeroDashboardPreview() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {["#브이로그", "#제품리뷰", "#감성루틴", "#Shorts아이디어"].map((tag) => (
+            {previewTags.map((tag) => (
               <span className="rounded-full bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700" key={tag}>
                 {tag}
               </span>
@@ -514,6 +656,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   if (code) {
     redirect(`/api/auth/reset-password/callback?code=${encodeURIComponent(code)}`);
   }
+
+  const mainData = await getMainPageData().catch(() => null);
 
   return (
     <div className="-mt-8 bg-white text-ink">
@@ -556,12 +700,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </div>
           </div>
 
-          <HeroDashboardPreview />
+          <HeroDashboardPreview mainData={mainData} />
         </div>
       </section>
 
-      <TrendInsightSection />
-      <VideoGrowthSection />
+      <TrendInsightSection mainData={mainData} />
+      <VideoGrowthSection mainData={mainData} />
     </div>
   );
 }
