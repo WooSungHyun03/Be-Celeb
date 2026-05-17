@@ -1,53 +1,12 @@
 "use client";
 
-// Renders the account ID recovery page and connects it to the auth API.
-import { FormEvent, useState } from "react";
+// Renders account recovery guidance without calling deprecated Vercel API routes.
 import Link from "next/link";
 import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
-import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-import { apiFetch } from "@/lib/client/api";
-
-type FindIdSuccessResponse = {
-  success: true;
-  data: {
-    found: boolean;
-    emailHint: string | null;
-    nickname: string | null;
-  };
-};
 
 export default function FindIdPage() {
-  const [nickname, setNickname] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [message, setMessage] = useState("");
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus("loading");
-    setMessage("");
-
-    try {
-      const result = await apiFetch<FindIdSuccessResponse>("/api/auth/find-id", {
-        method: "POST",
-        body: JSON.stringify({ nickname }),
-      });
-
-      if (result.data.found && result.data.emailHint) {
-        setStatus("success");
-        setMessage(`가입된 이메일은 ${result.data.emailHint} 입니다.`);
-        return;
-      }
-
-      setStatus("success");
-      setMessage("입력한 닉네임과 일치하는 계정을 찾지 못했어요.");
-    } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "계정 확인 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
-    }
-  }
-
   return (
     <div className="mx-auto flex min-h-[720px] max-w-7xl items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
       <div className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/70 lg:grid-cols-[0.92fr_1.08fr]">
@@ -97,34 +56,20 @@ export default function FindIdPage() {
             </p>
           </div>
 
-          <form className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6" onSubmit={handleSubmit}>
-            <div className="space-y-4">
-              <Input
-                autoComplete="nickname"
-                label="Nickname"
-                onChange={(event) => setNickname(event.target.value)}
-                placeholder="가입 닉네임"
-                required
-                value={nickname}
-              />
-              {message ? (
-                <p className={`text-sm font-medium ${status === "error" ? "text-rose-600" : "text-slate-700"}`}>
-                  {message}
-                </p>
-              ) : null}
-              <Button
-                className="min-h-11 w-full bg-violet-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_12px_22px_rgba(124,58,237,0.20)] hover:bg-violet-700"
-                disabled={status === "loading"}
-                type="submit"
-              >
-                {status === "loading" ? "확인 중..." : "아이디 확인하기"}
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+            <p className="text-sm leading-6 text-slate-600">
+              Be-Celeb 계정은 이메일 기반 Supabase Auth로 관리합니다. 가입 이메일이 기억나지 않으면 사용 가능한 이메일로
+              비밀번호 재설정을 요청해 메일 수신 여부를 확인해 주세요.
+            </p>
+            <Link className="mt-5 block" href={ROUTES.forgotPassword}>
+              <Button className="min-h-11 w-full bg-violet-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_12px_22px_rgba(124,58,237,0.20)] hover:bg-violet-700">
+                비밀번호 재설정으로 확인하기
               </Button>
-            </div>
-
+            </Link>
             <div className="mt-5 rounded-xl border border-violet-100 bg-white px-4 py-3 text-xs leading-5 text-slate-500">
-              계정 보호를 위해 이메일은 일부만 표시됩니다.
+              계정 보호를 위해 닉네임 기반 이메일 조회 API는 제공하지 않습니다.
             </div>
-          </form>
+          </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm text-slate-500">
             <Link href={ROUTES.login} className="font-semibold text-ink hover:underline">

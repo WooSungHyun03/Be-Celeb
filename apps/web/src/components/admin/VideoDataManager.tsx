@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { deleteVideo, updateVideo } from "@/lib/client/admin-api";
+import { deleteVideo, updateVideo } from "@/lib/api/admin";
 import type { AdminCategory, AdminInfluencerChannel, AdminVideo } from "@/types/admin";
 
 type VideoDataManagerProps = {

@@ -12,8 +12,8 @@ import { Loading } from "@/components/common/Loading";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ROUTES } from "@/constants/routes";
 import { CREATOR_CATEGORIES } from "@/lib/categories";
-import { getUserChannelSettings, updateUserChannelSettings } from "@/lib/client/api";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+import { getUserChannelSettings, updateUserChannelSettings } from "@/lib/api/users";
 import type { UserChannelSettings } from "@/types/content-recommendation";
 
 type ProfileRow = {

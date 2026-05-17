@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { collectNow } from "@/lib/client/admin-api";
+import { collectNow } from "@/lib/api/admin";
 import type { AdminCollectionLog, AdminCollectionSummary } from "@/types/admin";
 
 type CollectionManagerProps = {

@@ -1,0 +1,1 @@
+"""Domain-oriented FastAPI modules."""

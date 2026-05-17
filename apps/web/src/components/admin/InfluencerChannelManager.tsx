@@ -10,7 +10,7 @@ import {
   deleteInfluencerChannel,
   syncInfluencerChannel,
   updateInfluencerChannel,
-} from "@/lib/client/admin-api";
+} from "@/lib/api/admin";
 import type { AdminCategory, AdminInfluencerChannel } from "@/types/admin";
 
 type InfluencerChannelManagerProps = {

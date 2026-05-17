@@ -60,8 +60,11 @@ export type ChannelAnalysisResult = {
 export type StoryboardScene = {
   scene: number;
   duration: string;
-  description: string;
+  visual: string;
+  dialogue: string;
   caption: string;
+  shootingTip: string;
+  description?: string;
 };
 
 export type ContentRecommendation = {
@@ -154,6 +157,7 @@ export type SingleContentRecommendation = {
 };
 
 export type SingleRecommendContentResponse = {
+  recommendationId: string;
   analysisId: string;
   selectedCategory: CreatorCategoryName;
   channel: {
@@ -162,6 +166,10 @@ export type SingleRecommendContentResponse = {
     thumbnailUrl: string | null;
   };
   recommendation: SingleContentRecommendation;
+};
+
+export type RecommendationDetailResponse = SingleRecommendContentResponse & {
+  createdAt?: string | null;
 };
 
 export type UserChannelSettings = {

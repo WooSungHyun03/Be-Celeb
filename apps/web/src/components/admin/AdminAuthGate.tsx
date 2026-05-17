@@ -5,7 +5,7 @@ import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { Input } from "@/components/common/Input";
-import { clearAdminSecret, hasStoredAdminSecret, storeAdminSecret } from "@/lib/client/admin-api";
+import { clearAdminSecret, hasStoredAdminSecret, storeAdminSecret } from "@/lib/api/admin";
 
 type AdminAuthGateProps = {
   children: ReactNode;

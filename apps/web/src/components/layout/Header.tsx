@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/common/BrandLogo";
 import { ROUTES } from "@/constants/routes";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 
 const navItems = [
   { href: ROUTES.dashboard, label: "대시보드" },

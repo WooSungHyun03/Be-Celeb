@@ -40,9 +40,9 @@ Frontend는 `NEXT_PUBLIC_API_BASE_URL`을 통해 Render Backend API를 호출합
 
 | 역할 | 주로 수정 가능 | 협의 없이 수정하지 않는 영역 |
 | --- | --- | --- |
-| Frontend | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/features/`, `apps/web/src/utils/`, `apps/web/src/types/`, `apps/web/src/constants/`, `apps/web/public/` | `apps/web/src/app/api/`, `apps/web/src/lib/`, `apps/api/`, `supabase/` |
-| Backend | `apps/api/`, `apps/web/src/app/api/`, `apps/web/src/lib/supabase/`, `apps/web/src/lib/openai/`, `apps/web/src/lib/resend/`, `apps/web/src/lib/config/`, `supabase/` | `apps/web/src/components/`, 화면 페이지 디렉토리, `data-design/` |
-| Data/Design | `data-design/`, `apps/web/src/constants/`, `packages/shared/constants/` | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/app/api/`, `apps/api/app/services/`, `supabase/schema.sql` |
+| Frontend | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/lib/api/`, `apps/web/src/lib/auth/`, `apps/web/src/lib/common/`, `apps/web/src/utils/`, `apps/web/src/types/`, `apps/web/src/constants/`, `apps/web/public/` | `apps/api/`, `supabase/` |
+| Backend | `apps/api/app/domains/`, `apps/api/app/core/`, `apps/api/app/common/`, `apps/api/app/services/`, `supabase/` | `apps/web/src/components/`, 화면 페이지 디렉토리, `data-design/` |
+| Data/Design | `data-design/`, `apps/web/src/constants/`, `packages/shared/constants/` | `apps/web/src/app/`, `apps/web/src/components/`, `apps/api/app/domains/`, `supabase/schema.sql` |
 
 자세한 역할별 파일 목록은 `docs/role-guide.md`와 `docs/role-task-list.md`를 확인합니다.
 
@@ -183,12 +183,10 @@ Frontend:
 
 Backend:
 
-- FastAPI `/health`, `/recommendations/generate`
-- Next.js API route
+- FastAPI `/health`, `/api/recommend-content`, `/api/recommendations/{id}`, `/api/trends/*`, `/api/admin/*`
+- Domain router structure under `apps/api/app/domains`
 - Supabase Auth/DB 연결
-- OpenAI API 호출
-- Resend 이메일 발송
-- 룰베이스 점수 계산
+- YouTube API / Supabase / Local LLM API 연동
 - API contract, SQL schema, RLS 정책
 
 Data/Design:
@@ -209,9 +207,10 @@ Data/Design:
 ```bash
 cd apps/web
 npm install
-cp .env.example .env.local
 npm run dev
 ```
+
+환경값은 `.env` 파일이 아니라 shell, Docker, Vercel 또는 내부 환경 설정에서 주입합니다.
 
 로컬 주소:
 
@@ -226,9 +225,10 @@ cd apps/api
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env
 uvicorn app.main:app --reload
 ```
+
+FastAPI도 `.env` 파일을 로드하지 않습니다. 필요한 값은 runtime environment로 주입합니다.
 
 로컬 주소:
 
@@ -285,14 +285,6 @@ DB 변경은 `supabase/migrations/`의 versioned migration으로 관리합니다
 
 자동 실행은 Render Cron Job 또는 `.github/workflows/collect-daily-videos.yml`로 설정합니다. 자세한 입력 SQL, 환경 변수, 수동 테스트 방법은 `docs/daily-collection.md`를 확인합니다.
 
-## Resend 설정
-
-- 발신 주소: `no-reply@be-celeb.org`
-- API Key는 `RESEND_API_KEY`로만 등록합니다.
-- Supabase Custom SMTP도 Resend SMTP를 사용하도록 설정할 수 있습니다.
-
-자세한 내용은 `docs/resend-setup.md`를 확인합니다.
-
 ## Cloudflare 설정
 
 Cloudflare는 DNS, 도메인 관리, Email Routing을 담당합니다.
@@ -313,7 +305,7 @@ FastAPI Backend만 Local LLM API를 호출합니다. YouTube 추천 흐름은 Re
 - FastAPI route: `POST /api/recommend-content`
 - Admin prompt route: `GET/POST/PATCH/DELETE /api/admin/llm-prompts`
 
-`OPENAI_API_KEY`가 없으면 API는 명확한 설정 오류를 반환합니다. 브라우저에는 key가 노출되지 않습니다.
+브라우저에는 YouTube, Supabase service role, Local LLM key가 노출되지 않습니다.
 
 ## 환경변수 목록
 
@@ -330,20 +322,14 @@ LOCAL_LLM_API_URL=https://llm-api.be-celeb.org/v1/chat/completions
 LOCAL_LLM_API_KEY=
 LOCAL_LLM_MODEL=local-model
 CRON_SECRET=
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.4-mini
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=no-reply@be-celeb.org
 FASTAPI_ENV=production
+ENVIRONMENT=production
+LOG_LEVEL=INFO
 FRONTEND_URL=https://be-celeb.org
 API_BASE_URL=https://api.be-celeb.org
 ```
 
-환경변수 예시 파일:
-
-- `.env.example`
-- `apps/web/.env.example`
-- `apps/api/.env.example`
+`.env`와 `.env.example` 파일은 사용하지 않습니다. 자세한 Docker 실행 방식은 `docs/docker.md`를 확인합니다.
 
 ## 배포 체크리스트
 
@@ -353,30 +339,24 @@ API_BASE_URL=https://api.be-celeb.org
 - [ ] Render `api.be-celeb.org` 연결
 - [ ] Supabase Site URL / Redirect URL 설정
 - [ ] Supabase SQL / RLS 적용
-- [ ] Resend 도메인 인증
-- [ ] Supabase Custom SMTP 설정
-- [ ] Vercel `/api/health` 확인
+- [ ] Vercel frontend 접속 확인
 - [ ] Render `/health` 확인
-- [ ] 테스트 이메일 발송 확인
+- [ ] Docker build 또는 Render Docker 배포 확인
 - [ ] AI 추천 API 테스트 확인
 
 상세 체크리스트는 `project-management/deployment-checklist.md`를 사용합니다.
 
 ## 문제 해결
 
-- `/api/health`가 실패하면 Vercel Root Directory와 Build Command를 확인합니다.
+- Frontend 접속이 실패하면 Vercel Root Directory와 Build Command를 확인합니다.
 - `/health`가 실패하면 Render Start Command와 `PORT` 사용 여부를 확인합니다.
 - Supabase 인증 redirect가 실패하면 Site URL과 Redirect URLs를 확인합니다.
-- Resend 발송이 실패하면 도메인 인증과 `RESEND_FROM_EMAIL`의 verified domain 여부를 확인합니다.
-- AI 추천이 실패하면 `YOUTUBE_API_KEY`, `LOCAL_LLM_API_URL`, `LOCAL_LLM_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL` 설정을 확인합니다.
+- AI 추천이 실패하면 `YOUTUBE_API_KEY`, `LOCAL_LLM_API_URL`, `LOCAL_LLM_API_KEY` 설정을 확인합니다.
 - `api.be-celeb.org` TLS 또는 routing 문제가 생기면 Cloudflare DNS record를 `DNS only`로 바꿔 확인합니다.
 
 ## 보안 원칙
 
-- `OPENAI_API_KEY`는 클라이언트에 노출하지 않습니다.
 - `SUPABASE_SERVICE_ROLE_KEY`는 클라이언트에 노출하지 않습니다.
 - `YOUTUBE_API_KEY`와 `LOCAL_LLM_API_KEY`는 서버 route handler에서만 사용합니다.
-- `RESEND_API_KEY`는 클라이언트에 노출하지 않습니다.
 - `NEXT_PUBLIC_` 접두사는 공개 가능한 값에만 사용합니다.
 - `.env`와 `.env.local`은 Git에 커밋하지 않습니다.
-- 테스트 이메일 API는 운영 전 관리자 인증과 rate limit을 추가해야 합니다.

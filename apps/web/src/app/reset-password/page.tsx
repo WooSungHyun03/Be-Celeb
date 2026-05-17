@@ -7,7 +7,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-import { apiFetch } from "@/lib/client/api";
+import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -27,10 +27,10 @@ export default function ResetPasswordPage() {
     }
 
     try {
-      await apiFetch("/api/auth/update-password", {
-        method: "PATCH",
-        body: JSON.stringify({ password }),
-      });
+      const { error } = await getSupabaseBrowserClient().auth.updateUser({ password });
+      if (error) {
+        throw error;
+      }
 
       setStatus("success");
       setPassword("");

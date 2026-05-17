@@ -18,10 +18,6 @@ function normalizeSupabaseUrl(value: string) {
   return value.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/i, "");
 }
 
-function firstDefined(...values: Array<string | undefined>) {
-  return values.find((value) => value !== undefined && value !== "");
-}
-
 export function getPublicEnv() {
   return {
     siteUrl: requireValue("NEXT_PUBLIC_SITE_URL", process.env.NEXT_PUBLIC_SITE_URL),
@@ -38,66 +34,8 @@ export function getSupabasePublicEnv() {
   };
 }
 
-export function getServerEnv() {
-  return {
-    ...getPublicEnv(),
-    supabaseServiceRoleKey: requireValue("SUPABASE_SERVICE_ROLE_KEY", process.env.SUPABASE_SERVICE_ROLE_KEY),
-    openaiApiKey: requireValue("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
-    openaiModel: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
-    resendApiKey: requireValue("RESEND_API_KEY", process.env.RESEND_API_KEY),
-    resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "no-reply@be-celeb.org",
-  };
-}
-
-export function getSupabaseAuthServerEnv() {
-  return {
-    supabaseUrl: normalizeSupabaseUrl(
-      requireValue("SUPABASE_URL", firstDefined(process.env.SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_URL)),
-    ),
-    supabaseAnonKey: requireValue(
-      "SUPABASE_ANON_KEY",
-      firstDefined(process.env.SUPABASE_ANON_KEY, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-    ),
-  };
-}
-
-export function getSupabaseServerEnv() {
-  return {
-    ...getSupabaseAuthServerEnv(),
-    supabaseServiceRoleKey: requireValue("SUPABASE_SERVICE_ROLE_KEY", process.env.SUPABASE_SERVICE_ROLE_KEY),
-  };
-}
-
 export function getSiteUrlEnv() {
   return {
     siteUrl: requireValue("NEXT_PUBLIC_SITE_URL", process.env.NEXT_PUBLIC_SITE_URL),
-  };
-}
-
-export function getOpenAiEnv() {
-  return {
-    apiKey: requireValue("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
-    model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
-  };
-}
-
-export function getYouTubeEnv() {
-  return {
-    apiKey: requireValue("YOUTUBE_API_KEY", process.env.YOUTUBE_API_KEY),
-  };
-}
-
-export function getLocalLlmEnv() {
-  return {
-    apiUrl: requireValue("LOCAL_LLM_API_URL", process.env.LOCAL_LLM_API_URL),
-    apiKey: process.env.LOCAL_LLM_API_KEY,
-    model: process.env.LOCAL_LLM_MODEL ?? "local-model",
-  };
-}
-
-export function getResendEnv() {
-  return {
-    apiKey: requireValue("RESEND_API_KEY", process.env.RESEND_API_KEY),
-    fromEmail: process.env.RESEND_FROM_EMAIL ?? "no-reply@be-celeb.org",
   };
 }

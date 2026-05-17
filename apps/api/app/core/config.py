@@ -6,11 +6,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
     app_name: str = "Be Celeb Analysis API"
     app_version: str = "0.1.0"
     fastapi_env: str = "local"
+    environment: str = Field(default="local", validation_alias=AliasChoices("ENVIRONMENT", "FASTAPI_ENV"))
+    log_level: str = "INFO"
+    port: int = 8000
     frontend_url: str = "http://localhost:3000"
     api_base_url: str = "http://localhost:8000"
     allowed_origins: str | None = None

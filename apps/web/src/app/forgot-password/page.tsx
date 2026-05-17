@@ -7,15 +7,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-import { apiFetch } from "@/lib/client/api";
-
-type ResetPasswordSuccessResponse = {
-  success: true;
-  data: {
-    emailSent?: boolean;
-    authProvider?: "supabase" | "json";
-  } | null;
-};
+import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -28,16 +20,15 @@ export default function ForgotPasswordPage() {
     setMessage("");
 
     try {
-      const result = await apiFetch<ResetPasswordSuccessResponse>("/api/auth/reset-password", {
-        method: "POST",
-        body: JSON.stringify({ email }),
+      const redirectTo = `${window.location.origin}/auth/callback?next=/reset-password`;
+      const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email, {
+        redirectTo,
       });
+      if (error) {
+        throw error;
+      }
       setStatus("success");
-      setMessage(
-        result.data?.authProvider === "json"
-          ? "개발용 JSON 인증에서는 메일 발송 없이 요청만 성공 처리됩니다."
-          : "가입 여부와 관계없이 입력한 이메일로 재설정 안내를 보냈어요.",
-      );
+      setMessage("가입 여부와 관계없이 입력한 이메일로 재설정 안내를 보냈어요.");
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "재설정 요청 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");

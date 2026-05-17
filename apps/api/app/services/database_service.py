@@ -11,7 +11,11 @@ from app.core.errors import BackendApiError, missing_env
 from app.schemas.youtube_content import (
     ContentPlan,
     CreatorCategoryName,
+    RecommendationDetailResponse,
     RecommendationOption,
+    RecommendationResponseChannel,
+    SingleContentRecommendation,
+    StoryboardScene,
     YouTubeChannelAnalysis,
     YouTubeVideoAnalysis,
 )
@@ -268,3 +272,78 @@ async def save_single_content_recommendation(
         return recommendation_id if isinstance(recommendation_id, str) else None
     except Exception:
         return None
+
+
+def _storyboard_scene_from_value(value: dict[str, Any], index: int) -> StoryboardScene:
+    return StoryboardScene(
+        scene=value.get("scene") if isinstance(value.get("scene"), int) else index + 1,
+        duration=_as_str(value.get("duration"), f"{index * 5}-{index * 5 + 5}s"),
+        visual=_as_str(value.get("visual"), _as_str(value.get("description"))),
+        dialogue=_as_str(value.get("dialogue")),
+        caption=_as_str(value.get("caption")),
+        shootingTip=_as_str(value.get("shootingTip")),
+        description=_as_str(value.get("description")),
+    )
+
+
+def _single_recommendation_from_row(row: dict[str, Any]) -> SingleContentRecommendation:
+    llm_response = row.get("llm_response") if isinstance(row.get("llm_response"), dict) else {}
+    raw_recommendation = llm_response.get("recommendation") if isinstance(llm_response.get("recommendation"), dict) else {}
+    storyboard_values = raw_recommendation.get("storyboard") if isinstance(raw_recommendation.get("storyboard"), list) else []
+    storyboard = [
+        _storyboard_scene_from_value(scene, index)
+        for index, scene in enumerate(storyboard_values)
+        if isinstance(scene, dict)
+    ]
+    return SingleContentRecommendation(
+        title=_as_str(raw_recommendation.get("title"), "콘텐츠 추천 결과"),
+        format=_as_str(raw_recommendation.get("format"), "YouTube"),
+        hashtags=_as_str_list(raw_recommendation.get("hashtags")),
+        thumbnailIdea=_as_str(raw_recommendation.get("thumbnailIdea")),
+        targetAudience=_as_str(raw_recommendation.get("targetAudience")),
+        hook=_as_str(raw_recommendation.get("hook")),
+        reason=_as_str(raw_recommendation.get("reason"), "채널 분석과 카테고리 데이터를 기반으로 추천했습니다."),
+        whyNotDuplicate=_as_str(raw_recommendation.get("whyNotDuplicate")),
+        storyboard=storyboard,
+        uploadTips=_as_str_list(raw_recommendation.get("uploadTips")),
+    )
+
+
+async def fetch_content_recommendation_detail(
+    recommendation_id: str,
+    requester_user_id: str | None = None,
+) -> RecommendationDetailResponse:
+    rows = await _get(
+        "content_recommendations",
+        {
+            "select": "id,user_id,analysis_id,selected_category,llm_response,created_at",
+            "id": f"eq.{recommendation_id}",
+            "limit": "1",
+        },
+    )
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not row:
+        raise BackendApiError("Recommendation not found.", 404, "NOT_FOUND")
+
+    owner_user_id = row.get("user_id") if isinstance(row.get("user_id"), str) else None
+    if owner_user_id and owner_user_id != requester_user_id:
+        raise BackendApiError("You do not have access to this recommendation.", 403, "FORBIDDEN")
+
+    selected_category = row.get("selected_category")
+    if selected_category not in {"게임", "운동", "IT", "노래", "OTT", "일상", "뷰티", "스터디", "코미디", "먹방", "춤"}:
+        raise BackendApiError("Stored recommendation is missing selectedCategory.", 500, "SUPABASE_ERROR")
+
+    analysis = await fetch_channel_analysis(_as_str(row.get("analysis_id")))
+
+    return RecommendationDetailResponse(
+        recommendationId=recommendation_id,
+        analysisId=analysis.analysis_id,
+        selectedCategory=selected_category,
+        channel=RecommendationResponseChannel(
+            youtubeChannelId=analysis.channel.youtubeChannelId,
+            title=analysis.channel.channelTitle,
+            thumbnailUrl=analysis.channel.thumbnailUrl,
+        ),
+        recommendation=_single_recommendation_from_row(row),
+        createdAt=row.get("created_at") if isinstance(row.get("created_at"), str) else None,
+    )

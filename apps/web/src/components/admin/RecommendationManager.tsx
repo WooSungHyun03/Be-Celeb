@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { deleteRecommendation } from "@/lib/client/admin-api";
+import { deleteRecommendation } from "@/lib/api/admin";
 import type { AdminAnalysis, AdminRecommendation, AdminRecommendationOption } from "@/types/admin";
 
 type RecommendationManagerProps = {

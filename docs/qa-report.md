@@ -113,13 +113,6 @@ Be Celeb 웹 앱과 FastAPI 앱을 YouTube 전용 서비스 기준으로 점검�
 - `LOCAL_LLM_MODEL`
 - `CRON_SECRET`
 
-선택 기능:
-
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `RESEND_API_KEY`
-- `RESEND_FROM_EMAIL`
-
 배포와 DB 관리:
 
 - `SUPABASE_PROJECT_REF`
@@ -163,7 +156,7 @@ curl -X POST "http://localhost:3000/api/recommend-content" \
 ## 배포 전 체크리스트
 
 - Supabase migration과 seed를 적용한다.
-- `.env.example` 값을 기준으로 운영 환경변수를 설정한다.
+- 운영 환경변수는 `.env` 파일 없이 Vercel/Render/Docker runtime environment 또는 내부 환경 설정에서 관리한다.
 - `YOUTUBE_API_KEY`, `LOCAL_LLM_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`가 클라이언트에 노출되지 않는지 확인한다.
 - Render Cron Job 또는 GitHub Actions schedule을 `0 21 * * *`로 설정한다. 이는 KST 매일 오전 6시에 해당한다.
 - `POST /api/cron/collect-daily-videos`가 secret 없이는 `401`, secret이 맞으면 collector 실행 경로로 들어가는지 확인한다.

@@ -5,7 +5,7 @@ import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { Input } from "@/components/common/Input";
-import { activateLLMPrompt, createLLMPrompt, deleteLLMPrompt, updateLLMPrompt } from "@/lib/client/admin-api";
+import { activateLLMPrompt, createLLMPrompt, deleteLLMPrompt, updateLLMPrompt } from "@/lib/api/admin";
 import type { AdminPromptTemplate } from "@/types/admin";
 
 const variableGuide = ["{{user_channel}}", "{{user_recent_videos}}", "{{selected_category}}", "{{category_database_videos}}", "{{duplicate_guidelines}}"];

@@ -1,0 +1,1 @@
+"""Content recommendation domain."""

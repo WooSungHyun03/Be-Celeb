@@ -25,7 +25,7 @@ import {
   listLLMPrompts,
   listRecommendations,
   listVideos,
-} from "@/lib/client/admin-api";
+} from "@/lib/api/admin";
 import type {
   AdminAnalysis,
   AdminCategory,

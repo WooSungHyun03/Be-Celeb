@@ -52,18 +52,9 @@ ADMIN_SECRET=your-admin-secret
 
 `ADMIN_SECRET`은 MVP admin passcode다. 운영자는 `/admin`에서 이 값을 입력하고, 프론트엔드는 `Authorization: Bearer <ADMIN_SECRET>`로 Render Backend에 전달한다. 장기 운영에서는 Supabase Auth admin role로 교체하는 것을 권장한다.
 
-선택 기능:
-
-```env
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.4-mini
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=no-reply@be-celeb.org
-```
-
 ## API Base URL
 
-Frontend API client는 `apps/web/src/lib/client/api.ts`에 있다.
+Frontend API client는 `apps/web/src/lib/api` 도메인 wrapper와 `apps/web/src/lib/client/api.ts` 공통 fetch client로 구성된다.
 
 - `getApiBaseUrl()`은 `NEXT_PUBLIC_API_BASE_URL`을 읽는다.
 - `apiFetch("/api/...")`는 내부에서 Render Backend URL과 결합한다.
@@ -91,6 +82,7 @@ Render Backend가 `apps/api` FastAPI를 배포할 때도 Vercel Frontend와 호�
 
 ```text
 POST /api/recommend-content
+GET  /api/recommendations/{recommendation_id}
 POST /api/analyze-channel
 GET  /api/user/channel-settings
 PUT  /api/user/channel-settings
@@ -100,19 +92,18 @@ GET  /api/trends/popular-videos
 GET  /api/trends/keywords?range=daily|weekly|monthly
 ```
 
-Dashboard의 기본 추천 플로우는 1회 LLM 호출 API를 사용한다.
+Dashboard의 기본 추천 플로우는 1회 LLM 호출 API와 결과 조회 API를 사용한다.
 
-1. `POST /api/recommend-content`: 채널 분석, 카테고리 선정, 인플루언서 영상 비교, active prompt 적용, 제목/해시태그/콘티를 한 번에 생성
-2. `GET/PUT /api/user/channel-settings`: 회원별 channel URL/category 저장 및 자동 불러오기
-3. `GET/POST/PATCH/DELETE /api/admin/llm-prompts`: admin active LLM prompt 관리
+1. `POST /api/recommend-content`: 채널 분석, 카테고리 선정, 인플루언서 영상 비교, active prompt 적용, 추천 결과 저장 후 `recommendationId` 반환
+2. `GET /api/recommendations/{recommendation_id}`: 새로고침 가능한 결과 페이지에서 제목, 추천 이유, 해시태그, 상세 콘티 조회
+3. `GET/PUT /api/user/channel-settings`: 회원별 channel URL/category 저장 및 자동 불러오기
+4. `GET/POST/PATCH/DELETE /api/admin/llm-prompts`: admin active LLM prompt 관리
 
-기존 FastAPI route도 유지된다.
+기존 health/main route도 유지된다.
 
 ```text
 GET  /health
 GET  /trends
-GET  /recommendations
-POST /recommendations/generate
 GET  /api/v1/main
 ```
 
@@ -134,7 +125,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
 
 ## CORS 설정
 
-Render Backend API는 `apps/web/src/proxy.ts`에서 `/api/:path*` 요청에 CORS 헤더를 붙인다.
+Render Backend API는 FastAPI `app.core.cors.configure_cors`에서 CORS 헤더를 설정한다.
 
 필수 설정:
 
@@ -152,19 +143,16 @@ ALLOWED_ORIGINS=https://be-celeb.org,https://be-celeb.vercel.app,http://localhos
 
 보안상 `*` origin은 사용하지 않는다.
 
-## Next.js API Route 원칙
+## Frontend API 원칙
 
-`apps/web/src/app/api/*` route handler는 Render Backend API로 배포되는 서버 코드다. Vercel Frontend에서 이 route handler를 직접 호출하는 구조를 사용하지 않는다.
+`apps/web/src/app/api/*` route handler는 제거했다. Vercel Frontend는 UI만 담당하고 Render Backend API만 호출한다.
 
 Frontend 원칙:
 
 ```ts
-import { apiFetch } from "@/lib/client/api";
+import { recommendContent } from "@/lib/api/recommendations";
 
-await apiFetch("/api/recommend-content", {
-  method: "POST",
-  body: JSON.stringify(payload),
-});
+await recommendContent(payload);
 ```
 
 금지:

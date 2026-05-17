@@ -5,7 +5,7 @@ import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { Input } from "@/components/common/Input";
-import { createCategory, deleteCategory, updateCategory } from "@/lib/client/admin-api";
+import { createCategory, deleteCategory, updateCategory } from "@/lib/api/admin";
 import type { AdminCategory } from "@/types/admin";
 
 type CategoryManagerProps = {

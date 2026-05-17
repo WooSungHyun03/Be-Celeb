@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
-import { deleteAllCollectionLogs, deleteAllVideos, deleteInactiveChannels, deleteVideosByCategory } from "@/lib/client/admin-api";
+import { deleteAllCollectionLogs, deleteAllVideos, deleteInactiveChannels, deleteVideosByCategory } from "@/lib/api/admin";
 import type { AdminCategory } from "@/types/admin";
 
 type DangerZoneProps = {
@@ -52,12 +52,14 @@ export function DangerZone({ categories, onChanged, onError }: DangerZoneProps) 
 
   return (
     <Card title="위험 작업 구역">
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-          <p className="font-bold text-rose-900">특정 카테고리 영상 삭제</p>
-          <p className="mt-2 text-sm leading-6 text-rose-700">선택한 카테고리에 연결된 `influencer_videos`를 삭제합니다.</p>
+      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-rose-200 bg-rose-50 p-5">
+          <p className="break-words font-bold leading-6 text-rose-900">특정 카테고리 영상 삭제</p>
+          <p className="mt-2 text-sm leading-6 text-rose-700">
+            선택한 카테고리에 연결된 <code>influencer_videos</code>를 삭제합니다.
+          </p>
           <select
-            className="mt-4 min-h-10 w-full rounded-md border border-rose-200 bg-white px-3 py-2 text-sm"
+            className="mt-auto h-11 w-full rounded-md border border-rose-200 bg-white px-3 text-sm text-ink"
             onChange={(event) => setCategoryId(event.target.value)}
             value={categoryId}
           >
@@ -67,28 +69,30 @@ export function DangerZone({ categories, onChanged, onError }: DangerZoneProps) 
               </option>
             ))}
           </select>
-          <Button className="mt-4" onClick={() => setAction("delete-videos-by-category")} variant="danger">
+          <Button className="mt-3 h-11 w-full" onClick={() => setAction("delete-videos-by-category")} variant="danger">
             카테고리 영상 삭제
           </Button>
         </div>
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-          <p className="font-bold text-rose-900">inactive 채널 일괄 삭제</p>
+        <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-rose-200 bg-rose-50 p-5">
+          <p className="break-words font-bold leading-6 text-rose-900">inactive 채널 일괄 삭제</p>
           <p className="mt-2 text-sm leading-6 text-rose-700">비활성 채널과 연결된 영상이 cascade 삭제될 수 있습니다.</p>
-          <Button className="mt-4" onClick={() => setAction("delete-inactive-channels")} variant="danger">
+          <Button className="mt-auto h-11 w-full" onClick={() => setAction("delete-inactive-channels")} variant="danger">
             비활성 채널 삭제
           </Button>
         </div>
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-          <p className="font-bold text-rose-900">전체 영상 데이터 삭제</p>
-          <p className="mt-2 text-sm leading-6 text-rose-700">모든 `influencer_videos`를 삭제합니다. 추천 DB는 유지됩니다.</p>
-          <Button className="mt-4" onClick={() => setAction("delete-all-videos")} variant="danger">
+        <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-rose-200 bg-rose-50 p-5">
+          <p className="break-words font-bold leading-6 text-rose-900">전체 영상 데이터 삭제</p>
+          <p className="mt-2 text-sm leading-6 text-rose-700">
+            모든 <code>influencer_videos</code>를 삭제합니다. 추천 DB는 유지됩니다.
+          </p>
+          <Button className="mt-auto h-11 w-full" onClick={() => setAction("delete-all-videos")} variant="danger">
             전체 영상 삭제
           </Button>
         </div>
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
-          <p className="font-bold text-rose-900">collection_logs 전체 삭제</p>
+        <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-rose-200 bg-rose-50 p-5">
+          <p className="break-words font-bold leading-6 text-rose-900">collection_logs 전체 삭제</p>
           <p className="mt-2 text-sm leading-6 text-rose-700">수집 로그 이력만 정리합니다. 영상 데이터는 삭제하지 않습니다.</p>
-          <Button className="mt-4" onClick={() => setAction("delete-logs")} variant="danger">
+          <Button className="mt-auto h-11 w-full" onClick={() => setAction("delete-logs")} variant="danger">
             로그 전체 삭제
           </Button>
         </div>

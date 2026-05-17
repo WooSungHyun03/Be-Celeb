@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { ROUTES } from "@/constants/routes";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 
 type LogoutState = "loading" | "success" | "error";
 

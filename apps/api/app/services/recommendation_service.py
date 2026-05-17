@@ -1,4 +1,4 @@
-# Orchestrates the two-step YouTube recommendation workflow.
+# Orchestrates the YouTube content recommendation workflows.
 from __future__ import annotations
 
 import json
@@ -286,9 +286,9 @@ def _fallback_plan(option: GenerateContentPlanOptionInput) -> ContentPlan:
         targetAudience="이 주제에 관심이 있지만 빠르게 핵심만 보고 싶은 시청자",
         hook=option.summary or "첫 3초에 결과물을 먼저 보여주고 과정을 압축해서 전개합니다.",
         storyboard=[
-            StoryboardScene(scene=1, duration="0-3s", description="결과 또는 갈등 상황을 먼저 보여줍니다.", caption="이게 가능할까?"),
-            StoryboardScene(scene=2, duration="3-12s", description="핵심 과정을 빠르게 압축해 보여줍니다.", caption="핵심만 따라오세요"),
-            StoryboardScene(scene=3, duration="12-20s", description="차별화 포인트와 마무리 행동을 제안합니다.", caption="저장하고 다시 보기"),
+            StoryboardScene(scene=1, duration="0-3s", visual="결과 또는 갈등 상황을 먼저 보여줍니다.", caption="이게 가능할까?", shootingTip="첫 컷은 흔들림 없이 정면으로 촬영합니다."),
+            StoryboardScene(scene=2, duration="3-12s", visual="핵심 과정을 빠르게 압축해 보여줍니다.", caption="핵심만 따라오세요", shootingTip="손동작이나 화면 전환은 짧게 끊어 편집합니다."),
+            StoryboardScene(scene=3, duration="12-20s", visual="차별화 포인트와 마무리 행동을 제안합니다.", caption="저장하고 다시 보기", shootingTip="마지막 프레임에 댓글 질문을 남깁니다."),
         ],
         uploadTips=["첫 화면에 결과를 배치하세요.", "해시태그는 3-5개로 제한하세요.", "댓글 질문으로 다음 편 소재를 유도하세요."],
     )
@@ -307,9 +307,12 @@ def _fallback_single_recommendation(selected_category: CreatorCategoryName, infl
         reason="카테고리 인플루언서 DB에서 반복되는 관심사를 내 채널 톤에 맞게 변형했습니다.",
         whyNotDuplicate="최근 업로드 제목/설명/태그와 직접적인 키워드 중복을 피했습니다.",
         storyboard=[
-            StoryboardScene(scene=1, duration="0-3s", description="결과 또는 갈등 상황을 먼저 보여줍니다.", caption="이게 가능할까?"),
-            StoryboardScene(scene=2, duration="3-12s", description="핵심 과정과 차별점을 빠르게 보여줍니다.", caption="핵심만 따라오세요"),
-            StoryboardScene(scene=3, duration="12-20s", description="시청자가 저장하거나 댓글을 남길 질문으로 마무리합니다.", caption="다음 편도 볼까요?"),
+            StoryboardScene(scene=1, duration="0-5s", visual="완성 결과나 가장 강한 반전 장면을 화면 중앙에 크게 보여줍니다.", dialogue="오늘은 이 결과가 왜 나왔는지 바로 보여드릴게요.", caption="처음부터 결과 공개", shootingTip="첫 컷은 0.5초 안에 핵심 피사체가 보이도록 클로즈업합니다."),
+            StoryboardScene(scene=2, duration="5-12s", visual="현재 채널의 기존 영상과 다른 접근 포인트를 짧게 설명합니다.", dialogue="기존 방식과 다르게 이번에는 포인트를 하나만 바꿉니다.", caption="기존 영상과 다른 점", shootingTip="말하는 장면과 자료 화면을 1:1 비율로 교차 편집합니다."),
+            StoryboardScene(scene=3, duration="12-20s", visual="핵심 준비물, 설정값, 상황을 한 화면에 정리합니다.", dialogue="따라 하려면 이 세 가지만 준비하면 됩니다.", caption="준비물 3가지", shootingTip="텍스트가 잘 보이도록 배경을 단순하게 둡니다."),
+            StoryboardScene(scene=4, duration="20-32s", visual="첫 번째 실행 장면을 실제 속도보다 빠르게 보여줍니다.", dialogue="첫 단계에서는 여기서 실수가 가장 많이 나옵니다.", caption="1단계 핵심", shootingTip="중요한 손동작 또는 클릭 지점은 화면 확대를 넣습니다."),
+            StoryboardScene(scene=5, duration="32-45s", visual="두 번째 실행 장면에서 실패/성공 차이를 비교합니다.", dialogue="이 차이 하나 때문에 결과가 완전히 달라집니다.", caption="성공 포인트", shootingTip="좌우 비교 화면을 쓰면 일반 영상과 Shorts 모두 이해가 쉽습니다."),
+            StoryboardScene(scene=6, duration="45-60s", visual="완성 결과와 시청자 행동 유도를 함께 보여줍니다.", dialogue="여러분이라면 어떤 방식으로 바꿔보고 싶나요?", caption="댓글로 다음 실험 추천", shootingTip="마지막 2초는 댓글 질문이 읽히도록 화면을 정지합니다."),
         ],
         uploadTips=["첫 화면에 결과를 배치하세요.", "해시태그는 3-5개로 제한하세요.", "댓글 질문으로 다음 편 소재를 유도하세요."],
     )
@@ -328,8 +331,11 @@ def _normalize_plan(raw: dict[str, Any], fallback: ContentPlan) -> ContentPlan:
                 StoryboardScene(
                     scene=scene.get("scene") if isinstance(scene.get("scene"), int) else index + 1,
                     duration=scene.get("duration") if isinstance(scene.get("duration"), str) else f"{index * 3}-{index * 3 + 3}s",
-                    description=scene.get("description") if isinstance(scene.get("description"), str) else "",
+                    visual=scene.get("visual") if isinstance(scene.get("visual"), str) else scene.get("description") if isinstance(scene.get("description"), str) else "",
+                    dialogue=scene.get("dialogue") if isinstance(scene.get("dialogue"), str) else "",
                     caption=scene.get("caption") if isinstance(scene.get("caption"), str) else "",
+                    shootingTip=scene.get("shootingTip") if isinstance(scene.get("shootingTip"), str) else "",
+                    description=scene.get("description") if isinstance(scene.get("description"), str) else "",
                 )
             )
     return ContentPlan(
@@ -375,9 +381,11 @@ def build_single_recommendation_prompt(
             "storyboard": [
                 {
                     "scene": 1,
-                    "duration": "0-3s",
-                    "description": "string",
+                    "duration": "0-5s",
+                    "visual": "string",
+                    "dialogue": "string",
                     "caption": "string",
+                    "shootingTip": "string",
                 }
             ],
             "uploadTips": ["string"],
@@ -434,9 +442,19 @@ async def create_single_content_recommendation(
         ),
         "user_recent_videos": json.dumps([_compact_video(video) for video in recent_videos[:10]], ensure_ascii=False),
         "category_database_videos": json.dumps([_compact_video(video) for video in filtered_videos[:24]], ensure_ascii=False),
-        "duplicate_guidelines": "사용자가 이미 올린 영상의 제목, 설명, 태그와 유사한 주제는 추천하지 않는다.",
+        "duplicate_guidelines": "사용자가 이미 올린 영상의 제목, 설명, 태그와 유사한 주제는 추천하지 않는다. 콘티는 6~10개 scene으로 작성하고 각 scene에 duration, visual, dialogue, caption, shootingTip을 모두 채운다.",
     }
-    rendered_prompt = render_prompt_template(prompt_template["userPromptTemplate"], values)
+    prompt_contract = "\n\n".join(
+        [
+            "Required response contract:",
+            "Return valid JSON only. The root object must contain recommendation.",
+            "recommendation.storyboard must contain 6 to 10 scenes.",
+            "Every storyboard scene must include scene, duration, visual, dialogue, caption, and shootingTip.",
+            "Use detailed filming directions that a creator can follow on set.",
+            "Do not replace visual/dialogue/shootingTip with description-only scenes.",
+        ]
+    )
+    rendered_prompt = f"{render_prompt_template(prompt_template['userPromptTemplate'], values)}\n\n{prompt_contract}"
     raw_text = await call_local_llm(rendered_prompt, system_prompt=prompt_template["systemPrompt"])
     raw_json, parse_error = parse_llm_json_with_fallback(raw_text, {"recommendation": fallback.model_dump()})
     recommendation = _normalize_single_recommendation(raw_json, fallback)
@@ -449,7 +467,7 @@ async def create_single_content_recommendation(
         recent_videos=recent_videos,
         user_id=user_id,
     )
-    await save_single_content_recommendation(
+    recommendation_id = await save_single_content_recommendation(
         analysis_id=analysis_id,
         user_id=user_id,
         selected_category=selected_category,
@@ -465,10 +483,13 @@ async def create_single_content_recommendation(
         },
         llm_response={"recommendation": recommendation.model_dump(mode="json"), "raw": raw_json},
     )
+    if not recommendation_id:
+        raise BackendApiError("Recommendation was generated but could not be saved.", 502, "SUPABASE_ERROR")
     if user_id:
         await save_user_channel_settings_metadata(user_id, channel_url, selected_category, channel)
 
     return SingleRecommendContentResponse(
+        recommendationId=recommendation_id,
         analysisId=analysis_id,
         selectedCategory=selected_category,
         channel=RecommendationResponseChannel(

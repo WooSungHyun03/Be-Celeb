@@ -81,8 +81,11 @@ class ChannelAnalysisResult(BaseModel):
 class StoryboardScene(BaseModel):
     scene: int
     duration: str
-    description: str
-    caption: str
+    visual: str = ""
+    dialogue: str = ""
+    caption: str = ""
+    shootingTip: str = ""
+    description: str = ""
 
 
 class ContentRecommendation(BaseModel):
@@ -182,10 +185,15 @@ class RecommendationResponseChannel(BaseModel):
 
 
 class SingleRecommendContentResponse(BaseModel):
+    recommendationId: str
     analysisId: str
     selectedCategory: CreatorCategoryName
     channel: RecommendationResponseChannel
     recommendation: SingleContentRecommendation
+
+
+class RecommendationDetailResponse(SingleRecommendContentResponse):
+    createdAt: str | None = None
 
 
 class PopularTrendVideo(BaseModel):

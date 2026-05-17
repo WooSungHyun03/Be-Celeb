@@ -11,10 +11,23 @@ Dashboard
 → 회원별 channelUrl/category 저장
 → category influencer_videos 조회
 → active LLM prompt 적용
-→ title/hashtags/thumbnail/hook/storyboard/uploadTips 반환
+→ content_recommendations 저장
+→ recommendationId 반환
+→ /dashboard/result/{recommendationId} 이동
+→ GET /api/recommendations/{recommendationId}
+→ title/reason/hashtags/storyboard 표시
 ```
 
 이전 2단계 흐름인 `recommend-options`와 `generate-content-plan`은 dashboard에서 사용하지 않는다.
+
+추천 결과 화면은 아래 4개 정보를 중심으로 표시한다.
+
+- 제목
+- 추천 이유
+- 해시태그
+- 콘티
+
+콘티 scene은 `duration`, `visual`, `dialogue`, `caption`, `shootingTip`을 포함하며 6~10개 장면을 목표로 생성한다.
 
 ## 회원별 채널 설정
 

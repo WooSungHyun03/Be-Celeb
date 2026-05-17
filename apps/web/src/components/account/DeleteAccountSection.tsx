@@ -6,8 +6,8 @@ import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { ROUTES } from "@/constants/routes";
-import { deleteAccount } from "@/lib/client/api";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+import { deleteAccount } from "@/lib/api/users";
 
 type DeleteAccountSectionProps = {
   onError: (message: string) => void;

@@ -1,5 +1,6 @@
 import type {
   ChannelAnalysisResult,
+  RecommendationDetailResponse,
   SingleRecommendContentResponse,
   UserChannelSettings,
 } from "@/types/content-recommendation";
@@ -150,6 +151,15 @@ export async function recommendContent(payload: RecommendContentPayload, signal?
   const response = await apiFetch<ApiSuccess<SingleRecommendContentResponse>>("/api/recommend-content", {
     method: "POST",
     body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function getRecommendation(recommendationId: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<RecommendationDetailResponse>>(`/api/recommendations/${recommendationId}`, {
     headers: await getAuthorizationHeaders(),
     signal,
   });
