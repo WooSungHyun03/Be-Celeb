@@ -98,8 +98,11 @@ export function RecommendationResultClient({ recommendationId }: RecommendationR
       {!error && !result ? <LoadingSteps activeIndex={0} steps={["추천 결과 불러오는 중"]} /> : null}
       {result ? (
         <>
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-start justify-end gap-2">
             <RecommendationFavoriteButton result={result} />
+            <Link href={ROUTES.saved}>
+              <Button variant="secondary">찜 목록</Button>
+            </Link>
           </div>
           <RecommendationResult result={result} />
         </>
