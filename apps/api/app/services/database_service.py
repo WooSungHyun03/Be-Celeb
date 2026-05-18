@@ -342,6 +342,7 @@ async def fetch_content_recommendation_detail(
         channel=RecommendationResponseChannel(
             youtubeChannelId=analysis.channel.youtubeChannelId,
             title=analysis.channel.channelTitle,
+            channelUrl=analysis.channel_url,
             thumbnailUrl=analysis.channel.thumbnailUrl,
         ),
         recommendation=_single_recommendation_from_row(row),

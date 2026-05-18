@@ -116,6 +116,7 @@ export type RecommendOptionsResponse = {
   channel: {
     youtubeChannelId: string;
     title: string;
+    channelUrl?: string | null;
     thumbnailUrl: string | null;
   };
   options: RecommendationOption[];
@@ -163,6 +164,7 @@ export type SingleRecommendContentResponse = {
   channel: {
     youtubeChannelId: string;
     title: string;
+    channelUrl?: string | null;
     thumbnailUrl: string | null;
   };
   recommendation: SingleContentRecommendation;

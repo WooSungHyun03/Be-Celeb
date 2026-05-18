@@ -1,7 +1,7 @@
 "use client";
 
 // Renders saved AI recommendation favorites.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
@@ -19,6 +19,7 @@ type SavedRecommendation = {
   hook: string;
   category: string;
   channelTitle: string;
+  channelUrl: string;
   hashtags: string[];
 };
 
@@ -45,6 +46,7 @@ function getSavedRecommendation(item: FavoriteItem): SavedRecommendation {
     hook: asString(recommendation.hook),
     category: asString(metadata.selectedCategory, "추천"),
     channelTitle: asString(channel.title, "YouTube 채널"),
+    channelUrl: asString(channel.channelUrl),
     hashtags: asStringArray(recommendation.hashtags).slice(0, 5),
   };
 }
@@ -54,6 +56,35 @@ export default function SavedPage() {
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
   const [message, setMessage] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const categories = useMemo(() => {
+    return Array.from(new Set(items.map((item) => getSavedRecommendation(item).category)))
+      .filter((category) => category !== "추천")
+      .sort((left, right) => left.localeCompare(right, "ko-KR"));
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return items.filter((item) => {
+      const recommendation = getSavedRecommendation(item);
+      const matchesCategory = selectedCategory === "all" || recommendation.category === selectedCategory;
+      const searchableText = [
+        recommendation.title,
+        recommendation.reason,
+        recommendation.hook,
+        recommendation.category,
+        recommendation.channelTitle,
+        recommendation.channelUrl,
+        recommendation.hashtags.join(" "),
+      ].join(" ").toLowerCase();
+      const matchesSearch = !query || searchableText.includes(query);
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [items, searchQuery, selectedCategory]);
 
   useEffect(() => {
     let active = true;
@@ -166,42 +197,114 @@ export default function SavedPage() {
           }
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {items.map((item) => {
-            const recommendation = getSavedRecommendation(item);
+        <>
+          <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[1fr_220px_auto] lg:items-end">
+            <label className="block text-sm font-semibold text-slate-700">
+              <span>검색</span>
+              <input
+                className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="채널 URL, 채널명, 제목, 해시태그 검색"
+                value={searchQuery}
+              />
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              <span>카테고리</span>
+              <select
+                className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                onChange={(event) => setSelectedCategory(event.target.value)}
+                value={selectedCategory}
+              >
+                <option value="all">전체 카테고리</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-center justify-between gap-3 lg:justify-end">
+              <p className="text-xs font-bold text-slate-500">
+                {filteredItems.length} / {items.length}개
+              </p>
+              <Button
+                disabled={selectedCategory === "all" && !searchQuery}
+                onClick={() => {
+                  setSelectedCategory("all");
+                  setSearchQuery("");
+                }}
+                variant="secondary"
+              >
+                초기화
+              </Button>
+            </div>
+          </section>
 
-            return (
-              <Card className="flex h-full flex-col" key={item.id}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="brand">{recommendation.category}</Badge>
-                  <Badge>{recommendation.channelTitle}</Badge>
-                </div>
-                <h2 className="mt-4 line-clamp-2 text-xl font-bold leading-7 text-ink">{recommendation.title}</h2>
-                {recommendation.hook ? (
-                  <p className="mt-3 rounded-md bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800">{recommendation.hook}</p>
-                ) : null}
-                <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">{recommendation.reason}</p>
-                {recommendation.hashtags.length > 0 ? (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {recommendation.hashtags.map((tag) => (
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" key={tag}>
-                        {tag.startsWith("#") ? tag : `#${tag}`}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Link href={`/recommendations/${item.targetId}`}>
-                    <Button variant="secondary">상세 보기</Button>
-                  </Link>
-                  <Button disabled={deletingId === item.id} onClick={() => void handleDelete(item.id)} variant="ghost">
-                    {deletingId === item.id ? "해제 중" : "찜 해제"}
-                  </Button>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+          {filteredItems.length === 0 ? (
+            <EmptyState
+              title="조건에 맞는 찜이 없습니다"
+              description="검색어를 바꾸거나 카테고리 필터를 초기화해 보세요."
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setSelectedCategory("all");
+                    setSearchQuery("");
+                  }}
+                >
+                  필터 초기화
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {filteredItems.map((item) => {
+                const recommendation = getSavedRecommendation(item);
+
+                return (
+                  <Card className="flex h-full flex-col" key={item.id}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="brand">{recommendation.category}</Badge>
+                      <Badge>{recommendation.channelTitle}</Badge>
+                    </div>
+                    {recommendation.channelUrl ? (
+                      <a
+                        className="mt-3 line-clamp-1 break-all text-xs font-semibold text-violet-700 hover:underline"
+                        href={recommendation.channelUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {recommendation.channelUrl}
+                      </a>
+                    ) : null}
+                    <h2 className="mt-4 line-clamp-2 text-xl font-bold leading-7 text-ink">{recommendation.title}</h2>
+                    {recommendation.hook ? (
+                      <p className="mt-3 rounded-md bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800">{recommendation.hook}</p>
+                    ) : null}
+                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">{recommendation.reason}</p>
+                    {recommendation.hashtags.length > 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {recommendation.hashtags.map((tag) => (
+                          <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" key={tag}>
+                            {tag.startsWith("#") ? tag : `#${tag}`}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <Link href={`/recommendations/${item.targetId}`}>
+                        <Button variant="secondary">상세 보기</Button>
+                      </Link>
+                      <Button disabled={deletingId === item.id} onClick={() => void handleDelete(item.id)} variant="ghost">
+                        {deletingId === item.id ? "해제 중" : "찜 해제"}
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

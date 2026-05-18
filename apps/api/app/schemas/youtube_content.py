@@ -181,6 +181,7 @@ class SingleContentRecommendation(ContentPlan):
 class RecommendationResponseChannel(BaseModel):
     youtubeChannelId: str
     title: str
+    channelUrl: str | None = None
     thumbnailUrl: str | None = None
 
 
