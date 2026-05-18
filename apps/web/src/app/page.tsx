@@ -681,12 +681,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Link href={ROUTES.onboarding} className={primaryLinkClass}>
                 추천받기 <span aria-hidden="true">→</span>
               </Link>
               <Link href={ROUTES.trendingItems} className={secondaryLinkClass}>
                 트렌드 보기 <CompassIcon />
+              </Link>
+              <Link href={ROUTES.saved} className={secondaryLinkClass}>
+                찜 목록 <span aria-hidden="true">♡</span>
               </Link>
             </div>
 
