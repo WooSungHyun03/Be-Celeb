@@ -1,0 +1,149 @@
+# Provides per-user favorite operations backed by Supabase.
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+
+from app.core.config import get_settings
+from app.core.errors import BackendApiError, missing_env
+from app.schemas.account import FavoritePayload, FavoriteType
+from app.services.database_service import fetch_content_recommendation_detail
+
+
+def _supabase_url() -> str:
+    settings = get_settings()
+    if not settings.supabase_url:
+        raise missing_env("SUPABASE_URL")
+    return settings.supabase_url.rstrip("/").removesuffix("/rest/v1")
+
+
+def _headers(prefer: str | None = None) -> dict[str, str]:
+    settings = get_settings()
+    if not settings.supabase_service_role_key:
+        raise missing_env("SUPABASE_SERVICE_ROLE_KEY")
+    headers = {
+        "apikey": settings.supabase_service_role_key,
+        "Authorization": f"Bearer {settings.supabase_service_role_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if prefer:
+        headers["Prefer"] = prefer
+    return headers
+
+
+async def _request(
+    method: str,
+    path: str,
+    *,
+    params: dict[str, Any] | None = None,
+    payload: Any | None = None,
+    prefer: str | None = None,
+) -> Any:
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.request(
+            method,
+            f"{_supabase_url()}/rest/v1/{path}",
+            headers=_headers(prefer),
+            params=params,
+            json=payload,
+        )
+
+    if response.status_code >= 400:
+        raise BackendApiError(
+            f"Supabase request failed: {response.text}",
+            502 if response.status_code >= 500 else response.status_code,
+            "SUPABASE_ERROR",
+        )
+    return response.json() if response.text else None
+
+
+def _to_favorite(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row.get("id"),
+        "userId": row.get("user_id"),
+        "targetType": row.get("type"),
+        "targetId": row.get("target_id"),
+        "title": row.get("title"),
+        "metadata": row.get("metadata") if isinstance(row.get("metadata"), dict) else {},
+        "createdAt": row.get("created_at"),
+    }
+
+
+async def list_favorites(
+    user_id: str,
+    favorite_type: str | None = None,
+    target_id: str | None = None,
+) -> dict[str, Any]:
+    params = {
+        "select": "id,user_id,type,target_id,title,metadata,created_at",
+        "user_id": f"eq.{user_id}",
+        "order": "created_at.desc",
+    }
+    if favorite_type:
+        params["type"] = f"eq.{favorite_type}"
+    if target_id:
+        params["target_id"] = f"eq.{target_id}"
+
+    rows = await _request("GET", "favorites", params=params)
+    items = [_to_favorite(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    return {"items": items}
+
+
+async def create_favorite(user_id: str, payload: FavoritePayload) -> dict[str, Any]:
+    title = payload.title
+    metadata = payload.metadata
+
+    if payload.target_type == "recommendation":
+        detail = await fetch_content_recommendation_detail(payload.target_id, user_id)
+        title = detail.recommendation.title
+        metadata = {
+            "recommendationId": detail.recommendationId,
+            "analysisId": detail.analysisId,
+            "selectedCategory": detail.selectedCategory,
+            "channel": detail.channel.model_dump(mode="json"),
+            "recommendation": detail.recommendation.model_dump(mode="json"),
+            "createdAt": detail.createdAt,
+        }
+
+    rows = await _request(
+        "POST",
+        "favorites?on_conflict=user_id,type,target_id",
+        payload={
+            "user_id": user_id,
+            "type": payload.target_type,
+            "target_id": payload.target_id,
+            "title": title,
+            "metadata": metadata,
+        },
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not row:
+        raise BackendApiError("Favorite upsert did not return a row.", 502, "SUPABASE_ERROR")
+    return {"favorite": _to_favorite(row)}
+
+
+async def delete_favorite(user_id: str, favorite_id: str) -> dict[str, Any]:
+    rows = await _request(
+        "DELETE",
+        "favorites",
+        params={"id": f"eq.{favorite_id}", "user_id": f"eq.{user_id}"},
+        prefer="return=representation",
+    )
+    if not isinstance(rows, list) or not rows:
+        raise BackendApiError("Favorite not found.", 404, "NOT_FOUND")
+    return {"deleted": True}
+
+
+async def delete_favorite_by_target(user_id: str, favorite_type: FavoriteType, target_id: str) -> dict[str, Any]:
+    rows = await _request(
+        "DELETE",
+        "favorites",
+        params={"user_id": f"eq.{user_id}", "type": f"eq.{favorite_type}", "target_id": f"eq.{target_id}"},
+        prefer="return=representation",
+    )
+    if not isinstance(rows, list) or not rows:
+        raise BackendApiError("Favorite not found.", 404, "NOT_FOUND")
+    return {"deleted": True}

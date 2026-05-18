@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ErrorState } from "@/components/dashboard/ErrorState";
 import { LoadingSteps } from "@/components/dashboard/LoadingSteps";
+import { RecommendationFavoriteButton } from "@/components/dashboard/RecommendationFavoriteButton";
 import { RecommendationResult } from "@/components/dashboard/RecommendationResult";
 import { ROUTES } from "@/constants/routes";
 import { getRecommendation } from "@/lib/api/recommendations";
@@ -95,7 +96,14 @@ export function RecommendationResultClient({ recommendationId }: RecommendationR
       />
       {error ? <ErrorState message={error} /> : null}
       {!error && !result ? <LoadingSteps activeIndex={0} steps={["추천 결과 불러오는 중"]} /> : null}
-      {result ? <RecommendationResult result={result} /> : null}
+      {result ? (
+        <>
+          <div className="flex justify-end">
+            <RecommendationFavoriteButton result={result} />
+          </div>
+          <RecommendationResult result={result} />
+        </>
+      ) : null}
     </div>
   );
 }

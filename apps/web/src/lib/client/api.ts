@@ -37,6 +37,25 @@ export type AnalyzeChannelPayload = {
   channelUrl: string;
 };
 
+export type FavoriteType = "trend" | "product" | "recommendation";
+
+export type FavoriteItem = {
+  id: string;
+  userId: string;
+  targetType: FavoriteType;
+  targetId: string;
+  title: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type FavoritePayload = {
+  targetType: FavoriteType;
+  targetId: string;
+  title?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
 export class ApiClientError extends Error {
   constructor(
     message: string,
@@ -195,6 +214,58 @@ export async function deleteAccount(signal?: AbortSignal) {
     headers: await getAuthorizationHeaders(),
     signal,
   });
+
+  return response.data;
+}
+
+export async function getFavorites(params: { type?: FavoriteType; targetId?: string } = {}, signal?: AbortSignal) {
+  const query = new URLSearchParams();
+  if (params.type) {
+    query.set("type", params.type);
+  }
+  if (params.targetId) {
+    query.set("targetId", params.targetId);
+  }
+
+  const path = query.size > 0 ? `/api/favorites?${query.toString()}` : "/api/favorites";
+  const response = await apiFetch<ApiSuccess<{ items: FavoriteItem[] }>>(path, {
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data.items;
+}
+
+export async function addFavorite(payload: FavoritePayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ favorite: FavoriteItem }>>("/api/favorites", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data.favorite;
+}
+
+export async function deleteFavorite(favoriteId: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ deleted: true }>>(`/api/favorites/${favoriteId}`, {
+    method: "DELETE",
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function deleteFavoriteByTarget(type: FavoriteType, targetId: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ deleted: true }>>(
+    `/api/favorites/by-target/${type}/${encodeURIComponent(targetId)}`,
+    {
+      method: "DELETE",
+      headers: await getAuthorizationHeaders(),
+      signal,
+    },
+  );
 
   return response.data;
 }
