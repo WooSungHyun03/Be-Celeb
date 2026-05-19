@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -216,15 +217,7 @@ async def list_production_board_items(user_id: str) -> dict[str, Any]:
     return {"items": items}
 
 
-async def update_production_board_item_status(
-    user_id: str,
-    item_id: str,
-    payload: ProductionBoardStatusUpdatePayload,
-) -> dict[str, Any]:
-    requested_status = payload.status
-    if requested_status not in PRODUCTION_BOARD_STATUSES:
-        raise BadRequestException("허용되지 않는 제작 보드 상태입니다.", "VALIDATION_ERROR")
-
+async def _find_board_item_by_id(user_id: str, item_id: str) -> dict[str, Any]:
     rows = await _request(
         "GET",
         "production_board_items",
@@ -235,11 +228,26 @@ async def update_production_board_item_status(
             "limit": "1",
         },
     )
-    current_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
-    if not current_row:
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not row:
         raise NotFoundException("Production board item not found.")
+    return row
 
+
+async def update_production_board_item_status(
+    user_id: str,
+    item_id: str,
+    payload: ProductionBoardStatusUpdatePayload,
+) -> dict[str, Any]:
+    requested_status = payload.status
+    if requested_status not in PRODUCTION_BOARD_STATUSES:
+        raise BadRequestException("허용되지 않는 제작 보드 상태입니다.", "VALIDATION_ERROR")
+
+    current_row = await _find_board_item_by_id(user_id, item_id)
     current_status = current_row.get("status")
+    if requested_status == current_status:
+        return {"item": _item_from_row(current_row)}
+
     next_status = NEXT_STATUS_BY_STATUS.get(current_status)
     if not next_status:
         raise BadRequestException("업로드 완료 상태에서는 다음 단계로 이동할 수 없습니다.", "INVALID_STATUS_TRANSITION")
@@ -248,14 +256,19 @@ async def update_production_board_item_status(
 
     rows = await _request(
         "PATCH",
-        "production_board_items",
+        f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
         params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
-        payload={"status": requested_status},
+        payload={
+            "status": requested_status,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
         prefer="return=representation",
     )
     updated_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not updated_row:
-        raise BackendApiError("상태 변경에 실패했습니다.", 502, "SUPABASE_ERROR")
+        updated_row = await _find_board_item_by_id(user_id, item_id)
+        if updated_row.get("status") != requested_status:
+            raise BackendApiError("상태 변경에 실패했습니다.", 502, "SUPABASE_ERROR")
     return {"item": _item_from_row(updated_row)}
 
 

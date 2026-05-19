@@ -166,8 +166,9 @@ export default function ProductionBoardPage() {
       const updatedItem = await updateProductionBoardItemStatus(item.id, nextStatus);
       setItems((current) => current.map((currentItem) => (currentItem.id === updatedItem.id ? updatedItem : currentItem)));
       setToast({ message: "다음 단계로 이동했습니다.", tone: "success" });
-    } catch {
-      setToast({ message: "상태 변경에 실패했습니다.", tone: "error" });
+    } catch (error) {
+      const detail = error instanceof Error && error.message.trim() ? error.message : "";
+      setToast({ message: detail ? `상태 변경에 실패했습니다. ${detail}` : "상태 변경에 실패했습니다.", tone: "error" });
     } finally {
       setMovingId(null);
     }
