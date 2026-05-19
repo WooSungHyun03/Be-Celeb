@@ -50,7 +50,7 @@ class SampleRecommendation(BaseSchema):
     priority: str = Field(..., description="우선순위 (high, medium, low)")
     expected_score: int = Field(..., description="추천 적합도 점수")
     hook_text: str = Field(..., description="도입부 3초 후킹 멘트")
-    content_plan: List[str] = Field(..., description="Shorts 영상 3단 구성안")
+    content_plan: List[str] = Field(..., description="YouTube 콘텐츠 구성안")
     hashtags: List[str] = Field(..., description="추천 해시태그 목록")
     reason: str = Field(..., description="추천 이유")
     steps: List[str] = Field(..., description="실행 단계 가이드")

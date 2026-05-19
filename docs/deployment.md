@@ -101,7 +101,8 @@ PATCH /api/calendar/events/{event_id}
 DELETE /api/calendar/events/{event_id}
 GET  /api/growth-report
 POST /api/growth-report/refresh
-GET  /api/shop/products?category=IT&query=&limit=20&refresh=false
+GET  /api/shop/sections
+GET  /api/shop/products?equipmentCategory=카메라&limit=8&refresh=false
 POST /api/cron/collect-shop-products
 GET  /api/admin/llm-prompts
 GET  /api/trends/popular-videos
@@ -189,7 +190,7 @@ Admin에서 favorites/calendar/growth snapshots 전체 관리 UI는 아직 확�
 
 ## Naver Shopping Creator Shop
 
-`/shop`은 Naver Shopping Search API 검색 결과를 Render Backend에서 호출하고 Supabase에 캐싱한다. 프론트에서 Naver API를 직접 호출하지 않는다.
+`/shop`은 검색형 화면이 아니라 “크리에이터 필수 장비 자동 진열형 상점”이다. 페이지 진입 즉시 카메라, 마이크, 조명, 편집툴, 삼각대/거치대, 배경/소품, 저장장치, 라이브/스트리밍 장비 섹션을 불러온다. 프론트에서 Naver API를 직접 호출하지 않고 Render Backend API만 호출한다.
 
 ```text
 GET https://openapi.naver.com/v1/search/shop.json
@@ -202,37 +203,50 @@ X-Naver-Client-Id: NAVER_CLIENT_ID
 X-Naver-Client-Secret: NAVER_CLIENT_SECRET
 ```
 
-저장 테이블은 migration `supabase/migrations/20260519002000_creator_shop_products.sql`에 포함되어 있다.
+저장 테이블은 migration `supabase/migrations/20260519002000_creator_shop_products.sql`와 장비 섹션 전환 migration `supabase/migrations/20260520001000_shop_equipment_store.sql`에 포함되어 있다.
 
-- `creator_shop_keywords`: Be-Celeb 카테고리별 active 쇼핑 검색어
-- `creator_shop_products`: Naver Shopping 상품 캐시. `source`, `source_product_id`, `creator_category`, `search_keyword` 기준 upsert
+- `creator_shop_keywords`: 장비 섹션별 active 쇼핑 검색어
+- `creator_shop_products`: Naver Shopping 상품 캐시. `source`, `source_product_id`, `equipment_category`, `search_keyword` 기준 upsert
 - `creator_shop_collection_logs`: daily shop 수집 결과와 오류 요약
 
-기본 검색어 seed:
+기본 장비 섹션과 검색어 seed:
 
 ```txt
-게임: 게이밍 마이크, 게이밍 헤드셋, 방송 조명
-운동: 운동 촬영 삼각대, 무선 마이크, 러닝 카메라
-IT: 유튜브 마이크, 리뷰 촬영 조명, 데스크 셋업 조명
-노래: 보컬 마이크, 오디오 인터페이스, 방음 패널
-OTT: 영화 리뷰 마이크, 조명, 웹캠
-일상: 브이로그 카메라, 미니 삼각대, 무선 마이크
-뷰티: 메이크업 조명, 링라이트, 촬영 거울
-스터디: 스터디 조명, 타이머, 책상 마이크
-코미디: 무선 마이크, 촬영 삼각대, 조명
-먹방: 먹방 조명, 테이블 삼각대, 핀마이크
-춤: 댄스 촬영 삼각대, 짐벌, 광각 카메라
+카메라: 브이로그 카메라, 유튜브 카메라, 액션캠
+마이크: 유튜브 마이크, 무선 핀마이크, USB 마이크
+조명: 링라이트, 유튜브 조명, 촬영 조명
+편집툴: 영상 편집 키보드, 편집 모니터, 외장 SSD
+삼각대/거치대: 카메라 삼각대, 스마트폰 삼각대, 책상 거치대
+배경/소품: 촬영 배경지, 크로마키 배경, 제품 촬영 소품
+저장장치: 외장 SSD, SD 카드, CFexpress 카드
+라이브/스트리밍 장비: 웹캠, 캡처보드, 스트림덱
 ```
 
 API 동작:
 
-- `GET /api/shop/products?category=IT&query=&limit=20`: cache 우선 반환
-- `query`가 있으면 category 기본 keyword보다 query를 우선 사용
-- cache가 없거나 `refresh=true`면 Naver Shopping API 호출 후 upsert
-- `NAVER_CLIENT_ID` 또는 `NAVER_CLIENT_SECRET`이 없으면 명확한 missing env 오류 반환
+- `GET /api/shop/sections`: 기본 장비 섹션과 검색어 반환
+- `GET /api/shop/products?equipmentCategory=카메라&limit=8`: cache 우선 반환. `equipmentCategory`가 없으면 모든 기본 섹션 반환
+- cache가 부족하거나 `refresh=true`면 Naver Shopping API 호출 후 upsert
+- Naver API 실패, quota, 네트워크 오류, 인증 오류가 있어도 페이지 전체를 깨지 않고 cache 또는 fallback 추천 검색 섹션을 반환
 - `POST /api/cron/collect-shop-products`: `CRON_SECRET` 검증 후 active keyword 전체 daily 수집
 
 Shop 페이지는 광고/제휴 링크가 아니라 Naver Shopping 검색 결과임을 표시한다. `source` 컬럼은 추후 Coupang Partners 같은 다른 source를 추가할 수 있도록 유지한다.
+
+Naver Shopping 401 `errorCode: 024`는 보통 “Scope Status Invalid / Authentication failed”다. 코드에서는 endpoint와 header를 다음처럼 고정한다.
+
+```text
+GET https://openapi.naver.com/v1/search/shop.json
+X-Naver-Client-Id: NAVER_CLIENT_ID
+X-Naver-Client-Secret: NAVER_CLIENT_SECRET
+```
+
+401/024 체크리스트:
+
+- `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 Vercel이 아니라 Render Backend 환경변수에 넣었는지 확인
+- Render 환경변수 수정 후 Backend 서비스를 재배포했는지 확인
+- Naver Developers 앱에 “검색 API / 쇼핑 검색 API” 권한이 활성화되어 있는지 확인
+- DataLab API 권한/키와 Shopping Search API 권한/키를 혼동하지 않았는지 확인
+- 코드 로그에는 client id/secret 값이 아니라 존재 여부 boolean, status code, errorCode, query만 남긴다
 
 ## Naver DataLab 검색 트렌드
 
@@ -265,7 +279,7 @@ Content-Type: application/json
 - `naver_trend_daily_points`: `group_id + period + time_unit` 기준 upsert되는 daily ratio
 - `naver_trend_collection_logs`: Naver 수집 job 상태와 summary/error 기록
 
-`ratio`는 절대 검색량이 아니다. Naver DataLab이 요청 기간과 keyword group 기준으로 제공하는 상대 검색 추이 값이며, trends 화면에서도 상대 지표로만 표시한다.
+`ratio`는 절대 검색량이 아니다. Naver DataLab이 요청 기간과 keyword group 기준으로 제공하는 상대 검색 추이 값이며, 사용자 화면에서는 “검색 관심도” 상대 지표로 표시한다.
 
 기본 keyword group seed는 migration `supabase/migrations/20260517002000_naver_datalab_trends.sql`에 포함되어 있다. 기본 카테고리는 다음 11개다.
 
@@ -273,7 +287,7 @@ Content-Type: application/json
 게임, 운동, IT, 노래, OTT, 일상, 뷰티, 스터디, 코미디, 먹방, 춤
 ```
 
-Trends 페이지는 기존 YouTube 인기 영상/태그 집계를 유지하고, 아래에 Naver 검색 트렌드와 결합 트렌드를 추가한다. 결합 점수는 keyword 단위로 다음 값을 정규화해 계산한다.
+Trends 페이지는 기존 YouTube 인기 영상/태그 집계를 유지하고, 아래에 검색 관심도와 결합 트렌드를 추가한다. 결합 점수는 keyword 단위로 다음 값을 정규화해 계산한다.
 
 ```text
 combinedScore = normalizedYoutubeTagCount * 0.4
@@ -283,6 +297,7 @@ combinedScore = normalizedYoutubeTagCount * 0.4
 
 `/api/trends/popular-videos`는 `influencer_videos` 데이터를 조회한다. 운영 중 빈 DB, category join 누락, nullable `view_count`, 누락된 thumbnail/published_at 때문에 500이 나면 안 된다. 현재 구현은 Supabase 쿼리 실패를 서버 로그에 남기고 빈 배열을 반환하며, row별 매핑은 다음 fallback을 사용한다.
 
+- 배포 DB와 코드의 컬럼명이 다를 수 있어 `youtube_video_id`, `video_id`, `thumbnail_url`, `thumbnails`, `category_name`, `category` 조합으로 select를 재시도
 - category join 실패: `category_name`, `category`, `"미분류"` 순서로 fallback
 - `view_count`, `like_count`, `comment_count` null: `0`
 - thumbnail json 누락: `thumbnailUrl: null`
@@ -409,12 +424,14 @@ curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/growth-report/refresh" \
 Shop 확인:
 
 ```bash
-curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?category=IT&limit=20"
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/sections"
 
-curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?category=IT&query=%EC%9C%A0%ED%8A%9C%EB%B8%8C%20%EB%A7%88%EC%9D%B4%ED%81%AC&refresh=true"
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?limit=8"
+
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?equipmentCategory=%EC%B9%B4%EB%A9%94%EB%9D%BC&limit=8&refresh=true"
 ```
 
-404가 아니고 추천 결과 또는 명확한 환경변수 오류가 나오면 path 연결은 정상이다.
+404가 아니고 섹션별 상품, cache, fallback 중 하나가 나오면 path 연결은 정상이다. Naver 인증 오류가 있어도 `/shop` 화면은 “실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다.” 또는 “네이버 쇼핑 API 인증 설정이 올바르지 않습니다. 관리자에게 문의하세요.” 안내를 표시해야 한다.
 
 ## Cron
 
@@ -470,7 +487,7 @@ curl --fail-with-body -X POST "$NEXT_PUBLIC_API_BASE_URL/api/cron/collect-shop-p
 저장 확인:
 
 ```sql
-select creator_category, search_keyword, title, price, mall_name
+select equipment_category, search_keyword, title, price, mall_name
 from public.creator_shop_products
 order by collected_at desc
 limit 20;

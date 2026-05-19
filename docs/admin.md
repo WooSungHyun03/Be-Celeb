@@ -56,7 +56,7 @@ ALLOWED_ORIGINS=https://be-celeb.org,https://be-celeb.vercel.app,http://localhos
 - `recommendation_options`: 과거 2단계 추천 옵션 이력 조회
 - `content_recommendations`: 최종 콘텐츠 계획 조회/삭제
 - `naver_trend_keyword_groups`: Naver DataLab 검색 트렌드 keyword group 관리
-- `creator_shop_keywords`: Naver Shopping 상품 수집 keyword. 현재 CRUD UI는 TODO
+- `creator_shop_keywords`: Naver Shopping 장비 섹션별 상품 수집 keyword. 현재 CRUD UI는 TODO
 - `creator_shop_products`: Naver Shopping 상품 cache. `/shop`에서 조회
 - `admin_audit_logs`: admin 작업 이력 저장
 
@@ -93,7 +93,7 @@ GitHub Actions 또는 Render Cron은 기존 `CRON_SECRET` 기반 수집 endpoint
 - `POST /api/cron/collect-naver-trends`
 - `POST /api/cron/collect-shop-products`
 
-`creator_shop_keywords` 관리 UI는 아직 admin에 붙이지 않았다. 운영자가 keyword를 자주 바꾸는 단계가 되면 `/api/admin/shop-keywords` CRUD와 admin 섹션을 추가한다.
+`creator_shop_keywords` 관리 UI는 아직 admin에 붙이지 않았다. 운영자가 keyword를 자주 바꾸는 단계가 되면 장비 섹션 기준 `/api/admin/shop-keywords` CRUD와 admin 섹션을 추가한다.
 
 ## 위험 작업
 

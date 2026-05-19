@@ -17,7 +17,7 @@ Recommend exactly one content idea the user has not uploaded yet.
 Do not recommend content similar to the user's existing videos.
 The storyboard must contain 6 to 10 detailed scenes. Each scene must be specific enough for a creator to film it.
 Each storyboard scene must include duration, visual, dialogue, caption, and shootingTip.
-Support both YouTube Shorts and standard YouTube videos.
+Support standard YouTube videos and concise vertical formats when requested.
 Return valid JSON only with this schema:
 {
   "recommendation": {

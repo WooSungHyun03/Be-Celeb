@@ -1,2 +1,2 @@
-export { getShopProducts } from "@/lib/client/api";
-export type { ShopProduct, ShopProductsResponse } from "@/lib/client/api";
+export { getShopProducts, getShopSections } from "@/lib/client/api";
+export type { ShopProduct, ShopSection, ShopSectionInfo, ShopSectionsResponse } from "@/lib/client/api";

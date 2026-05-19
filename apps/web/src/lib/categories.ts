@@ -25,7 +25,7 @@ export const CATEGORY_KEYWORDS: Record<CreatorCategoryName, string[]> = {
   스터디: ["공부", "시험", "대학생", "생산성", "플래너", "스터디", "독서", "자격증", "집중"],
   코미디: ["웃긴", "몰카", "개그", "상황극", "코미디", "예능", "패러디", "드립"],
   먹방: ["먹방", "맛집", "음식", "라면", "디저트", "요리", "레시피", "카페", "먹는"],
-  춤: ["댄스", "안무", "커버댄스", "챌린지", "춤", "dance", "choreography", "Shorts댄스"],
+  춤: ["댄스", "안무", "커버댄스", "챌린지", "춤", "dance", "choreography", "아이돌댄스"],
 };
 
 export function normalizeCreatorCategory(value: string | null | undefined) {

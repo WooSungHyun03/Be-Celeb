@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from html import unescape
 
 
 def normalize_text(value: str | None) -> str:
@@ -10,6 +11,10 @@ def normalize_text(value: str | None) -> str:
 
 def normalize_tag(value: str | None) -> str:
     return normalize_text(value).lstrip("#")
+
+
+def strip_html_tags(value: str | None) -> str:
+    return re.sub(r"<[^>]+>", "", unescape(value or "")).strip()
 
 
 def keyword_overlap(left: str, right: str) -> float:

@@ -170,7 +170,7 @@ class GenerateContentPlanRequest(BaseModel):
 
 class ContentPlan(BaseModel):
     title: str
-    format: str = "Shorts"
+    format: str = "YouTube video"
     hashtags: list[str] = Field(default_factory=list)
     thumbnailIdea: str | None = None
     targetAudience: str | None = None

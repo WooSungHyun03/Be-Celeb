@@ -19,3 +19,7 @@ export function formatKrw(value: number | null | undefined) {
     maximumFractionDigits: 0,
   }).format(value);
 }
+
+export function stripHtmlTags(value: string | null | undefined) {
+  return (value ?? "").replace(/<[^>]+>/g, "").trim();
+}

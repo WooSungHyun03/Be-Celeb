@@ -236,7 +236,7 @@ def _fallback_options(selected_category: CreatorCategoryName, influencer_videos:
         RecommendationOption(
             optionId=f"option-{index + 1}",
             ideaTitle=f"{video.title[:40]} 재해석" if video.title else f"{selected_category} 콘텐츠 아이디어 {index + 1}",
-            format="Shorts",
+            format="YouTube video",
             summary="카테고리 인기 흐름을 참고하되 내 채널의 기존 영상과 겹치지 않도록 각도를 바꾼 아이디어입니다.",
             reason="카테고리 DB에서 반복적으로 나타나는 관심사를 내 채널 톤에 맞게 변형했습니다.",
             whyNotDuplicate="최근 업로드 제목/설명/태그와 직접적인 키워드 중복을 피했습니다.",
@@ -260,7 +260,7 @@ def _normalize_options(raw: dict[str, Any], fallback: list[RecommendationOption]
                 RecommendationOption(
                     optionId=value.get("optionId") if isinstance(value.get("optionId"), str) else f"option-{index + 1}",
                     ideaTitle=title,
-                    format=value.get("format") if isinstance(value.get("format"), str) else "Shorts",
+                    format=value.get("format") if isinstance(value.get("format"), str) else "YouTube video",
                     summary=value.get("summary") if isinstance(value.get("summary"), str) else "",
                     reason=value.get("reason") if isinstance(value.get("reason"), str) else "",
                     whyNotDuplicate=value.get("whyNotDuplicate") if isinstance(value.get("whyNotDuplicate"), str) else "",
@@ -281,8 +281,8 @@ def _normalize_options(raw: dict[str, Any], fallback: list[RecommendationOption]
 def _fallback_plan(option: GenerateContentPlanOptionInput) -> ContentPlan:
     return ContentPlan(
         title=option.ideaTitle,
-        format=option.format or "Shorts",
-        hashtags=["#YouTube", "#Shorts", "#BeCeleb"],
+        format=option.format or "YouTube video",
+        hashtags=["#YouTube", "#BeCeleb"],
         thumbnailIdea="핵심 장면을 크게 배치하고 대비가 강한 짧은 문구를 얹습니다.",
         targetAudience="이 주제에 관심이 있지만 빠르게 핵심만 보고 싶은 시청자",
         hook=option.summary or "첫 3초에 결과물을 먼저 보여주고 과정을 압축해서 전개합니다.",
@@ -300,8 +300,8 @@ def _fallback_single_recommendation(selected_category: CreatorCategoryName, infl
     title = f"{seed.title[:42]} 재해석" if seed and seed.title else f"{selected_category} 카테고리 신규 콘텐츠"
     return SingleContentRecommendation(
         title=title,
-        format="Shorts",
-        hashtags=["#YouTube", "#Shorts", "#BeCeleb", f"#{selected_category}"],
+        format="YouTube video",
+        hashtags=["#YouTube", "#BeCeleb", f"#{selected_category}"],
         thumbnailIdea="결과 장면을 크게 배치하고 대비가 강한 짧은 문구를 얹습니다.",
         targetAudience=f"{selected_category} 주제에 관심 있는 신규 시청자",
         hook="첫 3초에 결과 또는 반전을 먼저 보여주고 이유를 빠르게 전개합니다.",
@@ -312,7 +312,7 @@ def _fallback_single_recommendation(selected_category: CreatorCategoryName, infl
             StoryboardScene(scene=2, duration="5-12s", visual="현재 채널의 기존 영상과 다른 접근 포인트를 짧게 설명합니다.", dialogue="기존 방식과 다르게 이번에는 포인트를 하나만 바꿉니다.", caption="기존 영상과 다른 점", shootingTip="말하는 장면과 자료 화면을 1:1 비율로 교차 편집합니다."),
             StoryboardScene(scene=3, duration="12-20s", visual="핵심 준비물, 설정값, 상황을 한 화면에 정리합니다.", dialogue="따라 하려면 이 세 가지만 준비하면 됩니다.", caption="준비물 3가지", shootingTip="텍스트가 잘 보이도록 배경을 단순하게 둡니다."),
             StoryboardScene(scene=4, duration="20-32s", visual="첫 번째 실행 장면을 실제 속도보다 빠르게 보여줍니다.", dialogue="첫 단계에서는 여기서 실수가 가장 많이 나옵니다.", caption="1단계 핵심", shootingTip="중요한 손동작 또는 클릭 지점은 화면 확대를 넣습니다."),
-            StoryboardScene(scene=5, duration="32-45s", visual="두 번째 실행 장면에서 실패/성공 차이를 비교합니다.", dialogue="이 차이 하나 때문에 결과가 완전히 달라집니다.", caption="성공 포인트", shootingTip="좌우 비교 화면을 쓰면 일반 영상과 Shorts 모두 이해가 쉽습니다."),
+            StoryboardScene(scene=5, duration="32-45s", visual="두 번째 실행 장면에서 실패/성공 차이를 비교합니다.", dialogue="이 차이 하나 때문에 결과가 완전히 달라집니다.", caption="성공 포인트", shootingTip="좌우 비교 화면을 쓰면 핵심 차이를 빠르게 이해시키기 좋습니다."),
             StoryboardScene(scene=6, duration="45-60s", visual="완성 결과와 시청자 행동 유도를 함께 보여줍니다.", dialogue="여러분이라면 어떤 방식으로 바꿔보고 싶나요?", caption="댓글로 다음 실험 추천", shootingTip="마지막 2초는 댓글 질문이 읽히도록 화면을 정지합니다."),
         ],
         uploadTips=["첫 화면에 결과를 배치하세요.", "해시태그는 3-5개로 제한하세요.", "댓글 질문으로 다음 편 소재를 유도하세요."],

@@ -64,7 +64,7 @@ CATEGORY_KEYWORDS: dict[CreatorCategoryName, list[str]] = {
     "스터디": ["공부", "시험", "대학생", "생산성", "플래너", "스터디", "독서", "자격증", "집중"],
     "코미디": ["웃긴", "몰카", "개그", "상황극", "코미디", "예능", "패러디", "드립"],
     "먹방": ["먹방", "맛집", "음식", "라면", "디저트", "요리", "레시피", "카페", "먹는"],
-    "춤": ["댄스", "안무", "커버댄스", "챌린지", "춤", "dance", "choreography", "Shorts댄스"],
+    "춤": ["댄스", "안무", "커버댄스", "챌린지", "춤", "dance", "choreography", "아이돌댄스"],
 }
 
 
@@ -819,13 +819,35 @@ def _to_video_url(video_id: str) -> str:
     return f"https://www.youtube.com/watch?v={video_id}"
 
 
+def _first_str(row: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = row.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _popular_video_id(row: dict[str, Any]) -> str:
+    return _first_str(row, "youtube_video_id", "youtubeVideoId", "video_id", "videoId")
+
+
 def _thumbnail_url_from_row(row: dict[str, Any]) -> str | None:
+    direct = _first_str(row, "thumbnail_url", "thumbnailUrl", "thumbnail")
+    if direct:
+        return direct
     thumbnails = row.get("thumbnails")
-    return _best_thumbnail_url(thumbnails) if isinstance(thumbnails, dict) else None
+    if isinstance(thumbnails, dict):
+        thumbnail_url = _best_thumbnail_url(thumbnails)
+        if thumbnail_url:
+            return thumbnail_url
+    raw = row.get("raw")
+    snippet = raw.get("snippet") if isinstance(raw, dict) and isinstance(raw.get("snippet"), dict) else {}
+    raw_thumbnails = snippet.get("thumbnails") if isinstance(snippet, dict) else None
+    return _best_thumbnail_url(raw_thumbnails) if isinstance(raw_thumbnails, dict) else None
 
 
 def _popular_video_from_row(row: dict[str, Any], category: str) -> PopularTrendVideo:
-    video_id = _as_str(row.get("youtube_video_id"))
+    video_id = _popular_video_id(row)
     return PopularTrendVideo(
         category=category or _as_str(row.get("category_name"), _as_str(row.get("category"), "미분류")),
         youtubeVideoId=video_id,
@@ -837,8 +859,40 @@ def _popular_video_from_row(row: dict[str, Any], category: str) -> PopularTrendV
         likeCount=_as_int(row.get("like_count")) or 0,
         commentCount=_as_int(row.get("comment_count")) or 0,
         publishedAt=_as_str(row.get("published_at")) or None,
-        youtubeUrl=_to_video_url(video_id),
+        youtubeUrl=_to_video_url(video_id) if video_id else "",
     )
+
+
+async def _popular_video_rows() -> list[dict[str, Any]]:
+    select_candidates = [
+        (
+            "canonical",
+            "category_id,youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
+        ),
+        (
+            "video_id_thumbnail_url",
+            "category_id,video_id,published_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
+        ),
+        (
+            "category_name",
+            "category_name,category,youtube_video_id,published_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
+        ),
+        ("wildcard", "*"),
+    ]
+
+    for label, select_value in select_candidates:
+        try:
+            rows = await _supabase_get(
+                "influencer_videos",
+                {
+                    "select": select_value,
+                    "limit": "1000",
+                },
+            )
+            return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+        except Exception as error:
+            logger.warning("Popular videos query failed with select=%s: %s", label, error)
+    return []
 
 
 async def get_popular_videos_by_category() -> PopularVideosResponse:
@@ -853,31 +907,22 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
         logger.exception("Failed to load creator_categories for popular videos.")
         category_map = {}
 
-    try:
-        rows = await _supabase_get(
-            "influencer_videos",
-            {
-                "select": "category_id,youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count",
-                "limit": "1000",
-            },
-        )
-    except Exception as error:
-        logger.exception("Failed to load influencer_videos for popular videos.")
-        return PopularVideosResponse(videos=[])
+    rows = await _popular_video_rows()
 
     best_by_category: dict[str, PopularTrendVideo] = {}
 
-    if isinstance(rows, list):
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            category = category_map.get(row.get("category_id")) or _as_str(row.get("category_name"), _as_str(row.get("category"), "미분류"))
-            normalized = _popular_video_from_row(row, category)
-            current = best_by_category.get(category)
-            current_score = (current.viewCount or 0, current.publishedAt or "")
-            normalized_score = (normalized.viewCount or 0, normalized.publishedAt or "")
-            if current is None or normalized_score > current_score:
-                best_by_category[category] = normalized
+    for row in rows:
+        video_id = _popular_video_id(row)
+        if not video_id:
+            logger.warning("Skipping popular video row without a YouTube video id.")
+            continue
+        category = category_map.get(row.get("category_id")) or _as_str(row.get("category_name"), _as_str(row.get("category"), "미분류"))
+        normalized = _popular_video_from_row(row, category)
+        current = best_by_category.get(category)
+        current_score = (current.viewCount or 0, current.publishedAt or "")
+        normalized_score = (normalized.viewCount or 0, normalized.publishedAt or "")
+        if current is None or normalized_score > current_score:
+            best_by_category[category] = normalized
 
     videos = sorted(best_by_category.values(), key=lambda video: (video.viewCount or 0, video.publishedAt or ""), reverse=True)
     return PopularVideosResponse(videos=videos)

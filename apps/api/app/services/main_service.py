@@ -143,10 +143,10 @@ def _sample_from_row(row: dict[str, Any], trend_ids: list[str]) -> SampleRecomme
 
     return SampleRecommendation(
         id=_as_str(row.get("id"), "sample"),
-        title=_as_str(row.get("title"), "YouTube Shorts 콘텐츠 아이디어"),
+        title=_as_str(row.get("title"), "YouTube 콘텐츠 아이디어"),
         summary=_as_str(row.get("summary"), "채널 성향과 트렌드를 바탕으로 만든 샘플 추천입니다."),
         category=category,
-        platforms=["YouTube Shorts"],
+        platforms=["YouTube"],
         priority="high",
         expected_score=86,
         hook_text=_as_str(row.get("hook"), "첫 3초에 결과를 먼저 보여주세요."),
@@ -157,7 +157,7 @@ def _sample_from_row(row: dict[str, Any], trend_ids: list[str]) -> SampleRecomme
         ],
         hashtags=hashtags[:8],
         reason=f"{category} 카테고리의 반복 시청 패턴과 저장하기 좋은 구성에 맞춘 추천입니다.",
-        steps=["채널 톤 확인", "트렌드 훅 선택", "Shorts 콘티 작성"],
+        steps=["채널 톤 확인", "트렌드 훅 선택", "콘티 작성"],
         related_trend_ids=trend_ids[:3],
         is_saved=False,
     )
@@ -179,7 +179,7 @@ FALLBACK_SERVICE_CONTENTS = [
     ServiceContent(
         section="recommendation",
         title="채널에 맞는 콘텐츠를 추천합니다",
-        description="내 채널의 최근 업로드와 겹치지 않는 새 Shorts 아이디어를 생성합니다.",
+        description="내 채널의 최근 업로드와 겹치지 않는 새 콘텐츠 아이디어를 생성합니다.",
         sort_order=3,
     ),
 ]
@@ -187,14 +187,14 @@ FALLBACK_SERVICE_CONTENTS = [
 FALLBACK_TRENDS = [
     TrendSummary(
         id="fallback-trend-1",
-        title="루틴형 Shorts",
-        description="짧은 시간 안에 전후 차이를 보여주는 루틴 콘텐츠가 꾸준히 반응을 얻고 있습니다.",
+        title="루틴형 콘텐츠",
+        description="전후 차이를 명확하게 보여주는 루틴 콘텐츠가 꾸준히 반응을 얻고 있습니다.",
         category="lifestyle",
         platforms=["YouTube"],
         score=88,
         growth_rate=24,
         direction="rising",
-        tags=["#루틴", "#Shorts", "#브이로그"],
+        tags=["#루틴", "#콘텐츠아이디어", "#브이로그"],
     ),
     TrendSummary(
         id="fallback-trend-2",
@@ -212,14 +212,14 @@ FALLBACK_TRENDS = [
 FALLBACK_SAMPLE = SampleRecommendation(
     id="fallback-sample-1",
     title="내 채널에서 바로 시도할 수 있는 30초 튜토리얼",
-    summary="시청자가 바로 따라 할 수 있는 과정을 3단계로 압축한 Shorts 아이디어입니다.",
+    summary="시청자가 바로 따라 할 수 있는 과정을 3단계로 정리한 콘텐츠 아이디어입니다.",
     category="general",
-    platforms=["YouTube Shorts"],
+    platforms=["YouTube"],
     priority="high",
     expected_score=84,
     hook_text="이 방법 하나로 결과가 달라집니다.",
     content_plan=["완성 결과 먼저 보여주기", "핵심 단계 3개 설명", "댓글 질문으로 마무리"],
-    hashtags=["#Shorts", "#콘텐츠아이디어", "#튜토리얼"],
+    hashtags=["#YouTube", "#콘텐츠아이디어", "#튜토리얼"],
     reason="저장과 반복 시청을 유도하기 좋은 구조입니다.",
     steps=["소재 선택", "촬영 컷 정리", "업로드 문구 작성"],
     related_trend_ids=["fallback-trend-1"],

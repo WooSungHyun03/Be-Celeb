@@ -19,21 +19,21 @@ const secondaryLinkClass =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-7 py-3 text-sm font-bold text-violet-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-violet-50";
 
 const heroStats = [
-  { label: "라이브 점수", value: "85", change: "+12%" },
-  { label: "트렌드 점수", value: "92", change: "+8%" },
-  { label: "도달 가능성", value: "1.2M", change: "+22%" },
-  { label: "브랜드 필수", value: "14", change: "+8%" },
+  { label: "추천 생성", value: "85", change: "ideas" },
+  { label: "트렌드 지표", value: "92", change: "live" },
+  { label: "찜한 아이디어", value: "24", change: "saved" },
+  { label: "일정 관리", value: "14", change: "plan" },
 ];
 
-const sidebarItems = ["개요", "추천", "트렌드 분석", "키워드", "해시태그", "인플루언서", "전략 가이드"];
+const sidebarItems = ["개요", "추천", "찜 목록", "캘린더", "성장 리포트", "트렌드", "상점"];
 
 const insightCards = [
-  { icon: "spark", title: "맞춤 콘텐츠 추천", description: "내 채널 성향에 맞는 Shorts 아이디어를 추천받으세요.", tone: "violet" },
-  { icon: "trend", title: "트렌드 분석", description: "지금 뜨는 주제와 반응 좋은 패턴을 빠르게 파악하세요.", tone: "pink" },
-  { icon: "search", title: "키워드 분석", description: "어떤 키워드가 잘 먹히는지 그래프로 확인하세요.", tone: "orange" },
-  { icon: "hash", title: "해시태그 인사이트", description: "도달률을 높일 해시태그를 찾아보세요.", tone: "violet" },
-  { icon: "people", title: "유사 인플루언서 찾기", description: "나와 비슷한 채널의 성공 패턴을 참고하세요.", tone: "blue" },
-  { icon: "book", title: "Shorts 전략 가이드", description: "기획부터 업로드까지 실전 전략을 확인하세요.", tone: "green" },
+  { icon: "spark", title: "콘텐츠 추천", description: "채널 URL과 카테고리로 다음 아이디어를 생성합니다.", tone: "violet" },
+  { icon: "trend", title: "트렌드 분석", description: "YouTube 인기 영상과 검색 관심도를 함께 확인합니다.", tone: "pink" },
+  { icon: "search", title: "찜 목록", description: "마음에 드는 추천 결과를 저장해 다시 꺼내봅니다.", tone: "orange" },
+  { icon: "hash", title: "업로드 캘린더", description: "찜한 아이디어를 날짜별 업로드 일정으로 관리합니다.", tone: "violet" },
+  { icon: "people", title: "성장 리포트", description: "구독자, 조회수, 영상 수 변화를 스냅샷으로 확인합니다.", tone: "blue" },
+  { icon: "book", title: "크리에이터 상점", description: "촬영·편집에 필요한 장비를 섹션별로 둘러봅니다.", tone: "green" },
 ];
 
 const popularTags = [
@@ -45,19 +45,19 @@ const popularTags = [
 ];
 
 const platformStats = [
-  { label: "YouTube Shorts", value: "32%", color: "bg-violet-500" },
-  { label: "YouTube", value: "28%", color: "bg-pink-500" },
-  { label: "Long-form", value: "21%", color: "bg-orange-400" },
-  { label: "라이프스타일", value: "12%", color: "bg-sky-500" },
-  { label: "뷰티 리뷰", value: "7%", color: "bg-emerald-500" },
+  { label: "채널 분석", value: "URL", color: "bg-violet-500" },
+  { label: "콘텐츠 추천", value: "AI", color: "bg-pink-500" },
+  { label: "아이디어 저장", value: "찜", color: "bg-orange-400" },
+  { label: "업로드 일정", value: "캘린더", color: "bg-sky-500" },
+  { label: "성장 확인", value: "리포트", color: "bg-emerald-500" },
 ];
 
 const risingTopics = [
-  { label: "5월 Shorts 루틴", icon: "🔥" },
-  { label: "크리에이터의 AI 툴", icon: "🔥" },
-  { label: "여름 뷰티 챌린지", icon: "↗" },
-  { label: "디지털 디톡스", icon: "↗" },
-  { label: "부업 아이디어", icon: "↗" },
+  { label: "채널 기반 추천", icon: "↑" },
+  { label: "검색 관심도 결합", icon: "↑" },
+  { label: "찜한 아이디어 관리", icon: "→" },
+  { label: "업로드 일정화", icon: "→" },
+  { label: "성장 지표 확인", icon: "→" },
 ];
 
 type VideoRecommendationItem = {
@@ -73,7 +73,7 @@ const videoRecommendations: VideoRecommendationItem[] = [
   {
     title: "30분 만에 콘텐츠 기획하는 방법",
     image: "desk",
-    badge: "추천 Shorts",
+    badge: "추천 아이디어",
     creator: "콘텐츠 메이커",
     stats: "예상 도달 12.4K",
     tags: ["루틴", "생산성", "기획"],
@@ -81,25 +81,40 @@ const videoRecommendations: VideoRecommendationItem[] = [
   {
     title: "콘텐츠 크리에이터의 하루",
     image: "studio",
-    badge: "추천 Shorts",
-    creator: "Shorts 분석 채널",
+    badge: "콘티 추천",
+    creator: "브이로그 채널",
     stats: "참여율 9.8%",
     tags: ["브이로그", "성장", "일상"],
   },
   {
     title: "시간을 아껴주는 필수 앱 5가지",
     image: "phone",
-    badge: "추천 Shorts",
+    badge: "업로드 후보",
     creator: "생산성 크리에이터",
     stats: "저장률 높음",
     tags: ["앱추천", "꿀팁", "생산성"],
   },
 ];
 
+const workflowSteps = [
+  { step: "01", title: "채널 입력", description: "YouTube 채널 URL을 넣어 현재 채널 맥락을 불러옵니다." },
+  { step: "02", title: "카테고리 선택", description: "게임, IT, 뷰티 등 내 콘텐츠에 맞는 기준을 선택합니다." },
+  { step: "03", title: "추천 생성", description: "제목, 추천 이유, 해시태그, 콘티 등 필요한 항목만 체크해 받습니다." },
+  { step: "04", title: "찜 목록 저장", description: "마음에 드는 결과를 저장하고 나중에 다시 비교합니다." },
+  { step: "05", title: "일정 등록", description: "찜한 아이디어를 업로드 캘린더에 바로 배치합니다." },
+];
+
+const servicePages = [
+  { title: "Dashboard", description: "내 YouTube 채널을 기반으로 콘텐츠 추천을 생성합니다.", href: ROUTES.dashboard },
+  { title: "Trends", description: "YouTube 인기 영상과 검색 관심도 흐름을 함께 확인합니다.", href: ROUTES.trends },
+  { title: "Favorites", description: "마음에 드는 아이디어를 저장하고 제작 후보로 관리합니다.", href: ROUTES.favorites },
+  { title: "Calendar", description: "업로드 일정을 월간 캘린더에서 만들고 수정합니다.", href: ROUTES.calendar },
+  { title: "Growth Report", description: "구독자, 조회수, 영상 수의 성장 흐름을 확인합니다.", href: ROUTES.growthReport },
+  { title: "Shop", description: "촬영·편집 장비를 섹션별로 빠르게 둘러봅니다.", href: ROUTES.trendingItems },
+];
+
 const dynamicWidths = ["w-full", "w-4/5", "w-3/5", "w-1/2", "w-2/5"];
 const dynamicColors = ["bg-violet-500", "bg-pink-500", "bg-amber-400", "bg-blue-500", "bg-emerald-500"];
-const dynamicIcons = ["spark", "trend", "search", "hash", "people", "book"];
-const dynamicTones = ["violet", "pink", "orange", "violet", "blue", "green"];
 const dynamicImages = ["desk", "studio", "phone"];
 
 function formatCompactValue(value: number) {
@@ -110,12 +125,20 @@ function formatCompactValue(value: number) {
 }
 
 function cleanTag(value: string) {
-  const tag = value.trim();
+  const tag = cleanLandingText(value).trim();
   if (!tag) {
     return "";
   }
 
   return tag.startsWith("#") ? tag : `#${tag}`;
+}
+
+function cleanLandingText(value: string) {
+  return value
+    .replace(/YouTube\s*Shorts/gi, "YouTube 콘텐츠")
+    .replace(/Shorts|쇼츠/gi, "콘텐츠")
+    .replace(/Instagram|TikTok|Reels/gi, "YouTube")
+    .trim();
 }
 
 function getHeroStats(mainData: MainPageData | null) {
@@ -134,18 +157,8 @@ function getHeroStats(mainData: MainPageData | null) {
 }
 
 function getInsightCards(mainData: MainPageData | null) {
-  const contents = mainData?.serviceContents ?? [];
-
-  if (contents.length === 0) {
-    return insightCards;
-  }
-
-  return contents.slice(0, 6).map((item, index) => ({
-    icon: dynamicIcons[index % dynamicIcons.length],
-    title: item.title,
-    description: item.description,
-    tone: dynamicTones[index % dynamicTones.length],
-  }));
+  void mainData;
+  return insightCards;
 }
 
 function getPopularTags(mainData: MainPageData | null) {
@@ -171,7 +184,7 @@ function getRisingTopics(mainData: MainPageData | null) {
   }
 
   return trends.slice(0, 5).map((trend) => ({
-    label: trend.title,
+    label: cleanLandingText(trend.title),
     icon: trend.direction === "rising" ? "↑" : trend.direction === "stable" ? "→" : "•",
   }));
 }
@@ -188,23 +201,23 @@ function getVideoRecommendations(mainData: MainPageData | null): VideoRecommenda
 
   if (sample) {
     items.push({
-      title: sample.title,
+      title: cleanLandingText(sample.title),
       image: "desk",
       badge: "추천 샘플",
-      creator: sample.category,
+      creator: cleanLandingText(sample.category),
       stats: `${sample.expectedScore}점`,
-      tags: sample.hashtags.map((tag) => tag.replace(/^#/, "")).slice(0, 3),
+      tags: sample.hashtags.map((tag) => cleanLandingText(tag.replace(/^#/, ""))).slice(0, 3),
     });
   }
 
   trendItems.slice(0, 3).forEach((trend, index) => {
     items.push({
-      title: trend.title,
+      title: cleanLandingText(trend.title),
       image: dynamicImages[(index + 1) % dynamicImages.length],
       badge: trend.direction === "rising" ? "급상승" : "트렌드",
-      creator: trend.category,
+      creator: cleanLandingText(trend.category),
       stats: `${trend.growthRate}% 성장`,
-      tags: trend.tags.map((tag) => tag.replace(/^#/, "")).slice(0, 3),
+      tags: trend.tags.map((tag) => cleanLandingText(tag.replace(/^#/, ""))).slice(0, 3),
     });
   });
 
@@ -213,23 +226,23 @@ function getVideoRecommendations(mainData: MainPageData | null): VideoRecommenda
 
 const growthCards = [
   {
-    title: "데이터 기반 인사이트",
-    descriptionLines: ["명확한 데이터로 트렌드를", "발견하고 아이디어를 얻으세요."],
+    title: "채널 기반 추천",
+    descriptionLines: ["내 채널과 카테고리에 맞춰", "다음 아이디어를 정리하세요."],
     icon: "chart",
   },
   {
-    title: "참여율 향상",
-    descriptionLines: ["반응을 이끄는 콘텐츠로", "참여율을 높여보세요."],
+    title: "찜 목록 저장",
+    descriptionLines: ["괜찮은 추천 결과는", "제작 후보로 남겨두세요."],
     icon: "heart",
   },
   {
-    title: "꾸준한 콘텐츠 기획",
-    descriptionLines: ["아이디어가 끊기지 않는", "콘텐츠 플랜을 세워보세요."],
+    title: "업로드 캘린더",
+    descriptionLines: ["아이디어를 날짜에 배치해", "제작 흐름을 관리하세요."],
     icon: "calendar",
   },
   {
-    title: "더 빠른 성장",
-    descriptionLines: ["올바른 전략으로 도달과", "성장을 빠르게 경험하세요."],
+    title: "성장 리포트",
+    descriptionLines: ["구독자와 조회수 변화를", "한눈에 확인하세요."],
     icon: "rocket",
   },
 ];
@@ -320,7 +333,7 @@ function TrendInsightSection({ mainData }: { mainData: MainPageData | null }) {
               <h3 className="text-sm font-extrabold text-ink">키워드 분석</h3>
               <div className="flex gap-2 text-[11px] font-bold text-slate-500">
                 <span className="rounded-md border border-slate-200 px-2.5 py-1">최근 30일</span>
-                <span className="rounded-md border border-slate-200 px-2.5 py-1">Shorts</span>
+                <span className="rounded-md border border-slate-200 px-2.5 py-1">YouTube</span>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-5 text-[11px] font-bold text-slate-500">
@@ -346,7 +359,7 @@ function TrendInsightSection({ mainData }: { mainData: MainPageData | null }) {
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
-            <h3 className="text-sm font-extrabold text-ink">인기 해시태그</h3>
+            <h3 className="text-sm font-extrabold text-ink">YouTube 태그</h3>
             <div className="mt-4 space-y-3">
               {tagItems.map((tag) => (
                 <div key={tag.label}>
@@ -360,11 +373,11 @@ function TrendInsightSection({ mainData }: { mainData: MainPageData | null }) {
                 </div>
               ))}
             </div>
-            <Link className="mt-5 inline-flex text-xs font-extrabold text-violet-600" href={ROUTES.trends}>해시태그 더 보기 →</Link>
+            <Link className="mt-5 inline-flex text-xs font-extrabold text-violet-600" href={ROUTES.trends}>태그 흐름 보기 →</Link>
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
-            <h3 className="text-sm font-extrabold text-ink">성장 좋은 포맷</h3>
+            <h3 className="text-sm font-extrabold text-ink">콘텐츠 관리 흐름</h3>
             <div className="mt-4 space-y-3">
               {platformStats.map((item) => (
                 <div className="flex items-center justify-between text-xs font-bold" key={item.label}>
@@ -373,11 +386,11 @@ function TrendInsightSection({ mainData }: { mainData: MainPageData | null }) {
                 </div>
               ))}
             </div>
-            <Link className="mt-5 inline-flex text-xs font-extrabold text-violet-600" href={ROUTES.recommendations}>포맷 더 보기 →</Link>
+            <Link className="mt-5 inline-flex text-xs font-extrabold text-violet-600" href={ROUTES.recommendations}>추천 보기 →</Link>
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
-            <h3 className="text-sm font-extrabold text-ink">인기 주제</h3>
+            <h3 className="text-sm font-extrabold text-ink">실제 사용 흐름</h3>
             <div className="mt-4 space-y-3">
               {topicItems.map((topic) => (
                 <div className="flex items-center justify-between text-xs font-bold" key={topic.label}>
@@ -502,9 +515,9 @@ function VideoGrowthSection({ mainData }: { mainData: MainPageData | null }) {
       <div className="mx-auto max-w-7xl px-4 pb-14 sm:px-6 lg:px-8">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[22px] font-black tracking-tight text-ink">나에게 맞는 Shorts 추천</h2>
+            <h2 className="text-[22px] font-black tracking-tight text-ink">나에게 맞는 콘텐츠 추천</h2>
             <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
-              내 관심사와 최근 트렌드를 바탕으로 추천받은 콘텐츠 아이디어
+              내 채널과 카테고리를 바탕으로 추천받은 콘텐츠 아이디어
             </p>
           </div>
           <Link className="hidden rounded-full border border-violet-300 px-4 py-2 text-xs font-extrabold text-violet-700 transition hover:bg-violet-50 sm:inline-flex" href={ROUTES.recommendations}>
@@ -521,17 +534,17 @@ function VideoGrowthSection({ mainData }: { mainData: MainPageData | null }) {
         <div className="mt-8 grid gap-5 lg:grid-cols-[0.68fr_1.32fr] lg:items-center">
           <div>
             <h2 className="text-[30px] font-black leading-tight tracking-tight text-ink xl:text-[32px]">
-              더 똑똑하게
+              추천에서 업로드까지
               <br />
               <span className="whitespace-nowrap">
-                <span className="bg-[linear-gradient(90deg,#7c3aed_0%,#ec4899_100%)] bg-clip-text text-transparent">YouTube을 성장</span>시키세요
+                <span className="bg-[linear-gradient(90deg,#7c3aed_0%,#ec4899_100%)] bg-clip-text text-transparent">YouTube 콘텐츠</span>를 관리하세요
               </span>
             </h2>
             <p className="mt-4 max-w-md text-sm font-medium leading-6 text-slate-500">
-              {sample?.reason ?? "데이터 기반 인사이트로 더 좋은 콘텐츠를 만들고, 맞는 타겟에게 도달하고, 꾸준히 성장하세요."}
+              {sample?.reason ? cleanLandingText(sample.reason) : "추천 결과를 찜 목록에 저장하고, 캘린더에 업로드 일정을 배치하고, 성장 리포트로 변화를 확인하세요."}
             </p>
-            <Link className={`${primaryLinkClass} mt-5`} href={ROUTES.onboarding}>
-              지금 시작하기 <span aria-hidden="true">→</span>
+            <Link className={`${primaryLinkClass} mt-5`} href={ROUTES.dashboard}>
+              지금 대시보드로 이동 <span aria-hidden="true">→</span>
             </Link>
           </div>
 
@@ -556,11 +569,69 @@ function VideoGrowthSection({ mainData }: { mainData: MainPageData | null }) {
   );
 }
 
+function WorkflowSection() {
+  return (
+    <section className="border-b border-slate-100 bg-[linear-gradient(180deg,#ffffff_0%,#faf5ff_100%)]">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-violet-600">Workflow</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-ink">아이디어를 업로드 일정까지 이어갑니다</h2>
+          </div>
+          <p className="max-w-xl text-sm font-medium leading-6 text-slate-500">
+            채널 입력부터 추천 생성, 찜 목록 저장, 캘린더 등록까지 실제 화면 흐름에 맞춰 구성했습니다.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-5">
+          {workflowSteps.map((item) => (
+            <article className="min-h-[168px] rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-violet-100" key={item.step}>
+              <span className="inline-flex rounded-full bg-violet-50 px-3 py-1 text-xs font-black text-violet-700">{item.step}</span>
+              <h3 className="mt-4 text-sm font-extrabold text-ink">{item.title}</h3>
+              <p className="mt-2 text-xs font-medium leading-5 text-slate-500">{item.description}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ServicePagesSection() {
+  return (
+    <section className="border-b border-slate-100 bg-white">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-violet-600">Be-Celeb Pages</p>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-ink">서비스는 실제 작업 페이지로 이어집니다</h2>
+          <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">
+            추상적인 소개 대신 지금 구현된 페이지 기준으로 콘텐츠 제작 흐름을 정리했습니다.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {servicePages.map((page) => (
+            <Link
+              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100 transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md"
+              href={page.href}
+              key={page.title}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-base font-black text-ink">{page.title}</h3>
+                <span className="text-sm font-black text-violet-500 transition group-hover:translate-x-0.5">→</span>
+              </div>
+              <p className="mt-3 text-sm font-medium leading-6 text-slate-500">{page.description}</p>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function HeroDashboardPreview({ mainData }: { mainData: MainPageData | null }) {
   const stats = getHeroStats(mainData);
   const topTrend = mainData?.popularTrends[0];
   const sample = mainData?.sampleRecommendation;
-  const previewTags = (topTrend?.tags.length ? topTrend.tags : ["#브이로그", "#제품리뷰", "#감성루틴", "#Shorts아이디어"])
+  const previewTags = (topTrend?.tags.length ? topTrend.tags : ["#브이로그", "#제품리뷰", "#감성루틴", "#콘텐츠아이디어"])
     .map(cleanTag)
     .filter(Boolean)
     .slice(0, 4);
@@ -586,7 +657,7 @@ function HeroDashboardPreview({ mainData }: { mainData: MainPageData | null }) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-base font-extrabold text-ink">다시 오신 걸 환영해요, Alex</p>
-              <p className="mt-1 text-xs font-medium text-slate-500">당신의 Shorts 성장을 위한 트렌드 브리핑입니다.</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">당신의 YouTube 콘텐츠를 위한 트렌드 브리핑입니다.</p>
             </div>
             <span className="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-500">2024년 5월 12일 - 5월 18일</span>
           </div>
@@ -606,7 +677,7 @@ function HeroDashboardPreview({ mainData }: { mainData: MainPageData | null }) {
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-extrabold text-ink">{topTrend?.title ?? "트렌드 개요"}</p>
+                <p className="text-sm font-extrabold text-ink">{topTrend ? cleanLandingText(topTrend.title) : "트렌드 개요"}</p>
                 <span className="text-[11px] font-bold text-slate-400">{topTrend ? `점수 ${topTrend.score}` : "상승률 96%"}</span>
               </div>
               <svg className="h-32 w-full" role="img" viewBox="0 0 280 120">
@@ -619,12 +690,12 @@ function HeroDashboardPreview({ mainData }: { mainData: MainPageData | null }) {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-extrabold text-ink">추천 Shorts 아이디어</p>
+              <p className="text-sm font-extrabold text-ink">추천 콘텐츠 아이디어</p>
               <div className="mt-3 flex gap-3">
                 <div className="h-20 w-16 shrink-0 rounded-xl bg-[linear-gradient(135deg,#ddd6fe,#fbcfe8)]" />
                 <div className="min-w-0">
-                  <p className="text-sm font-extrabold leading-5 text-ink">{sample?.title ?? "내 삶을 담는 콘텐츠 메이커 되기"}</p>
-                  <p className="mt-2 text-[11px] leading-4 text-slate-500">{sample?.summary ?? "일상 장면도 빠르게 Shorts로 바꿔보세요."}</p>
+                  <p className="text-sm font-extrabold leading-5 text-ink">{sample ? cleanLandingText(sample.title) : "내 삶을 담는 콘텐츠 메이커 되기"}</p>
+                  <p className="mt-2 text-[11px] leading-4 text-slate-500">{sample?.summary ? cleanLandingText(sample.summary) : "일상 장면도 다음 업로드 아이디어로 정리해보세요."}</p>
                   <div className="mt-3 flex items-center gap-2">
                     <AvatarStack />
                     <span className="text-[11px] font-bold text-slate-400">
@@ -666,29 +737,29 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="relative z-10 space-y-7">
             <div className="space-y-5">
               <h1 className="relative max-w-2xl text-4xl font-black leading-[1.15] tracking-normal text-ink sm:text-5xl lg:text-[3.05rem]">
-                인플루언서 트렌드로
+                다음 YouTube 콘텐츠,
                 <br />
-                <span className="whitespace-nowrap">맞춤 Shorts 아이디어를</span>
+                <span className="whitespace-nowrap">감이 아니라 데이터로</span>
                 <br />
                 <span className="inline-block bg-[linear-gradient(90deg,#7c3aed_0%,#a855f7_35%,#ff3fb4_100%)] bg-clip-text [font-family:Pretendard,Inter,ui-sans-serif,system-ui,sans-serif] font-black text-transparent">
-                  추천받으세요
+                  정하세요
                 </span>
               </h1>
               <p className="text-[14px] font-medium leading-[1.65] text-[#64748b]">
-                <span className="block">Be Celeb은 비슷한 YouTube 크리에이터의</span>
-                <span className="block">최근 Shorts 패턴을 분석해, 다음에 올리면 좋을</span>
-                <span className="block">콘텐츠 아이디어를 추천합니다.</span>
+                <span className="block">내 채널과 비슷한 카테고리의 YouTube 콘텐츠 흐름을 분석해</span>
+                <span className="block">제목, 추천 이유, 해시태그, 콘티까지 필요한 항목만</span>
+                <span className="block">선택해서 추천받을 수 있습니다.</span>
               </p>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Link href={ROUTES.onboarding} className={primaryLinkClass}>
-                추천받기 <span aria-hidden="true">→</span>
+              <Link href={ROUTES.dashboard} className={primaryLinkClass}>
+                콘텐츠 추천받기 <span aria-hidden="true">→</span>
               </Link>
-              <Link href={ROUTES.trendingItems} className={secondaryLinkClass}>
+              <Link href={ROUTES.trends} className={secondaryLinkClass}>
                 트렌드 보기 <CompassIcon />
               </Link>
-              <Link href={ROUTES.saved} className={secondaryLinkClass}>
+              <Link href={ROUTES.favorites} className={secondaryLinkClass}>
                 찜 목록 <span aria-hidden="true">♡</span>
               </Link>
             </div>
@@ -707,7 +778,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
       </section>
 
+      <WorkflowSection />
       <TrendInsightSection mainData={mainData} />
+      <ServicePagesSection />
       <VideoGrowthSection mainData={mainData} />
     </div>
   );

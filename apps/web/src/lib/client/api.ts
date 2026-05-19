@@ -150,18 +150,25 @@ export type ShopProduct = {
   productUrl: string;
   brand: string | null;
   maker: string | null;
-  category: string | null;
-  creatorCategory: string;
+  equipmentCategory: string;
   searchKeyword: string;
   collectedAt: string | null;
 };
 
-export type ShopProductsResponse = {
-  category: string;
-  query: string | null;
-  source: string;
-  fromCache: boolean;
-  products: ShopProduct[];
+export type ShopSectionInfo = {
+  equipmentCategory: string;
+  keywords: string[];
+};
+
+export type ShopSection = {
+  equipmentCategory: string;
+  items: ShopProduct[];
+  error: string | null;
+  isFallback: boolean;
+};
+
+export type ShopSectionsResponse = {
+  sections: ShopSection[];
 };
 
 export class ApiClientError extends Error {
@@ -570,16 +577,18 @@ export async function refreshGrowthReport(signal?: AbortSignal) {
   return response.data;
 }
 
+export async function getShopSections(signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ sections: ShopSectionInfo[] }>>("/api/shop/sections", { signal });
+  return response.data.sections;
+}
+
 export async function getShopProducts(
-  params: { category?: string; query?: string; limit?: number; refresh?: boolean } = {},
+  params: { equipmentCategory?: string; limit?: number; refresh?: boolean } = {},
   signal?: AbortSignal,
 ) {
   const query = new URLSearchParams();
-  if (params.category) {
-    query.set("category", params.category);
-  }
-  if (params.query?.trim()) {
-    query.set("query", params.query.trim());
+  if (params.equipmentCategory) {
+    query.set("equipmentCategory", params.equipmentCategory);
   }
   if (params.limit) {
     query.set("limit", String(params.limit));
@@ -588,7 +597,7 @@ export async function getShopProducts(
     query.set("refresh", "true");
   }
   const path = query.size > 0 ? `/api/shop/products?${query.toString()}` : "/api/shop/products";
-  const response = await apiFetch<ApiSuccess<ShopProductsResponse>>(path, { signal });
+  const response = await apiFetch<ApiSuccess<ShopSectionsResponse>>(path, { signal });
   return response.data;
 }
 

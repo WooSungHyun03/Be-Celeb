@@ -14,23 +14,30 @@ class ShopProduct(BaseModel):
     productUrl: str
     brand: str | None = None
     maker: str | None = None
-    category: str | None = None
-    creatorCategory: str
+    equipmentCategory: str
     searchKeyword: str
     collectedAt: str | None = None
 
 
-class ShopProductsResponse(BaseModel):
-    category: str
-    query: str | None = None
-    source: str = "naver"
-    fromCache: bool
-    products: list[ShopProduct] = Field(default_factory=list)
+class ShopSectionInfo(BaseModel):
+    equipmentCategory: str
+    keywords: list[str]
+
+
+class ShopSection(BaseModel):
+    equipmentCategory: str
+    items: list[ShopProduct] = Field(default_factory=list)
+    error: str | None = None
+    isFallback: bool = False
+
+
+class ShopSectionsResponse(BaseModel):
+    sections: list[ShopSection] = Field(default_factory=list)
 
 
 class ShopCollectionSummary(BaseModel):
     ok: bool = True
-    categoriesChecked: int
+    sectionsChecked: int
     keywordsChecked: int
     productsUpserted: int
     errors: list[dict[str, str]] = Field(default_factory=list)

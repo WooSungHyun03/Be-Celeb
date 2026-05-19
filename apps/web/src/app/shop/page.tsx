@@ -1,32 +1,35 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Loading } from "@/components/common/Loading";
 import { PageHeader } from "@/components/common/PageHeader";
-import { CREATOR_CATEGORIES } from "@/lib/categories";
-import { getShopProducts, type ShopProduct, type ShopProductsResponse } from "@/lib/api/shop";
-import { formatKrw } from "@/lib/common/format";
+import { getShopProducts, type ShopProduct, type ShopSectionsResponse } from "@/lib/api/shop";
+import { formatKrw, stripHtmlTags } from "@/lib/common/format";
 
 function ProductCard({ product }: { product: ShopProduct }) {
+  const title = stripHtmlTags(product.title);
+
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md">
       <a className="block aspect-[4/3] bg-slate-100" href={product.productUrl} rel="noreferrer" target="_blank">
         {product.imageUrl ? (
-          <img alt={product.title} className="h-full w-full object-cover" src={product.imageUrl} />
+          <img alt={title} className="h-full w-full object-cover" src={product.imageUrl} />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">No image</div>
+          <div className="flex h-full items-center justify-center px-4 text-center text-sm font-semibold text-slate-400">
+            기본 추천 장비
+          </div>
         )}
       </a>
       <div className="flex flex-1 flex-col p-4">
         <div className="flex flex-wrap gap-2">
-          <Badge tone="brand">{product.creatorCategory}</Badge>
-          <Badge>{product.source}</Badge>
+          <Badge tone="brand">{product.equipmentCategory}</Badge>
+          <Badge>{product.source === "fallback" ? "추천 검색" : product.source}</Badge>
         </div>
-        <h2 className="mt-4 line-clamp-2 text-base font-bold leading-6 text-ink">{product.title}</h2>
+        <h2 className="mt-4 line-clamp-2 text-base font-bold leading-6 text-ink">{title}</h2>
         <div className="mt-3 grid gap-1 text-sm leading-6 text-slate-600">
           <p className="font-bold text-ink">{formatKrw(product.price)}</p>
           <p>{product.mallName || "쇼핑몰 정보 없음"}</p>
@@ -35,7 +38,7 @@ function ProductCard({ product }: { product: ShopProduct }) {
               {[product.brand, product.maker].filter(Boolean).join(" / ")}
             </p>
           ) : null}
-          {product.category ? <p className="line-clamp-1 text-xs text-slate-400">{product.category}</p> : null}
+          <p className="line-clamp-1 text-xs text-slate-400">{product.searchKeyword}</p>
         </div>
         <div className="mt-auto pt-4">
           <a
@@ -53,29 +56,24 @@ function ProductCard({ product }: { product: ShopProduct }) {
 }
 
 export default function ShopPage() {
-  const [category, setCategory] = useState("IT");
-  const [query, setQuery] = useState("");
-  const [submittedQuery, setSubmittedQuery] = useState("");
-  const [response, setResponse] = useState<ShopProductsResponse | null>(null);
+  const [response, setResponse] = useState<ShopSectionsResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const products = response?.products ?? [];
-  const hasQuery = submittedQuery.trim().length > 0;
-  const subtitle = useMemo(() => {
-    if (!response) {
-      return "Naver Shopping 검색 결과를 backend cache와 함께 불러옵니다.";
-    }
-    return response.fromCache ? "캐시된 Naver Shopping 결과입니다." : "Naver Shopping API에서 새로 수집한 결과입니다.";
-  }, [response]);
+  const sections = response?.sections ?? [];
+  const fallbackMessage = useMemo(() => {
+    const errors = sections.map((section) => section.error).filter((item): item is string => Boolean(item));
+    return errors[0] ?? null;
+  }, [sections]);
 
   useEffect(() => {
     const controller = new AbortController();
     setStatus("loading");
     setMessage("");
 
-    getShopProducts({ category, query: submittedQuery, limit: 24 }, controller.signal)
+    getShopProducts({ limit: 8 }, controller.signal)
       .then((data) => {
         setResponse(data);
         setStatus("ready");
@@ -88,17 +86,12 @@ export default function ShopPage() {
       });
 
     return () => controller.abort();
-  }, [category, submittedQuery, reloadKey]);
-
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmittedQuery(query.trim());
-  }
+  }, [reloadKey]);
 
   function handleRefresh() {
-    setStatus("loading");
+    setRefreshing(true);
     setMessage("");
-    getShopProducts({ category, query: submittedQuery, limit: 24, refresh: true })
+    getShopProducts({ limit: 8, refresh: true })
       .then((data) => {
         setResponse(data);
         setStatus("ready");
@@ -106,59 +99,45 @@ export default function ShopPage() {
       .catch((error) => {
         setStatus("error");
         setMessage(error instanceof Error ? error.message : "상품 목록 새로고침에 실패했습니다.");
-      });
+      })
+      .finally(() => setRefreshing(false));
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        description="카테고리별 제작 장비를 Naver Shopping 검색 결과 기반으로 확인합니다."
+        action={
+          <Button disabled={refreshing || status === "loading"} onClick={handleRefresh} type="button" variant="secondary">
+            {refreshing ? "새로고침 중" : "실시간 새로고침"}
+          </Button>
+        }
+        description="유튜브 크리에이터에게 필요한 촬영·편집 장비를 한눈에 확인하세요."
         eyebrow={<Badge tone="brand">Naver Shopping</Badge>}
         title="크리에이터 상점"
       />
 
       <Card>
-        <form className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_auto_auto] lg:items-end" onSubmit={handleSearch}>
-          <label className="block text-sm font-semibold text-slate-700">
-            <span>카테고리</span>
-            <select
-              className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
-              onChange={(event) => {
-                setCategory(event.target.value);
-                setSubmittedQuery("");
-                setQuery("");
-              }}
-              value={category}
-            >
-              {CREATOR_CATEGORIES.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block text-sm font-semibold text-slate-700">
-            <span>검색어</span>
-            <input
-              className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="예: 유튜브 마이크, 링라이트"
-              value={query}
-            />
-          </label>
-
-          <Button type="submit">검색</Button>
-          <Button onClick={handleRefresh} type="button" variant="secondary">
-            새로고침
-          </Button>
-        </form>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+          <div>
+            <h2 className="text-base font-bold text-ink">필수 장비 자동 진열</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              카메라, 마이크, 조명, 편집툴, 거치대 등 제작 흐름에 필요한 장비 섹션을 자동으로 불러옵니다.
+            </p>
+          </div>
+          <Badge tone="info">광고/제휴 링크 아님</Badge>
+        </div>
         <div className="mt-4 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-500">
-          이 목록은 광고/제휴 링크가 아니라 Naver Shopping Search API 검색 결과입니다. 가격과 재고는 판매처에서 다시 확인하세요.
+          이 목록은 네이버 쇼핑 검색 결과와 backend cache를 함께 사용합니다. 가격과 재고는 판매처에서 다시 확인하세요.
         </div>
       </Card>
 
-      {status === "loading" ? <Loading label="Naver Shopping 상품을 불러오는 중입니다." /> : null}
+      {fallbackMessage ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+          {fallbackMessage}
+        </div>
+      ) : null}
+
+      {status === "loading" ? <Loading label="크리에이터 장비 섹션을 불러오는 중입니다." /> : null}
 
       {status === "error" ? (
         <EmptyState
@@ -167,32 +146,52 @@ export default function ShopPage() {
               다시 시도
             </Button>
           }
-          description={message.includes("NAVER_CLIENT") ? "Render Backend에 NAVER_CLIENT_ID와 NAVER_CLIENT_SECRET을 설정한 뒤 다시 배포하세요." : message}
+          description={
+            message.includes("NAVER_CLIENT")
+              ? "네이버 쇼핑 API 인증 설정이 올바르지 않습니다. 관리자에게 문의하세요."
+              : message || "실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다."
+          }
           title="상품 목록을 불러오지 못했습니다"
         />
       ) : null}
 
       {status === "ready" ? (
-        <section className="space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-ink">{hasQuery ? `"${submittedQuery}" 검색 결과` : `${category} 추천 장비`}</h2>
-              <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
-            </div>
-            <p className="text-sm font-bold text-slate-500">{products.length}개</p>
-          </div>
-
-          {products.length === 0 ? (
+        <section className="space-y-8">
+          {sections.length === 0 ? (
             <EmptyState
-              description="아직 캐시된 상품이 없거나 검색 결과가 없습니다. 새로고침으로 Naver Shopping API 수집을 실행해 보세요."
+              description="아직 표시할 장비 섹션이 없습니다. shop migration과 backend 배포 상태를 확인하세요."
               title="표시할 상품이 없습니다"
             />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {products.map((product) => (
-                <ProductCard key={`${product.source}-${product.sourceProductId}-${product.searchKeyword}`} product={product} />
-              ))}
-            </div>
+            sections.map((section) => (
+              <div className="space-y-4" key={section.equipmentCategory}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-ink">{section.equipmentCategory}</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {section.isFallback ? "기본 추천 검색어로 구성한 fallback 섹션입니다." : "네이버 쇼핑 검색 결과 기반 장비 목록입니다."}
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold text-slate-500">{section.items.length}개</p>
+                </div>
+
+                {section.items.length === 0 ? (
+                  <EmptyState
+                    description="이 섹션에 표시할 상품이 없습니다. 실시간 새로고침 또는 daily collector 상태를 확인하세요."
+                    title={`${section.equipmentCategory} 상품 없음`}
+                  />
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    {section.items.slice(0, 8).map((product, index) => (
+                      <ProductCard
+                        key={`${product.source}-${product.sourceProductId ?? product.productUrl}-${product.searchKeyword}-${index}`}
+                        product={product}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </section>
       ) : null}

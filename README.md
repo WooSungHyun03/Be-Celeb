@@ -318,6 +318,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 YOUTUBE_API_KEY=
+NAVER_CLIENT_ID=
+NAVER_CLIENT_SECRET=
 LOCAL_LLM_API_URL=https://llm-api.be-celeb.org/v1/chat/completions
 LOCAL_LLM_API_KEY=
 LOCAL_LLM_MODEL=local-model
@@ -352,6 +354,7 @@ API_BASE_URL=https://api.be-celeb.org
 - `/health`가 실패하면 Render Start Command와 `PORT` 사용 여부를 확인합니다.
 - Supabase 인증 redirect가 실패하면 Site URL과 Redirect URLs를 확인합니다.
 - AI 추천이 실패하면 `YOUTUBE_API_KEY`, `LOCAL_LLM_API_URL`, `LOCAL_LLM_API_KEY` 설정을 확인합니다.
+- `/shop`에서 Naver 401 `errorCode: 024`가 나오면 Render Backend의 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, Render 재배포 여부, Naver Developers 앱의 “검색 API / 쇼핑 검색 API” 권한을 확인합니다.
 - `api.be-celeb.org` TLS 또는 routing 문제가 생기면 Cloudflare DNS record를 `DNS only`로 바꿔 확인합니다.
 
 ## 보안 원칙

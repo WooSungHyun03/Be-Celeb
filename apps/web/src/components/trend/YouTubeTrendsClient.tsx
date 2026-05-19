@@ -396,7 +396,7 @@ function KeywordsSection({
 function CategorySelect({ value, onChange }: { value: string; onChange: (category: string) => void }) {
   return (
     <label className="text-sm font-semibold text-slate-700">
-      <span className="sr-only">Naver 카테고리</span>
+      <span className="sr-only">검색 관심도 카테고리</span>
       <select
         className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
         onChange={(event) => onChange(event.target.value)}
@@ -416,7 +416,7 @@ function NaverKeywordCharts({ data }: { data: NaverTrendKeywordsResponse }) {
   if (data.topKeywords.length === 0) {
     return (
       <EmptyState
-        title="아직 네이버 트렌드 수집 데이터가 없습니다."
+        title="아직 검색 관심도 수집 데이터가 없습니다."
         description="관리자 수동 수집 또는 daily collector를 확인하세요."
       />
     );
@@ -425,7 +425,7 @@ function NaverKeywordCharts({ data }: { data: NaverTrendKeywordsResponse }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-[0.75fr_1.25fr]">
-        <Card title="Naver Top Keywords">
+        <Card title="인기 검색 키워드">
           <div className="space-y-3">
             {data.topKeywords.map((item, index) => (
               <div className="flex items-center justify-between gap-3" key={item.keyword}>
@@ -447,9 +447,9 @@ function NaverKeywordCharts({ data }: { data: NaverTrendKeywordsResponse }) {
           </div>
         </Card>
 
-        <Card title="Naver keyword ratio">
+        <Card title="검색 관심도 추이">
           <div className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800">
-            ratio는 절대 검색량이 아니라 Naver DataLab이 제공하는 상대 검색 추이 지표입니다.
+            검색 관심도 지표는 절대 검색량이 아니라 기간과 키워드 기준으로 정규화된 상대 추이입니다.
           </div>
           <div className="h-80 min-w-0">
             <ResponsiveContainer height="100%" width="100%">
@@ -483,9 +483,9 @@ function CombinedTrendSection({ state, onRetry }: { state: AsyncState<CombinedTr
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-ink">YouTube + Naver 결합 트렌드</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-ink">YouTube + 검색 관심도 결합 트렌드</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          YouTube 업로드 패턴과 네이버 검색 관심도를 결합한 한국 트렌드 지표
+          YouTube 업로드 패턴과 외부 검색 관심도를 결합한 한국 트렌드 지표
         </p>
       </div>
 
@@ -494,7 +494,7 @@ function CombinedTrendSection({ state, onRetry }: { state: AsyncState<CombinedTr
       {state.status === "success" && state.data?.combined.keywords.length === 0 ? (
         <EmptyState
           title="결합할 트렌드 데이터가 없습니다."
-          description="YouTube 영상 태그와 Naver trend daily points가 쌓이면 Top 10 결합 점수가 표시됩니다."
+          description="YouTube 영상 태그와 검색 관심도 데이터가 쌓이면 Top 10 결합 점수가 표시됩니다."
         />
       ) : null}
       {state.status === "success" && state.data && state.data.combined.keywords.length > 0 ? (
@@ -508,7 +508,7 @@ function CombinedTrendSection({ state, onRetry }: { state: AsyncState<CombinedTr
                     <th className="px-3 py-2 text-right">Score</th>
                     <th className="px-3 py-2 text-right">YouTube tags</th>
                     <th className="px-3 py-2 text-right">YouTube views</th>
-                    <th className="px-3 py-2 text-right">Naver ratio</th>
+                    <th className="px-3 py-2 text-right">검색 관심도</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -537,7 +537,7 @@ function CombinedTrendSection({ state, onRetry }: { state: AsyncState<CombinedTr
                 ))}
               </div>
             </Card>
-            <Card title="Naver top keywords">
+            <Card title="인기 검색 키워드">
               <div className="space-y-2">
                 {state.data.naver.topKeywords.slice(0, 8).map((keyword) => (
                   <div className="flex items-center justify-between gap-3 text-sm" key={keyword.keyword}>
@@ -576,8 +576,8 @@ function NaverTrendsSection({
       <section className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-ink">네이버 검색 트렌드</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Naver DataLab 통합검색어 트렌드 API의 카테고리별 상대 ratio를 표시합니다.</p>
+            <h2 className="text-2xl font-bold tracking-tight text-ink">검색 관심도</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">카테고리별 외부 검색 데이터의 상대 추이를 표시합니다.</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <CategorySelect onChange={onCategoryChange} value={category} />
@@ -586,7 +586,7 @@ function NaverTrendsSection({
         </div>
 
         {naverState.status === "loading" || naverState.status === "idle" ? <KeywordSkeleton /> : null}
-        {naverState.status === "error" ? <ErrorState message={naverState.error ?? "네이버 트렌드 데이터를 불러오지 못했습니다."} onRetry={onRetry} /> : null}
+        {naverState.status === "error" ? <ErrorState message={naverState.error ?? "검색 관심도 데이터를 불러오지 못했습니다."} onRetry={onRetry} /> : null}
         {naverState.status === "success" && naverState.data ? <NaverKeywordCharts data={naverState.data} /> : null}
       </section>
 
@@ -663,7 +663,7 @@ export function YouTubeTrendsClient() {
           setNaverState({
             status: "error",
             data: null,
-            error: error instanceof Error ? error.message : "네이버 트렌드 데이터를 불러오지 못했어요.",
+            error: error instanceof Error ? error.message : "검색 관심도 데이터를 불러오지 못했어요.",
           });
         }
       });
@@ -695,9 +695,9 @@ export function YouTubeTrendsClient() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow={<Badge tone="brand">YouTube + Naver</Badge>}
+        eyebrow={<Badge tone="brand">YouTube + 검색 관심도</Badge>}
         title="Trends"
-        description="카테고리별 인기 영상, YouTube 태그, Naver 검색 관심도를 함께 확인하세요."
+        description="카테고리별 인기 영상, YouTube 태그, 검색 관심도를 함께 확인하세요."
       />
 
       <PopularVideosSection

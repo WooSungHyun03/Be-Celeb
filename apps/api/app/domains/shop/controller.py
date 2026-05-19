@@ -7,18 +7,24 @@ from fastapi.responses import JSONResponse
 
 from app.core.responses import ApiResponse, error_response
 from app.core.security import verify_cron_secret
-from app.domains.shop.schemas import ShopCollectionSummary, ShopProductsResponse
-from app.domains.shop.service import collect_shop_products, get_shop_products
+from app.domains.shop.schemas import ShopCollectionSummary, ShopSectionInfo, ShopSectionsResponse
+from app.domains.shop.service import collect_shop_products, get_shop_products, list_shop_sections
+
+
+async def shop_sections() -> ApiResponse[dict[str, list[ShopSectionInfo]]] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await list_shop_sections())
+    except Exception as error:
+        return error_response(error)
 
 
 async def shop_products(
-    category: str = Query(default="IT"),
-    query: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=50),
+    equipmentCategory: str | None = Query(default=None),
+    limit: int = Query(default=8, ge=1, le=20),
     refresh: bool = Query(default=False),
-) -> ApiResponse[ShopProductsResponse] | JSONResponse:
+) -> ApiResponse[ShopSectionsResponse] | JSONResponse:
     try:
-        return ApiResponse(success=True, data=await get_shop_products(category, query, limit, refresh))
+        return ApiResponse(success=True, data=await get_shop_products(equipmentCategory, limit, refresh))
     except Exception as error:
         return error_response(error)
 
@@ -34,4 +40,4 @@ async def collect_shop_products_cron(
         return error_response(error)
 
 
-__all__ = ["collect_shop_products_cron", "shop_products"]
+__all__ = ["collect_shop_products_cron", "shop_products", "shop_sections"]

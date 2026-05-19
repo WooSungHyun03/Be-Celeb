@@ -1,24 +1,41 @@
 from __future__ import annotations
 
-import html
-import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote_plus
 
 import httpx
 
+from app.common.text import strip_html_tags
 from app.core.config import get_settings
-from app.core.exceptions import BadRequestException, BackendApiError, ExternalAPIException, missing_env
+from app.core.exceptions import BackendApiError, ExternalAPIException, missing_env
 from app.core.logging import get_logger
-from app.domains.shop.schemas import ShopCollectionSummary, ShopProduct, ShopProductsResponse
+from app.domains.shop.schemas import ShopCollectionSummary, ShopProduct, ShopSection, ShopSectionInfo, ShopSectionsResponse
 
 logger = get_logger(__name__)
 
 NAVER_SHOP_URL = "https://openapi.naver.com/v1/search/shop.json"
 SHOP_JOB_NAME = "creator_shop_products_daily_collection"
-DEFAULT_LIMIT = 20
-MAX_LIMIT = 50
-CREATOR_CATEGORIES = {"게임", "운동", "IT", "노래", "OTT", "일상", "뷰티", "스터디", "코미디", "먹방", "춤"}
+DEFAULT_LIMIT = 8
+MAX_LIMIT = 20
+NAVER_AUTH_ERROR_MESSAGE = "네이버 쇼핑 API 인증 설정이 올바르지 않습니다. 관리자에게 문의하세요."
+SHOP_FALLBACK_MESSAGE = "실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다."
+
+EQUIPMENT_KEYWORDS: dict[str, list[str]] = {
+    "카메라": ["브이로그 카메라", "유튜브 카메라", "액션캠"],
+    "마이크": ["유튜브 마이크", "무선 핀마이크", "USB 마이크"],
+    "조명": ["링라이트", "유튜브 조명", "촬영 조명"],
+    "편집툴": ["영상 편집 키보드", "편집 모니터", "외장 SSD"],
+    "삼각대/거치대": ["카메라 삼각대", "스마트폰 삼각대", "책상 거치대"],
+    "배경/소품": ["촬영 배경지", "크로마키 배경", "제품 촬영 소품"],
+    "저장장치": ["외장 SSD", "SD 카드", "CFexpress 카드"],
+    "라이브/스트리밍 장비": ["웹캠", "캡처보드", "스트림덱"],
+}
+
+
+class NaverShoppingAuthError(ExternalAPIException):
+    def __init__(self) -> None:
+        super().__init__(NAVER_AUTH_ERROR_MESSAGE, "NAVER_SHOPPING_AUTH_ERROR")
 
 
 def _supabase_url() -> str:
@@ -84,11 +101,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _clean_html(value: Any) -> str:
-    text = html.unescape(str(value or ""))
-    return re.sub(r"<[^>]+>", "", text).strip()
-
-
 def _as_int(value: Any) -> int | None:
     try:
         parsed = int(value)
@@ -97,21 +109,30 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
-def _validate_category(category: str) -> str:
-    value = category.strip()
-    if value not in CREATOR_CATEGORIES:
-        raise BadRequestException(f"category must be one of: {', '.join(sorted(CREATOR_CATEGORIES))}.", "VALIDATION_ERROR")
-    return value
-
-
 def _normalize_limit(limit: int | None) -> int:
     if limit is None:
         return DEFAULT_LIMIT
     return min(max(int(limit), 1), MAX_LIMIT)
 
 
-def _require_naver_credentials() -> tuple[str, str]:
+def _search_url(keyword: str) -> str:
+    return f"https://search.shopping.naver.com/search/all?query={quote_plus(keyword)}"
+
+
+def _safe_text(value: Any) -> str:
+    return strip_html_tags(str(value or "")).strip()
+
+
+def _naver_credentials() -> tuple[str, str]:
     settings = get_settings()
+    has_client_id = bool(settings.naver_client_id)
+    has_client_secret = bool(settings.naver_client_secret)
+    if not has_client_id or not has_client_secret:
+        logger.warning(
+            "Naver Shopping credentials missing: hasClientId=%s hasClientSecret=%s",
+            has_client_id,
+            has_client_secret,
+        )
     if not settings.naver_client_id:
         raise missing_env("NAVER_CLIENT_ID")
     if not settings.naver_client_secret:
@@ -120,82 +141,114 @@ def _require_naver_credentials() -> tuple[str, str]:
 
 
 def _product_from_row(row: dict[str, Any]) -> ShopProduct:
+    equipment_category = str(
+        row.get("equipment_category")
+        or row.get("shop_category")
+        or row.get("creator_category")
+        or row.get("category")
+        or "기타"
+    )
+    product_url = str(row.get("product_url") or "")
+    keyword = str(row.get("search_keyword") or equipment_category)
     return ShopProduct(
         id=row.get("id") if isinstance(row.get("id"), str) else None,
         source=str(row.get("source") or "naver"),
         sourceProductId=row.get("source_product_id") if isinstance(row.get("source_product_id"), str) else None,
-        title=str(row.get("title") or "Naver Shopping product"),
+        title=_safe_text(row.get("title")) or "Naver Shopping product",
         imageUrl=row.get("image_url") if isinstance(row.get("image_url"), str) else None,
         price=_as_int(row.get("price")),
         mallName=row.get("mall_name") if isinstance(row.get("mall_name"), str) else None,
-        productUrl=str(row.get("product_url") or ""),
+        productUrl=product_url or _search_url(keyword),
         brand=row.get("brand") if isinstance(row.get("brand"), str) else None,
         maker=row.get("maker") if isinstance(row.get("maker"), str) else None,
-        category=row.get("category") if isinstance(row.get("category"), str) else None,
-        creatorCategory=str(row.get("creator_category") or ""),
-        searchKeyword=str(row.get("search_keyword") or ""),
+        equipmentCategory=equipment_category,
+        searchKeyword=keyword,
         collectedAt=row.get("collected_at") if isinstance(row.get("collected_at"), str) else None,
     )
 
 
-def _row_from_naver_item(item: dict[str, Any], creator_category: str, keyword: str, collected_at: str) -> dict[str, Any]:
+def _row_from_naver_item(item: dict[str, Any], equipment_category: str, keyword: str, collected_at: str) -> dict[str, Any]:
     product_url = str(item.get("link") or "").strip()
     source_product_id = str(item.get("productId") or "").strip() or product_url
-    category_parts = [
-        _clean_html(item.get(key))
-        for key in ("category1", "category2", "category3", "category4")
-        if _clean_html(item.get(key))
-    ]
     return {
         "source": "naver",
         "source_product_id": source_product_id,
-        "title": _clean_html(item.get("title")) or "Naver Shopping product",
+        "title": _safe_text(item.get("title")) or "Naver Shopping product",
         "image_url": str(item.get("image") or "").strip() or None,
         "price": _as_int(item.get("lprice")),
-        "mall_name": _clean_html(item.get("mallName")) or None,
-        "product_url": product_url,
-        "brand": _clean_html(item.get("brand")) or None,
-        "maker": _clean_html(item.get("maker")) or None,
-        "category": " > ".join(category_parts) if category_parts else None,
-        "creator_category": creator_category,
+        "mall_name": _safe_text(item.get("mallName")) or None,
+        "product_url": product_url or _search_url(keyword),
+        "brand": _safe_text(item.get("brand")) or None,
+        "maker": _safe_text(item.get("maker")) or None,
+        "equipment_category": equipment_category,
         "search_keyword": keyword,
         "raw": item,
         "collected_at": collected_at,
     }
 
 
-async def _active_keywords(category: str | None = None) -> list[dict[str, Any]]:
+def _dedupe_products(products: list[ShopProduct], limit: int) -> list[ShopProduct]:
+    seen: set[str] = set()
+    deduped: list[ShopProduct] = []
+    for product in products:
+        key = product.sourceProductId or product.productUrl or product.title
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(product)
+        if len(deduped) >= limit:
+            break
+    return deduped
+
+
+async def _active_keywords(equipment_category: str | None = None) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
-        "select": "id,creator_category,shop_category,keyword,source,is_active",
+        "select": "id,equipment_category,keyword,source,is_active",
         "is_active": "eq.true",
         "source": "eq.naver",
-        "order": "creator_category.asc,keyword.asc",
+        "order": "equipment_category.asc,keyword.asc",
     }
-    if category:
-        params["creator_category"] = f"eq.{category}"
+    if equipment_category:
+        params["equipment_category"] = f"eq.{equipment_category}"
     rows = await _get("creator_shop_keywords", params)
     return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
 
 
-async def _cached_products(category: str, query: str | None, limit: int) -> list[ShopProduct]:
-    params: dict[str, Any] = {
-        "select": "id,source,source_product_id,title,image_url,price,mall_name,product_url,brand,maker,category,creator_category,search_keyword,collected_at",
-        "creator_category": f"eq.{category}",
-        "order": "collected_at.desc,price.asc.nullslast",
-        "limit": str(limit),
-    }
-    if query:
-        params["search_keyword"] = f"eq.{query}"
-    rows = await _get("creator_shop_products", params)
-    return [_product_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+def _default_keyword_rows(equipment_category: str | None = None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for section, keywords in EQUIPMENT_KEYWORDS.items():
+        if equipment_category and section != equipment_category:
+            continue
+        rows.extend({"equipment_category": section, "keyword": keyword, "source": "naver", "is_active": True} for keyword in keywords)
+    return rows
+
+
+async def _keywords_for_section(equipment_category: str) -> list[str]:
+    try:
+        rows = await _active_keywords(equipment_category)
+    except Exception as error:
+        logger.warning("Failed to load shop keywords from cache for %s: %s", equipment_category, error)
+        rows = []
+    keywords = [str(row.get("keyword")) for row in rows if isinstance(row.get("keyword"), str) and row.get("keyword")]
+    return keywords or EQUIPMENT_KEYWORDS.get(equipment_category, [])
+
+
+async def _cached_products(equipment_category: str, limit: int) -> list[ShopProduct]:
+    rows = await _get(
+        "creator_shop_products",
+        {
+            "select": "id,source,source_product_id,title,image_url,price,mall_name,product_url,brand,maker,equipment_category,search_keyword,collected_at",
+            "equipment_category": f"eq.{equipment_category}",
+            "order": "collected_at.desc,price.asc.nullslast",
+            "limit": str(max(limit * 3, limit)),
+        },
+    )
+    products = [_product_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    return _dedupe_products(products, limit)
 
 
 async def _fetch_naver_shop(keyword: str, display: int) -> list[dict[str, Any]]:
-    client_id, client_secret = _require_naver_credentials()
-    headers = {
-        "X-Naver-Client-Id": client_id,
-        "X-Naver-Client-Secret": client_secret,
-    }
+    client_id, client_secret = _naver_credentials()
     params = {
         "query": keyword,
         "display": str(min(max(display, 1), 100)),
@@ -203,11 +256,38 @@ async def _fetch_naver_shop(keyword: str, display: int) -> list[dict[str, Any]]:
         "sort": "sim",
     }
     async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.get(NAVER_SHOP_URL, headers=headers, params=params)
+        response = await client.get(
+            NAVER_SHOP_URL,
+            headers={
+                "X-Naver-Client-Id": client_id,
+                "X-Naver-Client-Secret": client_secret,
+            },
+            params=params,
+        )
+
+    payload: dict[str, Any] = {}
+    if response.content:
+        try:
+            parsed = response.json()
+            payload = parsed if isinstance(parsed, dict) else {}
+        except ValueError:
+            payload = {}
+
     if response.status_code >= 400:
-        raise ExternalAPIException(f"Naver Shopping API request failed ({response.status_code}): {response.text[:500]}")
-    payload = response.json()
-    items = payload.get("items") if isinstance(payload, dict) else None
+        error_code = payload.get("errorCode")
+        logger.warning(
+            "Naver Shopping API failed: status=%s errorCode=%s query=%s hasClientId=%s hasClientSecret=%s",
+            response.status_code,
+            error_code,
+            keyword,
+            bool(client_id),
+            bool(client_secret),
+        )
+        if response.status_code == 401 and error_code == "024":
+            raise NaverShoppingAuthError()
+        raise ExternalAPIException(f"Naver Shopping API request failed ({response.status_code}).")
+
+    items = payload.get("items")
     return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
 
 
@@ -215,46 +295,127 @@ async def _upsert_products(rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
     await _post(
-        "creator_shop_products?on_conflict=source,source_product_id,creator_category,search_keyword",
+        "creator_shop_products?on_conflict=source,source_product_id,equipment_category,search_keyword",
         rows,
         prefer="resolution=merge-duplicates,return=minimal",
     )
     return len(rows)
 
 
-async def _fetch_and_cache(category: str, keywords: list[str], limit: int) -> list[ShopProduct]:
+async def _fetch_and_cache(equipment_category: str, keywords: list[str], limit: int) -> list[ShopProduct]:
     collected_at = _now_iso()
     rows: list[dict[str, Any]] = []
-    per_keyword_limit = max(5, min(20, limit))
+    per_keyword_limit = max(4, min(10, limit))
+
     for keyword in keywords:
         items = await _fetch_naver_shop(keyword, per_keyword_limit)
-        rows.extend(_row_from_naver_item(item, category, keyword, collected_at) for item in items)
-    await _upsert_products(rows)
+        rows.extend(_row_from_naver_item(item, equipment_category, keyword, collected_at) for item in items)
+        if len(rows) >= limit:
+            break
+
+    try:
+        await _upsert_products(rows)
+    except Exception as error:
+        logger.warning("Failed to upsert shop product cache for %s: %s", equipment_category, error)
+
     products = [_product_from_row(row) for row in rows]
     products.sort(key=lambda product: (product.price is None, product.price or 0, product.title))
-    return products[:limit]
+    return _dedupe_products(products, limit)
 
 
-async def get_shop_products(category: str = "IT", query: str | None = None, limit: int | None = None, refresh: bool = False) -> ShopProductsResponse:
-    creator_category = _validate_category(category)
-    normalized_query = query.strip() if query and query.strip() else None
-    normalized_limit = _normalize_limit(limit)
+def _fallback_products(equipment_category: str, limit: int) -> list[ShopProduct]:
+    products: list[ShopProduct] = []
+    for keyword in EQUIPMENT_KEYWORDS.get(equipment_category, [])[:limit]:
+        products.append(
+            ShopProduct(
+                id=None,
+                source="fallback",
+                sourceProductId=f"fallback-{equipment_category}-{keyword}",
+                title=f"{keyword} 추천 검색",
+                imageUrl=None,
+                price=None,
+                mallName="Naver Shopping 검색",
+                productUrl=_search_url(keyword),
+                brand=None,
+                maker=None,
+                equipmentCategory=equipment_category,
+                searchKeyword=keyword,
+                collectedAt=None,
+            )
+        )
+    return products
 
+
+def _fallback_message(error: Exception) -> str:
+    text = str(error)
+    if isinstance(error, NaverShoppingAuthError) or "NAVER_CLIENT" in text or "NAVER_SHOPPING_AUTH_ERROR" in text:
+        return NAVER_AUTH_ERROR_MESSAGE
+    return SHOP_FALLBACK_MESSAGE
+
+
+async def _section_products(equipment_category: str, limit: int, refresh: bool) -> ShopSection:
+    cached: list[ShopProduct] = []
     if not refresh:
-        cached = await _cached_products(creator_category, normalized_query, normalized_limit)
+        try:
+            cached = await _cached_products(equipment_category, limit)
+            if len(cached) >= min(4, limit):
+                return ShopSection(equipmentCategory=equipment_category, items=cached, isFallback=False)
+        except Exception as error:
+            logger.warning("Failed to read shop product cache for %s: %s", equipment_category, error)
+
+    try:
+        keywords = await _keywords_for_section(equipment_category)
+        products = await _fetch_and_cache(equipment_category, keywords, limit)
+        if products:
+            return ShopSection(equipmentCategory=equipment_category, items=products, isFallback=False)
+    except Exception as error:
+        logger.warning("Shop live product load failed for %s: %s", equipment_category, error)
         if cached:
-            return ShopProductsResponse(category=creator_category, query=normalized_query, fromCache=True, products=cached)
+            return ShopSection(
+                equipmentCategory=equipment_category,
+                items=cached,
+                error=_fallback_message(error),
+                isFallback=False,
+            )
+        return ShopSection(
+            equipmentCategory=equipment_category,
+            items=_fallback_products(equipment_category, limit),
+            error=_fallback_message(error),
+            isFallback=True,
+        )
 
-    if normalized_query:
-        keywords = [normalized_query]
-    else:
-        keyword_rows = await _active_keywords(creator_category)
-        keywords = [str(row.get("keyword")) for row in keyword_rows if isinstance(row.get("keyword"), str)]
-        if not keywords:
-            return ShopProductsResponse(category=creator_category, query=None, fromCache=True, products=[])
+    if cached:
+        return ShopSection(equipmentCategory=equipment_category, items=cached, error=SHOP_FALLBACK_MESSAGE, isFallback=False)
+    return ShopSection(
+        equipmentCategory=equipment_category,
+        items=_fallback_products(equipment_category, limit),
+        error=SHOP_FALLBACK_MESSAGE,
+        isFallback=True,
+    )
 
-    products = await _fetch_and_cache(creator_category, keywords, normalized_limit)
-    return ShopProductsResponse(category=creator_category, query=normalized_query, fromCache=False, products=products)
+
+async def list_shop_sections() -> dict[str, list[ShopSectionInfo]]:
+    return {
+        "sections": [
+            ShopSectionInfo(equipmentCategory=equipment_category, keywords=keywords)
+            for equipment_category, keywords in EQUIPMENT_KEYWORDS.items()
+        ]
+    }
+
+
+async def get_shop_products(
+    equipment_category: str | None = None,
+    limit: int | None = None,
+    refresh: bool = False,
+) -> ShopSectionsResponse:
+    normalized_limit = _normalize_limit(limit)
+    sections = [equipment_category] if equipment_category else list(EQUIPMENT_KEYWORDS)
+    sections = [section for section in sections if section in EQUIPMENT_KEYWORDS]
+    if equipment_category and not sections:
+        return ShopSectionsResponse(sections=[])
+    return ShopSectionsResponse(
+        sections=[await _section_products(section, normalized_limit, refresh) for section in sections]
+    )
 
 
 async def _start_collection_log(started_at: str) -> str | None:
@@ -294,39 +455,48 @@ async def _finish_collection_log(log_id: str | None, status: str, summary: dict[
         logger.warning("Failed to finish shop collection log: %s", error)
 
 
+async def _collection_keywords() -> list[dict[str, Any]]:
+    try:
+        rows = await _active_keywords()
+    except Exception as error:
+        logger.warning("Failed to load active shop keywords for collection: %s", error)
+        rows = []
+    return rows or _default_keyword_rows()
+
+
 async def collect_shop_products() -> ShopCollectionSummary:
     started_at = _now_iso()
     log_id = await _start_collection_log(started_at)
     errors: list[dict[str, str]] = []
     products_upserted = 0
-    categories: set[str] = set()
+    sections: set[str] = set()
 
     try:
-        _require_naver_credentials()
-        keywords = await _active_keywords()
+        _naver_credentials()
+        keywords = await _collection_keywords()
         for row in keywords:
-            creator_category = str(row.get("creator_category") or "")
+            equipment_category = str(row.get("equipment_category") or "")
             keyword = str(row.get("keyword") or "")
-            if not creator_category or not keyword:
+            if not equipment_category or not keyword:
                 continue
-            categories.add(creator_category)
+            sections.add(equipment_category)
             try:
                 items = await _fetch_naver_shop(keyword, 10)
                 collected_at = _now_iso()
-                product_rows = [_row_from_naver_item(item, creator_category, keyword, collected_at) for item in items]
+                product_rows = [_row_from_naver_item(item, equipment_category, keyword, collected_at) for item in items]
                 products_upserted += await _upsert_products(product_rows)
             except Exception as error:
-                logger.exception("Shop product collection failed for %s / %s", creator_category, keyword)
+                logger.exception("Shop product collection failed for %s / %s", equipment_category, keyword)
                 errors.append(
                     {
-                        "category": creator_category,
+                        "equipmentCategory": equipment_category,
                         "keyword": keyword,
                         "message": str(error),
                     }
                 )
 
         summary = ShopCollectionSummary(
-            categoriesChecked=len(categories),
+            sectionsChecked=len(sections),
             keywordsChecked=len(keywords),
             productsUpserted=products_upserted,
             errors=errors,
