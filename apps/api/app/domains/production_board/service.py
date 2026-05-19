@@ -15,12 +15,6 @@ PRODUCTION_BOARD_SELECT = (
     "status,priority,memo,due_date,upload_scheduled_at,created_at,updated_at"
 )
 PRODUCTION_BOARD_STATUSES = ("idea", "script", "filming", "editing", "uploaded")
-NEXT_STATUS_BY_STATUS = {
-    "idea": "script",
-    "script": "filming",
-    "filming": "editing",
-    "editing": "uploaded",
-}
 
 
 class ProductionBoardAlreadyAddedError(BackendApiError):
@@ -247,12 +241,6 @@ async def update_production_board_item_status(
     current_status = current_row.get("status")
     if requested_status == current_status:
         return {"item": _item_from_row(current_row)}
-
-    next_status = NEXT_STATUS_BY_STATUS.get(current_status)
-    if not next_status:
-        raise BadRequestException("업로드 완료 상태에서는 다음 단계로 이동할 수 없습니다.", "INVALID_STATUS_TRANSITION")
-    if requested_status != next_status:
-        raise BadRequestException("제작 보드 상태는 한 단계씩만 이동할 수 있습니다.", "INVALID_STATUS_TRANSITION")
 
     rows = await _request(
         "PATCH",

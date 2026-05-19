@@ -37,10 +37,20 @@ export const NEXT_STATUS_MAP: Partial<Record<ProductionBoardStatus, ProductionBo
   editing: "uploaded",
 };
 
-export const productionBoardColumns: Array<{ status: ProductionBoardStatus; label: string }> = [
+export const VALID_PRODUCTION_BOARD_STATUSES: ProductionBoardStatus[] = [
+  "idea",
+  "script",
+  "filming",
+  "editing",
+  "uploaded",
+];
+
+export const PRODUCTION_BOARD_COLUMNS: Array<{ status: ProductionBoardStatus; label: string }> = [
   { status: "idea", label: PRODUCTION_BOARD_STATUS_LABELS.idea },
   { status: "script", label: PRODUCTION_BOARD_STATUS_LABELS.script },
   { status: "filming", label: PRODUCTION_BOARD_STATUS_LABELS.filming },
   { status: "editing", label: PRODUCTION_BOARD_STATUS_LABELS.editing },
   { status: "uploaded", label: PRODUCTION_BOARD_STATUS_LABELS.uploaded },
 ];
+
+export const productionBoardColumns = PRODUCTION_BOARD_COLUMNS;

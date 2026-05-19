@@ -1,6 +1,21 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  type DragEndEvent,
+  type DragStartEvent,
+  type UniqueIdentifier,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
@@ -14,11 +29,13 @@ import { getProductionBoardItems, updateProductionBoardItemStatus } from "@/lib/
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 import {
   NEXT_STATUS_MAP,
+  PRODUCTION_BOARD_COLUMNS,
   PRODUCTION_BOARD_STATUS_LABELS,
-  productionBoardColumns,
+  VALID_PRODUCTION_BOARD_STATUSES,
   type ProductionBoardItem,
   type ProductionBoardStatus,
 } from "@/types/production-board";
+import { cn } from "@/utils/cn";
 
 const statusTone: Record<ProductionBoardStatus, "brand" | "info" | "warning" | "signal" | "default"> = {
   idea: "brand",
@@ -32,6 +49,13 @@ function normalizeHashtag(tag: string) {
   return tag.startsWith("#") ? tag : `#${tag}`;
 }
 
+function getProductionBoardStatus(value: UniqueIdentifier | null | undefined): ProductionBoardStatus | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  return VALID_PRODUCTION_BOARD_STATUSES.includes(value as ProductionBoardStatus) ? (value as ProductionBoardStatus) : null;
+}
+
 type ToastState = {
   message: string;
   tone: "success" | "error" | "info";
@@ -40,46 +64,113 @@ type ToastState = {
 type ProductionBoardCardProps = {
   item: ProductionBoardItem;
   isMoving: boolean;
+  isActiveDragItem: boolean;
   onMoveNext: (item: ProductionBoardItem) => void;
 };
 
-function ProductionBoardCard({ item, isMoving, onMoveNext }: ProductionBoardCardProps) {
+function ProductionBoardCard({ item, isMoving, isActiveDragItem, onMoveNext }: ProductionBoardCardProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: item.id,
+    data: { status: item.status },
+    disabled: isMoving,
+  });
   const label = PRODUCTION_BOARD_STATUS_LABELS[item.status];
   const nextStatus = NEXT_STATUS_MAP[item.status];
   const nextLabel = nextStatus ? PRODUCTION_BOARD_STATUS_LABELS[nextStatus] : null;
   const visibleTags = item.hashtags.slice(0, 4);
+  const dragging = isDragging || isActiveDragItem;
+  const style: CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    zIndex: dragging ? 30 : undefined,
+  };
 
   return (
-    <Card className="p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={statusTone[item.status]}>{label}</Badge>
-          {item.category ? <Badge>{item.category}</Badge> : null}
+    <div
+      className={cn(
+        "touch-none rounded-lg outline-none transition duration-200",
+        dragging ? "opacity-70 shadow-lg ring-2 ring-violet-300 ring-offset-2" : "",
+      )}
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+    >
+      <Card className="cursor-grab p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={statusTone[item.status]}>{label}</Badge>
+            {item.category ? <Badge>{item.category}</Badge> : null}
+          </div>
+          {item.status === "uploaded" ? <Badge tone="signal">완료됨</Badge> : null}
         </div>
-        {item.status === "uploaded" ? <Badge tone="signal">완료됨</Badge> : null}
+        <h2 className="mt-3 text-base font-bold leading-6 text-ink">{item.title}</h2>
+        {item.hook ? <p className="mt-3 rounded-md bg-violet-50 px-3 py-2 text-sm font-semibold leading-6 text-violet-800">{item.hook}</p> : null}
+        {visibleTags.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {visibleTags.map((tag) => (
+              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" key={tag}>
+                {normalizeHashtag(tag)}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {item.recommendationId ? (
+          <Link className="mt-4 inline-flex text-sm font-bold text-violet-700 hover:text-violet-900" href={`/recommendations/${item.recommendationId}`}>
+            추천 상세 보기
+          </Link>
+        ) : null}
+        {nextStatus && nextLabel ? (
+          <Button className="mt-4 w-full" disabled={isMoving} onClick={() => onMoveNext(item)} variant="secondary">
+            {isMoving ? "이동 중" : `${nextLabel}으로 이동`}
+          </Button>
+        ) : null}
+      </Card>
+    </div>
+  );
+}
+
+type ProductionBoardColumnProps = {
+  column: { status: ProductionBoardStatus; label: string };
+  items: ProductionBoardItem[];
+  activeId: string | null;
+  movingId: string | null;
+  onMoveNext: (item: ProductionBoardItem) => void;
+};
+
+function ProductionBoardColumn({ column, items, activeId, movingId, onMoveNext }: ProductionBoardColumnProps) {
+  const { isOver, setNodeRef } = useDroppable({ id: column.status });
+
+  return (
+    <section
+      className={cn(
+        "min-h-[280px] rounded-lg border border-slate-200 bg-slate-50 p-3 transition duration-200",
+        isOver ? "border-violet-300 bg-violet-50/70 shadow-sm ring-2 ring-violet-100" : "",
+      )}
+      key={column.status}
+      ref={setNodeRef}
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-ink">{column.label}</h2>
+        <Badge>{items.length}</Badge>
       </div>
-      <h2 className="mt-3 text-base font-bold leading-6 text-ink">{item.title}</h2>
-      {item.hook ? <p className="mt-3 rounded-md bg-violet-50 px-3 py-2 text-sm font-semibold leading-6 text-violet-800">{item.hook}</p> : null}
-      {visibleTags.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {visibleTags.map((tag) => (
-            <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" key={tag}>
-              {normalizeHashtag(tag)}
-            </span>
+      {items.length > 0 ? (
+        <div className="grid gap-3">
+          {items.map((item) => (
+            <ProductionBoardCard
+              isActiveDragItem={activeId === item.id}
+              isMoving={movingId === item.id}
+              item={item}
+              key={item.id}
+              onMoveNext={onMoveNext}
+            />
           ))}
         </div>
-      ) : null}
-      {item.recommendationId ? (
-        <Link className="mt-4 inline-flex text-sm font-bold text-violet-700 hover:text-violet-900" href={`/recommendations/${item.recommendationId}`}>
-          추천 상세 보기
-        </Link>
-      ) : null}
-      {nextStatus && nextLabel ? (
-        <Button className="mt-4 w-full" disabled={isMoving} onClick={() => onMoveNext(item)} variant="secondary">
-          {isMoving ? "이동 중" : `${nextLabel}으로 이동`}
-        </Button>
-      ) : null}
-    </Card>
+      ) : (
+        <p className="rounded-md border border-dashed border-slate-300 bg-white px-3 py-6 text-center text-sm font-medium text-slate-500">
+          대기 중인 카드가 없습니다.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -88,7 +179,12 @@ export default function ProductionBoardPage() {
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
   const [message, setMessage] = useState("");
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor),
+  );
 
   useEffect(() => {
     let active = true;
@@ -139,7 +235,7 @@ export default function ProductionBoardPage() {
   }, [toast]);
 
   const itemsByStatus = useMemo(() => {
-    return productionBoardColumns.reduce<Record<ProductionBoardStatus, ProductionBoardItem[]>>(
+    return PRODUCTION_BOARD_COLUMNS.reduce<Record<ProductionBoardStatus, ProductionBoardItem[]>>(
       (grouped, column) => {
         grouped[column.status] = items.filter((item) => item.status === column.status);
         return grouped;
@@ -154,24 +250,55 @@ export default function ProductionBoardPage() {
     );
   }, [items]);
 
-  async function handleMoveNext(item: ProductionBoardItem) {
+  async function moveItemToStatus(item: ProductionBoardItem, targetStatus: ProductionBoardStatus, successMessage: string) {
+    if (movingId || item.status === targetStatus) {
+      return;
+    }
+
+    const previousItems = items;
+    setMovingId(item.id);
+    setToast(null);
+    setItems((current) => current.map((currentItem) => (currentItem.id === item.id ? { ...currentItem, status: targetStatus } : currentItem)));
+    try {
+      const updatedItem = await updateProductionBoardItemStatus(item.id, targetStatus);
+      setItems((current) => current.map((currentItem) => (currentItem.id === updatedItem.id ? updatedItem : currentItem)));
+      setToast({ message: successMessage, tone: "success" });
+    } catch {
+      setItems(previousItems);
+      setToast({ message: "상태 변경에 실패했습니다.", tone: "error" });
+    } finally {
+      setMovingId(null);
+    }
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(String(event.active.id));
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null);
+
+    const targetStatus = getProductionBoardStatus(event.over?.id);
+    if (!targetStatus) {
+      return;
+    }
+
+    const itemId = String(event.active.id);
+    const item = items.find((currentItem) => currentItem.id === itemId);
+    if (!item || item.status === targetStatus) {
+      return;
+    }
+
+    await moveItemToStatus(item, targetStatus, "카드 상태가 변경되었습니다.");
+  }
+
+  function handleMoveNext(item: ProductionBoardItem) {
     const nextStatus = NEXT_STATUS_MAP[item.status];
     if (!nextStatus) {
       return;
     }
 
-    setMovingId(item.id);
-    setToast(null);
-    try {
-      const updatedItem = await updateProductionBoardItemStatus(item.id, nextStatus);
-      setItems((current) => current.map((currentItem) => (currentItem.id === updatedItem.id ? updatedItem : currentItem)));
-      setToast({ message: "다음 단계로 이동했습니다.", tone: "success" });
-    } catch (error) {
-      const detail = error instanceof Error && error.message.trim() ? error.message : "";
-      setToast({ message: detail ? `상태 변경에 실패했습니다. ${detail}` : "상태 변경에 실패했습니다.", tone: "error" });
-    } finally {
-      setMovingId(null);
-    }
+    void moveItemToStatus(item, nextStatus, "다음 단계로 이동했습니다.");
   }
 
   if (status === "loading") {
@@ -221,30 +348,26 @@ export default function ProductionBoardPage() {
           title="아직 제작 보드에 추가된 아이디어가 없습니다"
         />
       ) : (
-        <div className="grid gap-4 xl:grid-cols-5">
-          {productionBoardColumns.map((column) => {
-            const columnItems = itemsByStatus[column.status];
-            return (
-              <section className="min-h-[280px] rounded-lg border border-slate-200 bg-slate-50 p-3" key={column.status}>
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 className="text-sm font-bold text-ink">{column.label}</h2>
-                  <Badge>{columnItems.length}</Badge>
-                </div>
-                {columnItems.length > 0 ? (
-                  <div className="grid gap-3">
-                    {columnItems.map((item) => (
-                      <ProductionBoardCard isMoving={movingId === item.id} item={item} key={item.id} onMoveNext={handleMoveNext} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="rounded-md border border-dashed border-slate-300 bg-white px-3 py-6 text-center text-sm font-medium text-slate-500">
-                    대기 중인 카드가 없습니다.
-                  </p>
-                )}
-              </section>
-            );
-          })}
-        </div>
+        <DndContext
+          collisionDetection={closestCenter}
+          onDragCancel={() => setActiveId(null)}
+          onDragEnd={(event) => void handleDragEnd(event)}
+          onDragStart={handleDragStart}
+          sensors={sensors}
+        >
+          <div className="grid gap-4 xl:grid-cols-5">
+            {PRODUCTION_BOARD_COLUMNS.map((column) => (
+              <ProductionBoardColumn
+                activeId={activeId}
+                column={column}
+                items={itemsByStatus[column.status]}
+                key={column.status}
+                movingId={movingId}
+                onMoveNext={handleMoveNext}
+              />
+            ))}
+          </div>
+        </DndContext>
       )}
     </div>
   );
