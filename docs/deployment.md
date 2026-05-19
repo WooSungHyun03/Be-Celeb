@@ -24,6 +24,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 Vercel에는 다음 값을 넣지 않는다.
 
 - `YOUTUBE_API_KEY`
+- `NAVER_CLIENT_ID`
+- `NAVER_CLIENT_SECRET`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `LOCAL_LLM_API_KEY`
 - `CRON_SECRET`
@@ -99,6 +101,8 @@ PATCH /api/calendar/events/{event_id}
 DELETE /api/calendar/events/{event_id}
 GET  /api/growth-report
 POST /api/growth-report/refresh
+GET  /api/shop/products?category=IT&query=&limit=20&refresh=false
+POST /api/cron/collect-shop-products
 GET  /api/admin/llm-prompts
 GET  /api/trends/popular-videos
 GET  /api/trends/keywords?range=daily|weekly|monthly
@@ -154,9 +158,81 @@ Frontend 라우트:
 
 `/favorites`는 추천 결과에서 누른 찜을 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다.
 
+Growth report 그래프:
+
+- snapshot이 2개 이상이면 Recharts line chart로 `subscriber_count`, `view_count`, `video_count` 추이를 표시
+- snapshot이 1개 이하이면 “추이 데이터가 더 필요합니다” 안내 표시
+- “지금 갱신” 버튼은 `POST /api/growth-report/refresh`로 최신 snapshot을 저장
+
 성장 리포트 refresh는 YouTube API quota를 사용한다. 운영에서는 refresh 버튼을 과도하게 누르지 않도록 UI/정책을 조정할 수 있다.
 
 Admin에서 favorites/calendar/growth snapshots 전체 관리 UI는 아직 확장하지 않았다. 운영 필요 시 admin 도메인에서 목록/삭제 API를 추가하면 된다.
+
+## Profile / Password
+
+`/profile`은 추천 사용량과 구독 상태 UI를 표시하지 않는다. 현재 계정 설정 화면은 다음만 제공한다.
+
+- 닉네임 변경
+- YouTube 채널 URL/category 변경
+- 비밀번호 변경
+- 계정 삭제
+
+비밀번호 변경은 Supabase Auth browser client를 사용한다. 사용자가 입력한 현재 비밀번호로 `signInWithPassword`를 먼저 수행해 검증한 뒤 `updateUser({ password })`로 새 비밀번호를 저장한다. service role key는 프론트에 노출하지 않으며, 변경 후 현재 세션은 유지된다.
+
+비밀번호 유효성:
+
+- 현재 비밀번호, 새 비밀번호, 새 비밀번호 확인 모두 필수
+- 새 비밀번호 8자 이상
+- 새 비밀번호와 확인 값 일치
+
+비밀번호 재설정 메일 발송도 더 이상 Vercel `/api/auth/reset-password` route를 호출하지 않고 Supabase Auth browser client에서 직접 수행한다. 인증 callback route만 세션 교환을 위해 유지한다.
+
+## Naver Shopping Creator Shop
+
+`/shop`은 Naver Shopping Search API 검색 결과를 Render Backend에서 호출하고 Supabase에 캐싱한다. 프론트에서 Naver API를 직접 호출하지 않는다.
+
+```text
+GET https://openapi.naver.com/v1/search/shop.json
+```
+
+요청 header:
+
+```text
+X-Naver-Client-Id: NAVER_CLIENT_ID
+X-Naver-Client-Secret: NAVER_CLIENT_SECRET
+```
+
+저장 테이블은 migration `supabase/migrations/20260519002000_creator_shop_products.sql`에 포함되어 있다.
+
+- `creator_shop_keywords`: Be-Celeb 카테고리별 active 쇼핑 검색어
+- `creator_shop_products`: Naver Shopping 상품 캐시. `source`, `source_product_id`, `creator_category`, `search_keyword` 기준 upsert
+- `creator_shop_collection_logs`: daily shop 수집 결과와 오류 요약
+
+기본 검색어 seed:
+
+```txt
+게임: 게이밍 마이크, 게이밍 헤드셋, 방송 조명
+운동: 운동 촬영 삼각대, 무선 마이크, 러닝 카메라
+IT: 유튜브 마이크, 리뷰 촬영 조명, 데스크 셋업 조명
+노래: 보컬 마이크, 오디오 인터페이스, 방음 패널
+OTT: 영화 리뷰 마이크, 조명, 웹캠
+일상: 브이로그 카메라, 미니 삼각대, 무선 마이크
+뷰티: 메이크업 조명, 링라이트, 촬영 거울
+스터디: 스터디 조명, 타이머, 책상 마이크
+코미디: 무선 마이크, 촬영 삼각대, 조명
+먹방: 먹방 조명, 테이블 삼각대, 핀마이크
+춤: 댄스 촬영 삼각대, 짐벌, 광각 카메라
+```
+
+API 동작:
+
+- `GET /api/shop/products?category=IT&query=&limit=20`: cache 우선 반환
+- `query`가 있으면 category 기본 keyword보다 query를 우선 사용
+- cache가 없거나 `refresh=true`면 Naver Shopping API 호출 후 upsert
+- `NAVER_CLIENT_ID` 또는 `NAVER_CLIENT_SECRET`이 없으면 명확한 missing env 오류 반환
+- `POST /api/cron/collect-shop-products`: `CRON_SECRET` 검증 후 active keyword 전체 daily 수집
+
+Shop 페이지는 광고/제휴 링크가 아니라 Naver Shopping 검색 결과임을 표시한다. `source` 컬럼은 추후 Coupang Partners 같은 다른 source를 추가할 수 있도록 유지한다.
 
 ## Naver DataLab 검색 트렌드
 
@@ -270,7 +346,7 @@ ALLOWED_ORIGINS=https://be-celeb.org,https://be-celeb.vercel.app,http://localhos
 
 ## Frontend API 원칙
 
-`apps/web/src/app/api/*` route handler는 제거했다. Vercel Frontend는 UI만 담당하고 Render Backend API만 호출한다.
+비즈니스 API용 `apps/web/src/app/api/*` route handler는 제거했다. Vercel Frontend는 UI만 담당하고 Render Backend API만 호출한다. Supabase Auth callback처럼 브라우저 세션 교환에 필요한 auth route handler만 유지한다.
 
 Frontend 원칙:
 
@@ -330,6 +406,14 @@ curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/growth-report/refresh" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 ```
 
+Shop 확인:
+
+```bash
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?category=IT&limit=20"
+
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?category=IT&query=%EC%9C%A0%ED%8A%9C%EB%B8%8C%20%EB%A7%88%EC%9D%B4%ED%81%AC&refresh=true"
+```
+
 404가 아니고 추천 결과 또는 명확한 환경변수 오류가 나오면 path 연결은 정상이다.
 
 ## Cron
@@ -339,6 +423,7 @@ Daily YouTube collection과 Daily Naver trends collection은 Render Backend API�
 ```env
 DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
+DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-products
 CRON_SECRET=your-cron-secret
 ```
 
@@ -355,6 +440,7 @@ GitHub Actions repository secrets:
 ```txt
 DAILY_COLLECT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
+DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-products
 CRON_SECRET=your-cron-secret
 ```
 
@@ -373,3 +459,26 @@ from public.naver_trend_daily_points
 order by period desc
 limit 20;
 ```
+
+수동 Shop 상품 수집 확인:
+
+```bash
+curl --fail-with-body -X POST "$NEXT_PUBLIC_API_BASE_URL/api/cron/collect-shop-products" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+저장 확인:
+
+```sql
+select creator_category, search_keyword, title, price, mall_name
+from public.creator_shop_products
+order by collected_at desc
+limit 20;
+```
+
+## 정리된 코드
+
+- `/profile`에서 추천 사용량과 구독 상태 UI 및 `user_plans` 조회를 제거했다.
+- 사용되지 않던 `apps/web/src/lib/config/dev-auth-store.ts`, `apps/web/src/lib/config/auth-provider.ts`, `apps/web/src/components/common/ProductCard.tsx`를 삭제했다.
+- `/shop`의 mock 상품 목록과 Naver Shopping 직접 링크 생성 로직을 제거하고 Render Backend API 호출로 교체했다.
+- 클라이언트의 `fetch("/api/...")` 잔여 호출을 제거했다. 비밀번호 재설정 메일은 Supabase Auth browser client를 사용한다.

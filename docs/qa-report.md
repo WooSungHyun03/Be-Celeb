@@ -40,7 +40,6 @@ Be Celeb 웹 앱과 FastAPI 앱을 YouTube 전용 서비스 기준으로 점검�
 - `GET /api/me`
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
-- `POST /api/auth/reset-password`
 - `GET /api/not-a-real-route`
 
 ## 발견한 문제
@@ -63,7 +62,7 @@ Be Celeb 웹 앱과 FastAPI 앱을 YouTube 전용 서비스 기준으로 점검�
 - `/api/email/test`, `/api/cron/collect-daily-videos`, `/api/collect-daily-videos`는 `CRON_SECRET` 기반 보호를 확인했다.
 - `CRON_SECRET`이 없거나 틀린 cron 요청은 `401`을 반환한다.
 - 모바일 헤더 로고 줄바꿈과 내비게이션 잘림을 개선했다.
-- 프로필 화면은 실제 `/api/me`와 `/api/me/profile` 기반으로 동작하고, 미로그인 상태는 빈 상태로 안내한다.
+- 프로필 화면은 추천 사용량/구독 상태 UI를 제거하고, Supabase Auth 기반 비밀번호 변경 UI를 제공한다.
 - admin 화면은 운영용 YouTube 수집 설정 체크리스트로 바꿨다.
 - FastAPI의 샘플 전용 라우트와 저장소, 서비스 코드를 제거하거나 빈 응답 구조로 정리했다.
 - YouTube 전용 서비스와 맞지 않는 타 플랫폼 잔여 문구를 제거했다.

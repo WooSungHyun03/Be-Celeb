@@ -20,22 +20,23 @@ type ProfileRow = {
   nickname: string;
 };
 
-type PlanRow = {
-  plan_name: string;
-  monthly_recommendation_limit: number;
-  monthly_recommendation_used: number;
-};
-
 export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState("");
-  const [plan, setPlan] = useState<PlanRow | null>(null);
   const [settings, setSettings] = useState<UserChannelSettings | null>(null);
   const [channelUrl, setChannelUrl] = useState("");
   const [category, setCategory] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [profileStatus, setProfileStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [channelStatus, setChannelStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [passwordStatus, setPasswordStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [profileMessage, setProfileMessage] = useState("");
+  const [channelMessage, setChannelMessage] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -56,14 +57,10 @@ export default function ProfilePage() {
           return;
         }
 
-        setEmail(session.user.email ?? "");
-        const [profileResult, planResult, channelSettings] = await Promise.all([
+        const userEmail = session.user.email ?? "";
+        setEmail(userEmail);
+        const [profileResult, channelSettings] = await Promise.all([
           supabase.from("profiles").select("nickname").eq("user_id", session.user.id).maybeSingle<ProfileRow>(),
-          supabase
-            .from("user_plans")
-            .select("plan_name,monthly_recommendation_limit,monthly_recommendation_used")
-            .eq("user_id", session.user.id)
-            .maybeSingle<PlanRow>(),
           getUserChannelSettings().catch(() => null),
         ]);
 
@@ -76,7 +73,6 @@ export default function ProfilePage() {
         }
 
         setNickname(profileResult.data?.nickname ?? "");
-        setPlan(planResult.data ?? null);
         setSettings(channelSettings);
         setChannelUrl(channelSettings?.channelUrl ?? "");
         setCategory(channelSettings?.category ?? "");
@@ -98,7 +94,8 @@ export default function ProfilePage() {
 
   async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaveStatus("saving");
+    setProfileStatus("saving");
+    setProfileMessage("");
     setMessage("");
 
     try {
@@ -116,27 +113,70 @@ export default function ProfilePage() {
         throw new Error(error.message);
       }
 
-      setSaveStatus("success");
-      setMessage("프로필이 저장되었습니다.");
+      setProfileStatus("success");
+      setProfileMessage("프로필이 저장되었습니다.");
     } catch (error) {
-      setSaveStatus("error");
-      setMessage(error instanceof Error ? error.message : "프로필 저장에 실패했습니다.");
+      setProfileStatus("error");
+      setProfileMessage(error instanceof Error ? error.message : "프로필 저장에 실패했습니다.");
     }
   }
 
   async function handleChannelSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaveStatus("saving");
+    setChannelStatus("saving");
+    setChannelMessage("");
     setMessage("");
 
     try {
       const updated = await updateUserChannelSettings({ channelUrl, category });
       setSettings(updated);
-      setSaveStatus("success");
-      setMessage("채널 설정이 저장되었습니다.");
+      setChannelStatus("success");
+      setChannelMessage("채널 설정이 저장되었습니다.");
     } catch (error) {
-      setSaveStatus("error");
-      setMessage(error instanceof Error ? error.message : "채널 설정 저장에 실패했습니다.");
+      setChannelStatus("error");
+      setChannelMessage(error instanceof Error ? error.message : "채널 설정 저장에 실패했습니다.");
+    }
+  }
+
+  async function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordStatus("saving");
+    setPasswordMessage("");
+    setMessage("");
+
+    try {
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        throw new Error("현재 비밀번호, 새 비밀번호, 확인 값을 모두 입력하세요.");
+      }
+      if (newPassword.length < 8) {
+        throw new Error("새 비밀번호는 8자 이상이어야 합니다.");
+      }
+      if (newPassword !== confirmPassword) {
+        throw new Error("새 비밀번호와 확인 값이 일치하지 않습니다.");
+      }
+      if (!email) {
+        throw new Error("로그인 이메일을 확인하지 못했습니다. 다시 로그인한 뒤 시도하세요.");
+      }
+
+      const supabase = getSupabaseBrowserClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+      if (signInError) {
+        throw new Error("현재 비밀번호가 올바르지 않습니다.");
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordStatus("success");
+      setPasswordMessage("비밀번호가 변경되었습니다. 현재 세션은 유지됩니다.");
+    } catch (error) {
+      setPasswordStatus("error");
+      setPasswordMessage(error instanceof Error ? error.message : "비밀번호 변경에 실패했습니다.");
     }
   }
 
@@ -175,19 +215,20 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8">
       <PageHeader title="계정 설정" description="프로필과 기본 YouTube 채널 설정을 관리합니다." />
+      {message ? <p className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{message}</p> : null}
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <Card title="프로필 정보">
             <form className="space-y-4" onSubmit={handleProfileSubmit}>
               <Input label="닉네임" onChange={(event) => setNickname(event.target.value)} required value={nickname} />
               <Input label="이메일" readOnly type="email" value={email} />
-              {message ? (
-                <p className={`text-sm font-semibold ${saveStatus === "error" ? "text-rose-700" : "text-violet-700"}`}>
-                  {message}
+              {profileMessage ? (
+                <p className={`text-sm font-semibold ${profileStatus === "error" ? "text-rose-700" : "text-violet-700"}`}>
+                  {profileMessage}
                 </p>
               ) : null}
-              <Button disabled={saveStatus === "saving"} type="submit">
-                {saveStatus === "saving" ? "저장 중" : "프로필 저장"}
+              <Button disabled={profileStatus === "saving"} type="submit">
+                {profileStatus === "saving" ? "저장 중" : "프로필 저장"}
               </Button>
             </form>
           </Card>
@@ -219,28 +260,64 @@ export default function ProfilePage() {
                   ))}
                 </select>
               </label>
-              <Button disabled={saveStatus === "saving"} type="submit">
-                채널 설정 저장
+              {channelMessage ? (
+                <p className={`text-sm font-semibold ${channelStatus === "error" ? "text-rose-700" : "text-violet-700"}`}>
+                  {channelMessage}
+                </p>
+              ) : null}
+              <Button disabled={channelStatus === "saving"} type="submit">
+                {channelStatus === "saving" ? "저장 중" : "채널 설정 저장"}
+              </Button>
+            </form>
+          </Card>
+
+          <Card title="비밀번호 변경">
+            <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+              <Input
+                autoComplete="current-password"
+                label="현재 비밀번호"
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+                type="password"
+                value={currentPassword}
+              />
+              <Input
+                autoComplete="new-password"
+                helperText="새 비밀번호는 8자 이상이어야 합니다."
+                label="새 비밀번호"
+                minLength={8}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+                type="password"
+                value={newPassword}
+              />
+              <Input
+                autoComplete="new-password"
+                label="새 비밀번호 확인"
+                minLength={8}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                required
+                type="password"
+                value={confirmPassword}
+              />
+              {passwordMessage ? (
+                <p className={`text-sm font-semibold ${passwordStatus === "error" ? "text-rose-700" : "text-violet-700"}`}>
+                  {passwordMessage}
+                </p>
+              ) : null}
+              <Button disabled={passwordStatus === "saving"} type="submit">
+                {passwordStatus === "saving" ? "변경 중" : "비밀번호 변경"}
               </Button>
             </form>
           </Card>
         </div>
 
         <div className="space-y-4">
-          <Card title="추천 사용량">
-            <p className="text-3xl font-bold text-ink">
-              {plan?.monthly_recommendation_used ?? 0} / {plan?.monthly_recommendation_limit ?? 5}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-500">이번 달 YouTube 추천 생성 사용량입니다.</p>
-          </Card>
           <Card title="저장된 채널">
             <div className="space-y-3">
               <Badge tone="info">{settings?.category ?? "카테고리 없음"}</Badge>
               <p className="break-all text-sm font-semibold text-ink">{settings?.channelTitle ?? settings?.channelUrl ?? "저장된 채널 없음"}</p>
             </div>
-          </Card>
-          <Card title="구독 상태">
-            <p className="text-2xl font-bold capitalize text-ink">{plan?.plan_name ?? "free"}</p>
           </Card>
           <DeleteAccountSection onError={setMessage} />
         </div>

@@ -133,6 +133,31 @@ export type GrowthReportResponse = {
   trend: GrowthSnapshot[];
 };
 
+export type ShopProduct = {
+  id: string | null;
+  source: string;
+  sourceProductId: string | null;
+  title: string;
+  imageUrl: string | null;
+  price: number | null;
+  mallName: string | null;
+  productUrl: string;
+  brand: string | null;
+  maker: string | null;
+  category: string | null;
+  creatorCategory: string;
+  searchKeyword: string;
+  collectedAt: string | null;
+};
+
+export type ShopProductsResponse = {
+  category: string;
+  query: string | null;
+  source: string;
+  fromCache: boolean;
+  products: ShopProduct[];
+};
+
 export class ApiClientError extends Error {
   constructor(
     message: string,
@@ -417,6 +442,28 @@ export async function refreshGrowthReport(signal?: AbortSignal) {
     headers: await getAuthorizationHeaders(),
     signal,
   });
+  return response.data;
+}
+
+export async function getShopProducts(
+  params: { category?: string; query?: string; limit?: number; refresh?: boolean } = {},
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams();
+  if (params.category) {
+    query.set("category", params.category);
+  }
+  if (params.query?.trim()) {
+    query.set("query", params.query.trim());
+  }
+  if (params.limit) {
+    query.set("limit", String(params.limit));
+  }
+  if (params.refresh) {
+    query.set("refresh", "true");
+  }
+  const path = query.size > 0 ? `/api/shop/products?${query.toString()}` : "/api/shop/products";
+  const response = await apiFetch<ApiSuccess<ShopProductsResponse>>(path, { signal });
   return response.data;
 }
 

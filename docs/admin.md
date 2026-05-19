@@ -36,6 +36,8 @@ Render Backend:
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 YOUTUBE_API_KEY=
+NAVER_CLIENT_ID=
+NAVER_CLIENT_SECRET=
 LOCAL_LLM_API_URL=
 LOCAL_LLM_API_KEY=
 ADMIN_SECRET=
@@ -53,6 +55,9 @@ ALLOWED_ORIGINS=https://be-celeb.org,https://be-celeb.vercel.app,http://localhos
 - `llm_prompt_templates`: 콘텐츠 추천에 사용할 active prompt 관리
 - `recommendation_options`: 과거 2단계 추천 옵션 이력 조회
 - `content_recommendations`: 최종 콘텐츠 계획 조회/삭제
+- `naver_trend_keyword_groups`: Naver DataLab 검색 트렌드 keyword group 관리
+- `creator_shop_keywords`: Naver Shopping 상품 수집 keyword. 현재 CRUD UI는 TODO
+- `creator_shop_products`: Naver Shopping 상품 cache. `/shop`에서 조회
 - `admin_audit_logs`: admin 작업 이력 저장
 
 ## 인플루언서 채널 추가 방법
@@ -82,6 +87,13 @@ curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/admin/collect-now" \
 - cron: `0 21 * * *`
 
 GitHub Actions 또는 Render Cron은 기존 `CRON_SECRET` 기반 수집 endpoint를 호출한다. Admin의 `collect-now`는 운영자 수동 실행용이다.
+
+추가 daily collector:
+
+- `POST /api/cron/collect-naver-trends`
+- `POST /api/cron/collect-shop-products`
+
+`creator_shop_keywords` 관리 UI는 아직 admin에 붙이지 않았다. 운영자가 keyword를 자주 바꾸는 단계가 되면 `/api/admin/shop-keywords` CRUD와 admin 섹션을 추가한다.
 
 ## 위험 작업
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
@@ -11,16 +12,13 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { ROUTES } from "@/constants/routes";
 import { getGrowthReport, refreshGrowthReport, type GrowthReportResponse, type GrowthSnapshot } from "@/lib/api/growth";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
-
-function formatNumber(value: number | null | undefined) {
-  return Number(value ?? 0).toLocaleString("ko-KR");
-}
+import { compactNumber, formatInteger } from "@/lib/common/format";
 
 function formatDelta(value: number) {
   if (value > 0) {
-    return `+${formatNumber(value)}`;
+    return `+${formatInteger(value)}`;
   }
-  return formatNumber(value);
+  return formatInteger(value);
 }
 
 function formatDate(value: string | null | undefined) {
@@ -34,14 +32,23 @@ function snapshotLabel(snapshot: GrowthSnapshot) {
   return new Date(snapshot.collectedAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
 }
 
+function metricLabel(value: unknown) {
+  return compactNumber(typeof value === "number" ? value : Number(value));
+}
+
 export default function GrowthReportPage() {
   const [report, setReport] = useState<GrowthReportResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
   const [message, setMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
-  const maxViews = useMemo(() => {
-    return Math.max(...(report?.trend ?? []).map((snapshot) => snapshot.viewCount), 1);
+  const chartData = useMemo(() => {
+    return (report?.trend ?? []).map((snapshot) => ({
+      period: snapshotLabel(snapshot),
+      subscriberCount: snapshot.subscriberCount,
+      viewCount: snapshot.viewCount,
+      videoCount: snapshot.videoCount,
+    }));
   }, [report]);
 
   useEffect(() => {
@@ -165,17 +172,17 @@ export default function GrowthReportPage() {
           <section className="grid gap-4 md:grid-cols-3">
             <Card>
               <p className="text-sm font-bold text-slate-500">구독자 수</p>
-              <p className="mt-2 text-3xl font-bold text-ink">{formatNumber(latest.subscriberCount)}</p>
+              <p className="mt-2 text-3xl font-bold text-ink">{formatInteger(latest.subscriberCount)}</p>
               <p className="mt-2 text-sm font-semibold text-violet-700">이전 대비 {formatDelta(deltas.subscriberCount)}</p>
             </Card>
             <Card>
               <p className="text-sm font-bold text-slate-500">전체 조회수</p>
-              <p className="mt-2 text-3xl font-bold text-ink">{formatNumber(latest.viewCount)}</p>
+              <p className="mt-2 text-3xl font-bold text-ink">{formatInteger(latest.viewCount)}</p>
               <p className="mt-2 text-sm font-semibold text-violet-700">이전 대비 {formatDelta(deltas.viewCount)}</p>
             </Card>
             <Card>
               <p className="text-sm font-bold text-slate-500">영상 수</p>
-              <p className="mt-2 text-3xl font-bold text-ink">{formatNumber(latest.videoCount)}</p>
+              <p className="mt-2 text-3xl font-bold text-ink">{formatInteger(latest.videoCount)}</p>
               <p className="mt-2 text-sm font-semibold text-violet-700">이전 대비 {formatDelta(deltas.videoCount)}</p>
             </Card>
           </section>
@@ -201,20 +208,56 @@ export default function GrowthReportPage() {
           </Card>
 
           <Card title="성장 추이">
-            {report?.trend.length ? (
-              <div className="grid gap-3">
-                {report.trend.map((snapshot) => (
-                  <div className="grid gap-2 sm:grid-cols-[96px_minmax(0,1fr)_120px]" key={snapshot.id}>
-                    <span className="text-sm font-semibold text-slate-500">{snapshotLabel(snapshot)}</span>
-                    <div className="h-7 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-violet-600" style={{ width: `${Math.max((snapshot.viewCount / maxViews) * 100, 4)}%` }} />
-                    </div>
-                    <span className="text-right text-sm font-bold text-ink">{formatNumber(snapshot.viewCount)} views</span>
+            {chartData.length > 1 ? (
+              <div className="grid gap-6">
+                <div>
+                  <p className="mb-3 text-sm font-bold text-slate-500">구독자 수 추이</p>
+                  <div className="h-72 min-w-0">
+                    <ResponsiveContainer height="100%" width="100%">
+                      <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 16, top: 8 }}>
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="period" tick={{ fontSize: 11 }} tickMargin={8} />
+                        <YAxis tick={{ fontSize: 11 }} tickFormatter={metricLabel} width={48} />
+                        <Tooltip formatter={(value) => [metricLabel(value), "구독자"]} />
+                        <Line dataKey="subscriberCount" dot={false} name="구독자" stroke="#7c3aed" strokeWidth={2.5} type="monotone" />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="h-72 min-w-0 rounded-lg border border-slate-200 p-3">
+                    <p className="mb-3 text-sm font-bold text-slate-500">전체 조회수 추이</p>
+                    <ResponsiveContainer height="88%" width="100%">
+                      <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 16, top: 8 }}>
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="period" tick={{ fontSize: 11 }} tickMargin={8} />
+                        <YAxis tick={{ fontSize: 11 }} tickFormatter={metricLabel} width={48} />
+                        <Tooltip formatter={(value) => [metricLabel(value), "조회수"]} />
+                        <Line dataKey="viewCount" dot={false} name="조회수" stroke="#2563eb" strokeWidth={2.5} type="monotone" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="h-72 min-w-0 rounded-lg border border-slate-200 p-3">
+                    <p className="mb-3 text-sm font-bold text-slate-500">영상 수 추이</p>
+                    <ResponsiveContainer height="88%" width="100%">
+                      <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 16, top: 8 }}>
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="period" tick={{ fontSize: 11 }} tickMargin={8} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickFormatter={metricLabel} width={48} />
+                        <Tooltip formatter={(value) => [metricLabel(value), "영상 수"]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                        <Line dataKey="videoCount" dot={false} name="영상 수" stroke="#059669" strokeWidth={2.5} type="monotone" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
             ) : (
-              <p className="text-sm text-slate-500">추이 데이터가 없습니다.</p>
+              <EmptyState
+                description="성장 추이를 그래프로 보려면 최소 2개 이상의 snapshot이 필요합니다. 하루 뒤 다시 갱신하거나 운영 스케줄을 확인하세요."
+                title="추이 데이터가 더 필요합니다"
+              />
             )}
           </Card>
 
@@ -228,9 +271,9 @@ export default function GrowthReportPage() {
                       <p className="mt-1 text-xs text-slate-500">{formatDate(video.publishedAt)}</p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-600 md:justify-end">
-                      <span className="rounded bg-slate-100 px-2 py-1">조회 {formatNumber(video.viewCount)}</span>
-                      <span className="rounded bg-slate-100 px-2 py-1">좋아요 {formatNumber(video.likeCount)}</span>
-                      <span className="rounded bg-slate-100 px-2 py-1">댓글 {formatNumber(video.commentCount)}</span>
+                      <span className="rounded bg-slate-100 px-2 py-1">조회 {formatInteger(video.viewCount)}</span>
+                      <span className="rounded bg-slate-100 px-2 py-1">좋아요 {formatInteger(video.likeCount)}</span>
+                      <span className="rounded bg-slate-100 px-2 py-1">댓글 {formatInteger(video.commentCount)}</span>
                     </div>
                   </article>
                 ))}

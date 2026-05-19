@@ -7,11 +7,7 @@ import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
-
-type ApiErrorResponse = {
-  success: false;
-  message?: string;
-};
+import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -24,15 +20,12 @@ export default function ForgotPasswordPage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+      const redirectTo = `${window.location.origin}/api/auth/reset-password/callback`;
+      const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email, {
+        redirectTo,
       });
-
-      if (!response.ok) {
-        const payload = (await response.json()) as ApiErrorResponse;
-        throw new Error(payload.message ?? "Failed to send reset password email.");
+      if (error) {
+        throw new Error("Failed to send reset password email.");
       }
 
       setStatus("success");
