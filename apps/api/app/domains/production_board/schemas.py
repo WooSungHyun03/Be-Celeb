@@ -15,6 +15,10 @@ class ProductionBoardCreatePayload(BaseModel):
     recommendation_id: str | None = Field(default=None, alias="recommendationId")
 
 
+class ProductionBoardStatusUpdatePayload(BaseModel):
+    status: str = Field(min_length=1)
+
+
 class ProductionBoardItem(BaseModel):
     id: str
     userId: str

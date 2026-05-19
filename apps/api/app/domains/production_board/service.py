@@ -6,13 +6,20 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.exceptions import BackendApiError, BadRequestException, NotFoundException, missing_env
-from app.domains.production_board.schemas import ProductionBoardCreatePayload
+from app.domains.production_board.schemas import ProductionBoardCreatePayload, ProductionBoardStatusUpdatePayload
 from app.services.database_service import fetch_content_recommendation_detail
 
 PRODUCTION_BOARD_SELECT = (
     "id,user_id,favorite_id,recommendation_id,title,hook,reason,hashtags,storyboard,category,"
     "status,priority,memo,due_date,upload_scheduled_at,created_at,updated_at"
 )
+PRODUCTION_BOARD_STATUSES = ("idea", "script", "filming", "editing", "uploaded")
+NEXT_STATUS_BY_STATUS = {
+    "idea": "script",
+    "script": "filming",
+    "filming": "editing",
+    "editing": "uploaded",
+}
 
 
 class ProductionBoardAlreadyAddedError(BackendApiError):
@@ -207,6 +214,49 @@ async def list_production_board_items(user_id: str) -> dict[str, Any]:
     )
     items = [_item_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     return {"items": items}
+
+
+async def update_production_board_item_status(
+    user_id: str,
+    item_id: str,
+    payload: ProductionBoardStatusUpdatePayload,
+) -> dict[str, Any]:
+    requested_status = payload.status
+    if requested_status not in PRODUCTION_BOARD_STATUSES:
+        raise BadRequestException("허용되지 않는 제작 보드 상태입니다.", "VALIDATION_ERROR")
+
+    rows = await _request(
+        "GET",
+        "production_board_items",
+        params={
+            "select": PRODUCTION_BOARD_SELECT,
+            "id": f"eq.{item_id}",
+            "user_id": f"eq.{user_id}",
+            "limit": "1",
+        },
+    )
+    current_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not current_row:
+        raise NotFoundException("Production board item not found.")
+
+    current_status = current_row.get("status")
+    next_status = NEXT_STATUS_BY_STATUS.get(current_status)
+    if not next_status:
+        raise BadRequestException("업로드 완료 상태에서는 다음 단계로 이동할 수 없습니다.", "INVALID_STATUS_TRANSITION")
+    if requested_status != next_status:
+        raise BadRequestException("제작 보드 상태는 한 단계씩만 이동할 수 있습니다.", "INVALID_STATUS_TRANSITION")
+
+    rows = await _request(
+        "PATCH",
+        "production_board_items",
+        params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
+        payload={"status": requested_status},
+        prefer="return=representation",
+    )
+    updated_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not updated_row:
+        raise BackendApiError("상태 변경에 실패했습니다.", 502, "SUPABASE_ERROR")
+    return {"item": _item_from_row(updated_row)}
 
 
 async def add_production_board_item(user_id: str, payload: ProductionBoardCreatePayload) -> dict[str, Any]:

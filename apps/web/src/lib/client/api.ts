@@ -12,7 +12,7 @@ import type {
   TrendKeywordsResponse,
   TrendKeywordRange,
 } from "@/types/youtube-trends";
-import type { ProductionBoardItem } from "@/types/production-board";
+import type { ProductionBoardItem, ProductionBoardStatus } from "@/types/production-board";
 import { getAuthorizationHeaders } from "@/lib/client/auth";
 
 export type ApiSuccess<T> = {
@@ -405,6 +405,24 @@ export async function addFavoriteToProductionBoard(payload: AddProductionBoardIt
     headers: await getAuthorizationHeaders(),
     signal,
   });
+
+  return response.data.item;
+}
+
+export async function updateProductionBoardItemStatus(
+  itemId: string,
+  status: ProductionBoardStatus,
+  signal?: AbortSignal,
+) {
+  const response = await apiFetch<ApiSuccess<{ item: ProductionBoardItem }>>(
+    `/api/production-board/items/${itemId}/status`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+      headers: await getAuthorizationHeaders(),
+      signal,
+    },
+  );
 
   return response.data.item;
 }

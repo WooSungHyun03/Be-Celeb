@@ -22,10 +22,25 @@ export type ProductionBoardItem = {
   updatedAt: string | null;
 };
 
+export const PRODUCTION_BOARD_STATUS_LABELS: Record<ProductionBoardStatus, string> = {
+  idea: "아이디어",
+  script: "대본 작성",
+  filming: "촬영 예정",
+  editing: "편집 중",
+  uploaded: "업로드 완료",
+};
+
+export const NEXT_STATUS_MAP: Partial<Record<ProductionBoardStatus, ProductionBoardStatus>> = {
+  idea: "script",
+  script: "filming",
+  filming: "editing",
+  editing: "uploaded",
+};
+
 export const productionBoardColumns: Array<{ status: ProductionBoardStatus; label: string }> = [
-  { status: "idea", label: "아이디어" },
-  { status: "script", label: "대본 작성" },
-  { status: "filming", label: "촬영 예정" },
-  { status: "editing", label: "편집 중" },
-  { status: "uploaded", label: "업로드 완료" },
+  { status: "idea", label: PRODUCTION_BOARD_STATUS_LABELS.idea },
+  { status: "script", label: PRODUCTION_BOARD_STATUS_LABELS.script },
+  { status: "filming", label: PRODUCTION_BOARD_STATUS_LABELS.filming },
+  { status: "editing", label: PRODUCTION_BOARD_STATUS_LABELS.editing },
+  { status: "uploaded", label: PRODUCTION_BOARD_STATUS_LABELS.uploaded },
 ];
