@@ -87,8 +87,8 @@ function ProductionBoardCard({ item, isMoving, isActiveDragItem, onMoveNext }: P
   return (
     <div
       className={cn(
-        "touch-none rounded-lg outline-none transition duration-200",
-        dragging ? "opacity-70 shadow-lg ring-2 ring-violet-300 ring-offset-2" : "",
+        "touch-none rounded-lg outline-none transition-[opacity,box-shadow] duration-100",
+        dragging ? "opacity-80 shadow-lg ring-2 ring-violet-300 ring-offset-2 transition-none" : "",
       )}
       ref={setNodeRef}
       style={style}
@@ -182,7 +182,7 @@ export default function ProductionBoardPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
     useSensor(KeyboardSensor),
   );
 
