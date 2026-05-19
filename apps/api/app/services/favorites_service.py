@@ -7,7 +7,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.errors import BackendApiError, missing_env
-from app.schemas.account import FavoritePayload, FavoriteType
+from app.schemas.account import FavoritePayload, FavoriteType, FavoriteUpdatePayload
 from app.services.database_service import fetch_content_recommendation_detail
 
 
@@ -60,14 +60,22 @@ async def _request(
 
 
 def _to_favorite(row: dict[str, Any]) -> dict[str, Any]:
+    source = row.get("source") if isinstance(row.get("source"), dict) else {}
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
     return {
         "id": row.get("id"),
         "userId": row.get("user_id"),
-        "targetType": row.get("type"),
-        "targetId": row.get("target_id"),
+        "targetType": row.get("type") or "recommendation",
+        "targetId": row.get("target_id") or row.get("recommendation_id"),
+        "recommendationId": row.get("recommendation_id"),
         "title": row.get("title"),
-        "metadata": row.get("metadata") if isinstance(row.get("metadata"), dict) else {},
+        "reason": row.get("reason"),
+        "hashtags": row.get("hashtags") if isinstance(row.get("hashtags"), list) else [],
+        "storyboard": row.get("storyboard") if isinstance(row.get("storyboard"), list) else [],
+        "source": source,
+        "metadata": metadata or source,
         "createdAt": row.get("created_at"),
+        "updatedAt": row.get("updated_at"),
     }
 
 
@@ -77,7 +85,7 @@ async def list_favorites(
     target_id: str | None = None,
 ) -> dict[str, Any]:
     params = {
-        "select": "id,user_id,type,target_id,title,metadata,created_at",
+        "select": "id,user_id,type,target_id,recommendation_id,title,reason,hashtags,storyboard,source,metadata,created_at,updated_at",
         "user_id": f"eq.{user_id}",
         "order": "created_at.desc",
     }
@@ -92,13 +100,23 @@ async def list_favorites(
 
 
 async def create_favorite(user_id: str, payload: FavoritePayload) -> dict[str, Any]:
-    title = payload.title
-    metadata = payload.metadata
+    target_id = payload.target_id or payload.recommendation_id
+    if not target_id:
+        raise BackendApiError("targetId or recommendationId is required.", 400, "VALIDATION_ERROR")
+
+    title = payload.title or "찜한 콘텐츠"
+    reason = payload.reason
+    hashtags = payload.hashtags or []
+    storyboard = payload.storyboard or []
+    source = payload.source or payload.metadata
 
     if payload.target_type == "recommendation":
-        detail = await fetch_content_recommendation_detail(payload.target_id, user_id)
+        detail = await fetch_content_recommendation_detail(target_id, user_id)
         title = detail.recommendation.title
-        metadata = {
+        reason = detail.recommendation.reason
+        hashtags = detail.recommendation.hashtags or []
+        storyboard = [scene.model_dump(mode="json") for scene in detail.recommendation.storyboard]
+        source = {
             "recommendationId": detail.recommendationId,
             "analysisId": detail.analysisId,
             "selectedCategory": detail.selectedCategory,
@@ -113,15 +131,49 @@ async def create_favorite(user_id: str, payload: FavoritePayload) -> dict[str, A
         payload={
             "user_id": user_id,
             "type": payload.target_type,
-            "target_id": payload.target_id,
+            "target_id": target_id,
+            "recommendation_id": target_id if payload.target_type == "recommendation" else payload.recommendation_id,
             "title": title,
-            "metadata": metadata,
+            "reason": reason,
+            "hashtags": hashtags,
+            "storyboard": storyboard,
+            "source": source,
+            "metadata": source,
         },
         prefer="resolution=merge-duplicates,return=representation",
     )
     row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not row:
         raise BackendApiError("Favorite upsert did not return a row.", 502, "SUPABASE_ERROR")
+    return {"favorite": _to_favorite(row)}
+
+
+async def update_favorite(user_id: str, favorite_id: str, payload: FavoriteUpdatePayload) -> dict[str, Any]:
+    patch = {
+        key: value
+        for key, value in {
+            "title": payload.title,
+            "reason": payload.reason,
+            "hashtags": payload.hashtags,
+            "storyboard": payload.storyboard,
+            "source": payload.source,
+            "metadata": payload.metadata,
+        }.items()
+        if value is not None
+    }
+    if not patch:
+        raise BackendApiError("No fields to update.", 400, "VALIDATION_ERROR")
+
+    rows = await _request(
+        "PATCH",
+        "favorites",
+        params={"id": f"eq.{favorite_id}", "user_id": f"eq.{user_id}"},
+        payload=patch,
+        prefer="return=representation",
+    )
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not row:
+        raise BackendApiError("Favorite not found.", 404, "NOT_FOUND")
     return {"favorite": _to_favorite(row)}
 
 

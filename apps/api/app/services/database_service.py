@@ -12,6 +12,7 @@ from app.schemas.youtube_content import (
     ContentPlan,
     CreatorCategoryName,
     RecommendationDetailResponse,
+    RecommendationFieldOptions,
     RecommendationOption,
     RecommendationResponseChannel,
     SingleContentRecommendation,
@@ -309,6 +310,15 @@ def _single_recommendation_from_row(row: dict[str, Any]) -> SingleContentRecomme
     )
 
 
+def _recommendation_options_from_row(row: dict[str, Any]) -> RecommendationFieldOptions:
+    llm_response = row.get("llm_response") if isinstance(row.get("llm_response"), dict) else {}
+    input_payload = row.get("input_payload") if isinstance(row.get("input_payload"), dict) else {}
+    value = llm_response.get("options") if isinstance(llm_response.get("options"), dict) else input_payload.get("options")
+    if isinstance(value, dict):
+        return RecommendationFieldOptions.model_validate(value)
+    return RecommendationFieldOptions()
+
+
 async def fetch_content_recommendation_detail(
     recommendation_id: str,
     requester_user_id: str | None = None,
@@ -316,7 +326,7 @@ async def fetch_content_recommendation_detail(
     rows = await _get(
         "content_recommendations",
         {
-            "select": "id,user_id,analysis_id,selected_category,llm_response,created_at",
+            "select": "id,user_id,analysis_id,selected_category,input_payload,llm_response,created_at",
             "id": f"eq.{recommendation_id}",
             "limit": "1",
         },
@@ -346,5 +356,6 @@ async def fetch_content_recommendation_detail(
             thumbnailUrl=analysis.channel.thumbnailUrl,
         ),
         recommendation=_single_recommendation_from_row(row),
+        options=_recommendation_options_from_row(row),
         createdAt=row.get("created_at") if isinstance(row.get("created_at"), str) else None,
     )

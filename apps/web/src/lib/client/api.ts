@@ -1,5 +1,6 @@
 import type {
   ChannelAnalysisResult,
+  RecommendationFieldOptions,
   RecommendationDetailResponse,
   SingleRecommendContentResponse,
   UserChannelSettings,
@@ -31,6 +32,7 @@ export type ApiFailure = {
 export type RecommendContentPayload = {
   channelUrl: string;
   category?: string | null;
+  options?: RecommendationFieldOptions;
 };
 
 export type AnalyzeChannelPayload = {
@@ -44,16 +46,91 @@ export type FavoriteItem = {
   userId: string;
   targetType: FavoriteType;
   targetId: string;
+  recommendationId?: string | null;
   title: string | null;
+  reason?: string | null;
+  hashtags?: string[];
+  storyboard?: Array<Record<string, unknown>>;
+  source?: Record<string, unknown>;
   metadata: Record<string, unknown>;
   createdAt: string;
+  updatedAt?: string | null;
 };
 
 export type FavoritePayload = {
   targetType: FavoriteType;
-  targetId: string;
+  targetId?: string;
+  recommendationId?: string;
   title?: string | null;
+  reason?: string | null;
+  hashtags?: string[];
+  storyboard?: Array<Record<string, unknown>>;
+  source?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+};
+
+export type CalendarEventStatus = "planned" | "scripted" | "filmed" | "edited" | "uploaded";
+
+export type CalendarEvent = {
+  id: string;
+  userId: string;
+  favoriteId: string | null;
+  title: string;
+  description: string | null;
+  scheduledDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  status: CalendarEventStatus;
+  platform: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CalendarEventPayload = {
+  favoriteId?: string | null;
+  title: string;
+  description?: string | null;
+  scheduledDate: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  status?: CalendarEventStatus;
+  platform?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type GrowthVideoStat = {
+  youtubeVideoId: string;
+  title: string;
+  publishedAt: string;
+  viewCount: number;
+  likeCount: number;
+  commentCount: number;
+};
+
+export type GrowthSnapshot = {
+  id: string;
+  youtubeChannelId: string;
+  channelUrl: string | null;
+  subscriberCount: number;
+  viewCount: number;
+  videoCount: number;
+  recentVideoStats: GrowthVideoStat[];
+  collectedAt: string;
+  createdAt: string;
+};
+
+export type GrowthReportResponse = {
+  hasChannelSettings: boolean;
+  settings: UserChannelSettings | null;
+  latest: GrowthSnapshot | null;
+  previous: GrowthSnapshot | null;
+  deltas: {
+    subscriberCount: number;
+    viewCount: number;
+    videoCount: number;
+  };
+  trend: GrowthSnapshot[];
 };
 
 export class ApiClientError extends Error {
@@ -257,6 +334,17 @@ export async function deleteFavorite(favoriteId: string, signal?: AbortSignal) {
   return response.data;
 }
 
+export async function updateFavorite(favoriteId: string, payload: Partial<FavoritePayload>, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ favorite: FavoriteItem }>>(`/api/favorites/${favoriteId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data.favorite;
+}
+
 export async function deleteFavoriteByTarget(type: FavoriteType, targetId: string, signal?: AbortSignal) {
   const response = await apiFetch<ApiSuccess<{ deleted: true }>>(
     `/api/favorites/by-target/${type}/${encodeURIComponent(targetId)}`,
@@ -267,6 +355,68 @@ export async function deleteFavoriteByTarget(type: FavoriteType, targetId: strin
     },
   );
 
+  return response.data;
+}
+
+export async function getCalendarEvents(params: { start?: string; end?: string } = {}, signal?: AbortSignal) {
+  const query = new URLSearchParams();
+  if (params.start) {
+    query.set("start", params.start);
+  }
+  if (params.end) {
+    query.set("end", params.end);
+  }
+  const path = query.size > 0 ? `/api/calendar/events?${query.toString()}` : "/api/calendar/events";
+  const response = await apiFetch<ApiSuccess<{ events: CalendarEvent[] }>>(path, {
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+  return response.data.events;
+}
+
+export async function createCalendarEvent(payload: CalendarEventPayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ event: CalendarEvent }>>("/api/calendar/events", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+  return response.data.event;
+}
+
+export async function updateCalendarEvent(eventId: string, payload: Partial<CalendarEventPayload>, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ event: CalendarEvent }>>(`/api/calendar/events/${eventId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+  return response.data.event;
+}
+
+export async function deleteCalendarEvent(eventId: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ deleted: true }>>(`/api/calendar/events/${eventId}`, {
+    method: "DELETE",
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+  return response.data;
+}
+
+export async function getGrowthReport(signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<GrowthReportResponse>>("/api/growth-report", {
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+  return response.data;
+}
+
+export async function refreshGrowthReport(signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<GrowthReportResponse>>("/api/growth-report/refresh", {
+    method: "POST",
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
   return response.data;
 }
 

@@ -67,6 +67,17 @@ export type StoryboardScene = {
   description?: string;
 };
 
+export type RecommendationFieldOptions = {
+  reason: boolean;
+  hashtags: boolean;
+  storyboard: boolean;
+  hook: boolean;
+  thumbnailIdea?: boolean;
+  thumbnail_idea?: boolean;
+  uploadTips?: boolean;
+  upload_tips?: boolean;
+};
+
 export type ContentRecommendation = {
   title: string;
   format: string;
@@ -147,14 +158,14 @@ export type GenerateContentPlanPayload = {
 export type SingleContentRecommendation = {
   title: string;
   format: string;
-  hashtags: string[];
-  thumbnailIdea: string;
-  targetAudience: string;
-  hook: string;
-  reason: string;
-  whyNotDuplicate: string;
-  storyboard: StoryboardScene[];
-  uploadTips: string[];
+  hashtags?: string[];
+  thumbnailIdea?: string | null;
+  targetAudience?: string | null;
+  hook?: string | null;
+  reason?: string | null;
+  whyNotDuplicate?: string | null;
+  storyboard?: StoryboardScene[];
+  uploadTips?: string[];
 };
 
 export type SingleRecommendContentResponse = {
@@ -168,6 +179,7 @@ export type SingleRecommendContentResponse = {
     thumbnailUrl: string | null;
   };
   recommendation: SingleContentRecommendation;
+  options?: RecommendationFieldOptions;
 };
 
 export type RecommendationDetailResponse = SingleRecommendContentResponse & {

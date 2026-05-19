@@ -63,7 +63,10 @@ function formatCompactNumber(value: number | null | undefined) {
   }).format(value);
 }
 
-function formatDate(value: string) {
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return "-";
+  }
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {

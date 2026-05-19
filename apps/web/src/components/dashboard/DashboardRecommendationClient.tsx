@@ -14,13 +14,23 @@ import { ROUTES } from "@/constants/routes";
 import { recommendContent } from "@/lib/api/recommendations";
 import { getUserChannelSettings } from "@/lib/api/users";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+import type { RecommendationFieldOptions } from "@/types/content-recommendation";
 
 const loadingSteps = ["채널 분석 중", "카테고리 데이터 분석 중", "AI가 콘텐츠 추천 생성 중"];
+const defaultRecommendationOptions: RecommendationFieldOptions = {
+  reason: true,
+  hashtags: true,
+  storyboard: true,
+  hook: false,
+  thumbnailIdea: false,
+  uploadTips: false,
+};
 
 export function DashboardRecommendationClient() {
   const router = useRouter();
   const [channelUrl, setChannelUrl] = useState("");
   const [category, setCategory] = useState("");
+  const [options, setOptions] = useState<RecommendationFieldOptions>(defaultRecommendationOptions);
   const [stageIndex, setStageIndex] = useState(0);
   const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [isLoading, setIsLoading] = useState(false);
@@ -85,7 +95,7 @@ export function DashboardRecommendationClient() {
     setIsLoading(true);
 
     try {
-      const data = await recommendContent({ channelUrl, category: category || null });
+      const data = await recommendContent({ channelUrl, category: category || null, options });
       setCategory(data.selectedCategory);
       router.push(`/dashboard/result/${data.recommendationId}`);
     } catch (caughtError) {
@@ -127,7 +137,9 @@ export function DashboardRecommendationClient() {
         isLoading={isLoading}
         onCategoryChange={setCategory}
         onChannelUrlChange={setChannelUrl}
+        onOptionsChange={setOptions}
         onSubmit={handleSubmit}
+        options={options}
       />
 
       {isLoading ? <LoadingSteps activeIndex={stageIndex} steps={loadingSteps} /> : null}

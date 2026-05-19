@@ -34,6 +34,7 @@ async def call_local_llm(
     prompt: str,
     temperature: float = 0.65,
     system_prompt: str = "You are Be-Celeb's Korean YouTube content strategist. Return valid JSON only.",
+    max_tokens: int | None = None,
 ) -> str:
     settings = get_settings()
 
@@ -45,25 +46,25 @@ async def call_local_llm(
         headers["Authorization"] = f"Bearer {settings.local_llm_api_key}"
 
     async with httpx.AsyncClient(timeout=60) as client:
-        response = await client.post(
-            settings.local_llm_api_url,
-            headers=headers,
-            json={
-                "model": settings.local_llm_model,
-                "temperature": temperature,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": system_prompt,
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    },
-                ],
-            },
-        )
+        body: dict[str, Any] = {
+            "model": settings.local_llm_model,
+            "temperature": temperature,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+        }
+        if max_tokens is not None:
+            body["max_tokens"] = max_tokens
+
+        response = await client.post(settings.local_llm_api_url, headers=headers, json=body)
 
     if response.status_code >= 400:
         raise BackendApiError(response.text or f"Local LLM API request failed with status {response.status_code}.", 502)

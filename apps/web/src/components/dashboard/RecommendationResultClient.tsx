@@ -100,7 +100,7 @@ export function RecommendationResultClient({ recommendationId }: RecommendationR
         <>
           <div className="flex flex-wrap items-start justify-end gap-2">
             <RecommendationFavoriteButton result={result} />
-            <Link href={ROUTES.saved}>
+            <Link href={ROUTES.favorites}>
               <Button variant="secondary">찜 목록</Button>
             </Link>
           </div>

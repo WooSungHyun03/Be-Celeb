@@ -10,7 +10,7 @@ export type PopularTrendVideo = {
   viewCount: number | null;
   likeCount: number | null;
   commentCount: number | null;
-  publishedAt: string;
+  publishedAt: string | null;
   youtubeUrl: string;
 };
 

@@ -58,7 +58,16 @@ export function RecommendationFavoriteButton({ result }: RecommendationFavoriteB
       const favorite = await addFavorite({
         targetType: "recommendation",
         targetId: result.recommendationId,
+        recommendationId: result.recommendationId,
         title: result.recommendation.title,
+        reason: result.recommendation.reason,
+        hashtags: result.recommendation.hashtags ?? [],
+        storyboard: result.recommendation.storyboard ?? [],
+        source: {
+          selectedCategory: result.selectedCategory,
+          channel: result.channel,
+          options: result.options ?? null,
+        },
       });
       setFavoriteId(favorite.id);
       setStatus("idle");

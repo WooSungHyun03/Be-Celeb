@@ -10,8 +10,10 @@ import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 const navItems = [
   { href: ROUTES.dashboard, label: "대시보드" },
   { href: ROUTES.trends, label: "트렌드" },
+  { href: ROUTES.favorites, label: "찜 목록" },
+  { href: ROUTES.calendar, label: "캘린더" },
+  { href: ROUTES.growthReport, label: "성장 리포트" },
   { href: ROUTES.trendingItems, label: "상점" },
-  { href: ROUTES.pricing, label: "요금" },
 ];
 
 function LoginIcon() {

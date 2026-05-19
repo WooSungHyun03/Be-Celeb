@@ -19,11 +19,23 @@ CreatorCategoryName = Literal[
 TrendKeywordRange = Literal["daily", "weekly", "monthly"]
 
 
+class RecommendationFieldOptions(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    reason: bool = True
+    hashtags: bool = True
+    storyboard: bool = True
+    hook: bool = False
+    thumbnail_idea: bool = Field(default=False, alias="thumbnailIdea")
+    upload_tips: bool = Field(default=False, alias="uploadTips")
+
+
 class RecommendContentRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     channel_url: str = Field(alias="channelUrl", min_length=1)
     category: str | None = None
+    options: RecommendationFieldOptions | None = None
 
 
 class AnalyzeChannelRequest(BaseModel):
@@ -158,13 +170,13 @@ class GenerateContentPlanRequest(BaseModel):
 
 class ContentPlan(BaseModel):
     title: str
-    format: str
-    hashtags: list[str]
-    thumbnailIdea: str
-    targetAudience: str
-    hook: str
-    storyboard: list[StoryboardScene]
-    uploadTips: list[str]
+    format: str = "Shorts"
+    hashtags: list[str] = Field(default_factory=list)
+    thumbnailIdea: str | None = None
+    targetAudience: str | None = None
+    hook: str | None = None
+    storyboard: list[StoryboardScene] = Field(default_factory=list)
+    uploadTips: list[str] = Field(default_factory=list)
 
 
 class ContentPlanResponse(BaseModel):
@@ -174,8 +186,8 @@ class ContentPlanResponse(BaseModel):
 
 
 class SingleContentRecommendation(ContentPlan):
-    reason: str
-    whyNotDuplicate: str
+    reason: str | None = None
+    whyNotDuplicate: str | None = None
 
 
 class RecommendationResponseChannel(BaseModel):
@@ -191,6 +203,7 @@ class SingleRecommendContentResponse(BaseModel):
     selectedCategory: CreatorCategoryName
     channel: RecommendationResponseChannel
     recommendation: SingleContentRecommendation
+    options: RecommendationFieldOptions = Field(default_factory=RecommendationFieldOptions)
 
 
 class RecommendationDetailResponse(SingleRecommendContentResponse):
@@ -207,7 +220,7 @@ class PopularTrendVideo(BaseModel):
     viewCount: int | None = None
     likeCount: int | None = None
     commentCount: int | None = None
-    publishedAt: str
+    publishedAt: str | None = None
     youtubeUrl: str
 
 

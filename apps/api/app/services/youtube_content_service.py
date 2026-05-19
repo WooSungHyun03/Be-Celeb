@@ -12,6 +12,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.errors import BackendApiError, missing_env
+from app.core.logging import get_logger
 from app.schemas.youtube_content import (
     CategoryScore,
     ChannelAnalysisResult,
@@ -32,6 +33,7 @@ from app.schemas.youtube_content import (
 )
 
 YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3"
+logger = get_logger(__name__)
 DAY_SECONDS = 24 * 60 * 60
 UTC = timezone.utc
 TOP_KEYWORD_COUNT = 10
@@ -825,51 +827,59 @@ def _thumbnail_url_from_row(row: dict[str, Any]) -> str | None:
 def _popular_video_from_row(row: dict[str, Any], category: str) -> PopularTrendVideo:
     video_id = _as_str(row.get("youtube_video_id"))
     return PopularTrendVideo(
-        category=category,
+        category=category or _as_str(row.get("category_name"), _as_str(row.get("category"), "미분류")),
         youtubeVideoId=video_id,
         title=_as_str(row.get("title"), "Untitled video"),
         description=_as_str(row.get("description")),
         thumbnailUrl=_as_str(row.get("thumbnail_url")) or _thumbnail_url_from_row(row),
         tags=_as_str_list(row.get("tags")),
-        viewCount=_as_int(row.get("view_count")),
-        likeCount=_as_int(row.get("like_count")),
-        commentCount=_as_int(row.get("comment_count")),
-        publishedAt=_as_str(row.get("published_at")),
+        viewCount=_as_int(row.get("view_count")) or 0,
+        likeCount=_as_int(row.get("like_count")) or 0,
+        commentCount=_as_int(row.get("comment_count")) or 0,
+        publishedAt=_as_str(row.get("published_at")) or None,
         youtubeUrl=_to_video_url(video_id),
     )
 
 
 async def get_popular_videos_by_category() -> PopularVideosResponse:
-    categories = await _supabase_get("creator_categories", {"select": "id,name"})
-    category_map = {
-        row["id"]: row["name"]
-        for row in categories
-        if isinstance(row, dict) and isinstance(row.get("id"), str) and isinstance(row.get("name"), str)
-    } if isinstance(categories, list) else {}
-    rows = await _supabase_get(
-        "influencer_videos",
-        {
-            "select": "category_id,youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count",
-            "limit": "1000",
-        },
-    )
+    try:
+        categories = await _supabase_get("creator_categories", {"select": "id,name"})
+        category_map = {
+            row["id"]: row["name"]
+            for row in categories
+            if isinstance(row, dict) and isinstance(row.get("id"), str) and isinstance(row.get("name"), str)
+        } if isinstance(categories, list) else {}
+    except Exception as error:
+        logger.exception("Failed to load creator_categories for popular videos.")
+        category_map = {}
+
+    try:
+        rows = await _supabase_get(
+            "influencer_videos",
+            {
+                "select": "category_id,youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count",
+                "limit": "1000",
+            },
+        )
+    except Exception as error:
+        logger.exception("Failed to load influencer_videos for popular videos.")
+        return PopularVideosResponse(videos=[])
+
     best_by_category: dict[str, PopularTrendVideo] = {}
 
     if isinstance(rows, list):
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            category = category_map.get(row.get("category_id"))
-            if not category:
-                continue
+            category = category_map.get(row.get("category_id")) or _as_str(row.get("category_name"), _as_str(row.get("category"), "미분류"))
             normalized = _popular_video_from_row(row, category)
             current = best_by_category.get(category)
-            current_score = (current.viewCount or -1, current.publishedAt)
-            normalized_score = (normalized.viewCount or -1, normalized.publishedAt)
+            current_score = (current.viewCount or 0, current.publishedAt or "")
+            normalized_score = (normalized.viewCount or 0, normalized.publishedAt or "")
             if current is None or normalized_score > current_score:
                 best_by_category[category] = normalized
 
-    videos = sorted(best_by_category.values(), key=lambda video: (video.viewCount or -1, video.publishedAt), reverse=True)
+    videos = sorted(best_by_category.values(), key=lambda video: (video.viewCount or 0, video.publishedAt or ""), reverse=True)
     return PopularVideosResponse(videos=videos)
 
 

@@ -89,6 +89,16 @@ POST /api/analyze-channel
 GET  /api/user/channel-settings
 PUT  /api/user/channel-settings
 DELETE /api/account
+GET  /api/favorites
+POST /api/favorites
+PATCH /api/favorites/{favorite_id}
+DELETE /api/favorites/{favorite_id}
+GET  /api/calendar/events?start=YYYY-MM-DD&end=YYYY-MM-DD
+POST /api/calendar/events
+PATCH /api/calendar/events/{event_id}
+DELETE /api/calendar/events/{event_id}
+GET  /api/growth-report
+POST /api/growth-report/refresh
 GET  /api/admin/llm-prompts
 GET  /api/trends/popular-videos
 GET  /api/trends/keywords?range=daily|weekly|monthly
@@ -106,6 +116,47 @@ Dashboard의 기본 추천 플로우는 1회 LLM 호출 API와 결과 조회 API
 2. `GET /api/recommendations/{recommendation_id}`: 새로고침 가능한 결과 페이지에서 제목, 추천 이유, 해시태그, 상세 콘티 조회
 3. `GET/PUT /api/user/channel-settings`: 회원별 channel URL/category 저장 및 자동 불러오기
 4. `GET/POST/PATCH/DELETE /api/admin/llm-prompts`: admin active LLM prompt 관리
+
+추천 요청은 선택형 옵션을 받는다. `title`은 항상 생성하고, 나머지 필드는 사용자가 체크한 항목만 prompt와 JSON schema에 포함한다.
+
+```json
+{
+  "channelUrl": "https://www.youtube.com/@example",
+  "category": "IT",
+  "options": {
+    "reason": true,
+    "hashtags": true,
+    "storyboard": true,
+    "hook": false,
+    "thumbnailIdea": false,
+    "uploadTips": false
+  }
+}
+```
+
+LLM `max_tokens`는 선택 옵션에 따라 동적으로 증가한다. 기본 추천은 1200~1600 수준, 추천이유/해시태그 중심은 약 1800, 콘티 포함 시 3500~5000, 콘티와 hook/thumbnail/uploadTips를 모두 포함하면 5000~7000 범위를 사용한다. `storyboard=true`일 때는 8~12 scene, scene별 `duration`, `visual`, `dialogue`, `caption`, `shootingTip`을 요구한다.
+
+## Favorites / Calendar / Growth Report
+
+사용자 생산 워크플로우는 다음 테이블에 저장된다. migration은 `supabase/migrations/20260519001000_planning_growth_features.sql`이다.
+
+- `favorites`: 추천 결과 또는 콘텐츠 아이디어 찜 목록. `recommendation_id`, `title`, `reason`, `hashtags`, `storyboard`, `source`를 저장한다.
+- `calendar_events`: 업로드 예정일과 제작 상태. `planned`, `scripted`, `filmed`, `edited`, `uploaded` 상태를 사용한다.
+- `channel_growth_snapshots`: YouTube 채널의 구독자 수, 전체 조회수, 영상 수, 최근 영상 통계를 스냅샷으로 저장한다.
+
+Frontend 라우트:
+
+```text
+/favorites
+/calendar
+/growth-report
+```
+
+`/favorites`는 추천 결과에서 누른 찜을 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다.
+
+성장 리포트 refresh는 YouTube API quota를 사용한다. 운영에서는 refresh 버튼을 과도하게 누르지 않도록 UI/정책을 조정할 수 있다.
+
+Admin에서 favorites/calendar/growth snapshots 전체 관리 UI는 아직 확장하지 않았다. 운영 필요 시 admin 도메인에서 목록/삭제 API를 추가하면 된다.
 
 ## Naver DataLab 검색 트렌드
 
@@ -152,6 +203,25 @@ Trends 페이지는 기존 YouTube 인기 영상/태그 집계를 유지하고, 
 combinedScore = normalizedYoutubeTagCount * 0.4
   + normalizedYoutubeViews * 0.3
   + normalizedNaverRatio * 0.3
+```
+
+`/api/trends/popular-videos`는 `influencer_videos` 데이터를 조회한다. 운영 중 빈 DB, category join 누락, nullable `view_count`, 누락된 thumbnail/published_at 때문에 500이 나면 안 된다. 현재 구현은 Supabase 쿼리 실패를 서버 로그에 남기고 빈 배열을 반환하며, row별 매핑은 다음 fallback을 사용한다.
+
+- category join 실패: `category_name`, `category`, `"미분류"` 순서로 fallback
+- `view_count`, `like_count`, `comment_count` null: `0`
+- thumbnail json 누락: `thumbnailUrl: null`
+- `published_at` 누락: `publishedAt: null`
+
+확인:
+
+```bash
+curl "$NEXT_PUBLIC_API_BASE_URL/api/trends/popular-videos"
+```
+
+응답은 DB가 비어 있어도 500이 아니라 다음 형태의 빈 배열이어야 한다.
+
+```json
+{ "success": true, "data": { "videos": [] } }
 ```
 
 기존 health/main route도 유지된다.
@@ -234,13 +304,29 @@ await fetch("/api/recommend-content");
 curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/recommend-content" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-  -d '{"channelUrl":"https://www.youtube.com/@example","category":"IT"}'
+  -d '{"channelUrl":"https://www.youtube.com/@example","category":"IT","options":{"reason":true,"hashtags":true,"storyboard":true,"hook":false,"thumbnailIdea":false,"uploadTips":false}}'
 ```
 
 회원별 채널 설정 확인:
 
 ```bash
 curl "$NEXT_PUBLIC_API_BASE_URL/api/user/channel-settings" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+```
+
+찜/캘린더/성장 리포트 확인:
+
+```bash
+curl "$NEXT_PUBLIC_API_BASE_URL/api/favorites" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+
+curl "$NEXT_PUBLIC_API_BASE_URL/api/calendar/events?start=2026-05-01&end=2026-05-31" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+
+curl "$NEXT_PUBLIC_API_BASE_URL/api/growth-report" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/growth-report/refresh" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 ```
 

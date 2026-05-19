@@ -31,7 +31,7 @@ async def recommend_content(
 ) -> ApiResponse[SingleRecommendContentResponse] | JSONResponse:
     try:
         user = await get_user_from_access_token(access_token_from_authorization(authorization))
-        result = await create_single_content_recommendation(request.channel_url, request.category, user.get("id") if user else None)
+        result = await create_single_content_recommendation(request.channel_url, request.category, user.get("id") if user else None, request.options)
         return ApiResponse(success=True, data=result)
     except Exception as error:
         return error_response(error)

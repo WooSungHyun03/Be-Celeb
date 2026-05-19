@@ -4,24 +4,42 @@ import type { FormEvent } from "react";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { CREATOR_CATEGORIES } from "@/lib/categories";
+import type { RecommendationFieldOptions } from "@/types/content-recommendation";
 
 type ChannelAnalysisCardProps = {
   channelUrl: string;
   category: string;
+  options: RecommendationFieldOptions;
   isLoading: boolean;
   onChannelUrlChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
+  onOptionsChange: (options: RecommendationFieldOptions) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
+
+const optionItems: Array<{ key: keyof RecommendationFieldOptions; label: string; description: string }> = [
+  { key: "reason", label: "추천이유", description: "왜 이 주제가 맞는지 요약합니다." },
+  { key: "hashtags", label: "해시태그", description: "업로드에 바로 쓸 태그를 제안합니다." },
+  { key: "storyboard", label: "콘티", description: "8~12개 장면의 촬영 콘티를 만듭니다." },
+  { key: "hook", label: "3초 Hook", description: "초반 이탈을 줄이는 도입 문구를 만듭니다." },
+  { key: "thumbnailIdea", label: "썸네일 아이디어", description: "클릭을 유도할 화면 구성을 제안합니다." },
+  { key: "uploadTips", label: "업로드 팁", description: "게시 시간과 패키징 팁을 정리합니다." },
+];
 
 export function ChannelAnalysisCard({
   channelUrl,
   category,
+  options,
   isLoading,
   onChannelUrlChange,
   onCategoryChange,
+  onOptionsChange,
   onSubmit,
 }: ChannelAnalysisCardProps) {
+  function handleOptionChange(key: keyof RecommendationFieldOptions, checked: boolean) {
+    onOptionsChange({ ...options, [key]: checked });
+  }
+
   return (
     <Card title="채널 분석 시작">
       <form className="space-y-3" onSubmit={onSubmit}>
@@ -60,6 +78,34 @@ export function ChannelAnalysisCard({
             {isLoading ? "추천 생성 중" : "콘텐츠 추천받기"}
           </Button>
         </div>
+        <section className="rounded-md border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-bold text-ink">추천 옵션</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">제목은 기본 포함됩니다. 선택한 항목만 AI 응답과 결과 화면에 표시됩니다.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {optionItems.map((item) => (
+              <label
+                className="flex min-h-20 cursor-pointer gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm shadow-sm transition hover:border-violet-300"
+                key={item.key}
+              >
+                <input
+                  checked={Boolean(options[item.key])}
+                  className="mt-1 size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                  disabled={isLoading}
+                  onChange={(event) => handleOptionChange(item.key, event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block font-bold text-ink">{item.label}</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">{item.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </section>
         <p className="text-xs leading-5 text-slate-500">저장된 회원 채널 설정이 있으면 자동으로 입력됩니다.</p>
       </form>
     </Card>

@@ -11,6 +11,7 @@ from app.schemas.youtube_content import (
     ContentPlanResponse,
     CreatorCategoryName,
     GenerateContentPlanOptionInput,
+    RecommendationFieldOptions,
     RecommendationResponseChannel,
     RecommendOptionsResponse,
     RecommendationOption,
@@ -318,6 +319,90 @@ def _fallback_single_recommendation(selected_category: CreatorCategoryName, infl
     )
 
 
+def _selected_options(options: RecommendationFieldOptions | None) -> RecommendationFieldOptions:
+    return options or RecommendationFieldOptions()
+
+
+def _max_tokens_for_options(options: RecommendationFieldOptions) -> int:
+    selected_count = sum(
+        [
+            options.reason,
+            options.hashtags,
+            options.storyboard,
+            options.hook,
+            options.thumbnail_idea,
+            options.upload_tips,
+        ]
+    )
+    if options.storyboard and options.hook and options.thumbnail_idea and options.upload_tips:
+        return 6500
+    if options.storyboard:
+        return 4500
+    if options.reason or options.hashtags:
+        return 1800
+    return 1200 if selected_count <= 1 else 1600
+
+
+def _recommendation_schema_for_options(options: RecommendationFieldOptions) -> dict[str, Any]:
+    recommendation: dict[str, Any] = {"title": "string"}
+    if options.reason:
+        recommendation["reason"] = "string"
+        recommendation["whyNotDuplicate"] = "string"
+    if options.hashtags:
+        recommendation["hashtags"] = ["string"]
+    if options.hook:
+        recommendation["hook"] = "string"
+    if options.thumbnail_idea:
+        recommendation["thumbnailIdea"] = "string"
+    if options.storyboard:
+        recommendation["storyboard"] = [
+            {
+                "scene": 1,
+                "duration": "0-5s",
+                "visual": "string",
+                "dialogue": "string",
+                "caption": "string",
+                "shootingTip": "string",
+            }
+        ]
+    if options.upload_tips:
+        recommendation["uploadTips"] = ["string"]
+    return {"recommendation": recommendation}
+
+
+def _option_instructions(options: RecommendationFieldOptions) -> list[str]:
+    instructions = [
+        "title is mandatory and must always be included.",
+        "Only include fields listed in the JSON schema. Do not include unchecked option fields.",
+    ]
+    if options.storyboard:
+        instructions.extend(
+            [
+                "storyboard must contain 8 to 12 scenes.",
+                "Every storyboard scene must include duration, visual, dialogue, caption, and shootingTip.",
+                "Write detailed filming directions that a creator can use immediately.",
+                "Include scene transitions, framing, subtitle copy, B-roll, and camera points.",
+                "Do not write thin one-line storyboard scenes.",
+            ]
+        )
+    return instructions
+
+
+def _filter_recommendation_options(recommendation: SingleContentRecommendation, options: RecommendationFieldOptions) -> SingleContentRecommendation:
+    return SingleContentRecommendation(
+        title=recommendation.title,
+        format=recommendation.format,
+        reason=recommendation.reason if options.reason else None,
+        whyNotDuplicate=recommendation.whyNotDuplicate if options.reason else None,
+        hashtags=recommendation.hashtags if options.hashtags else [],
+        hook=recommendation.hook if options.hook else None,
+        thumbnailIdea=recommendation.thumbnailIdea if options.thumbnail_idea else None,
+        targetAudience=recommendation.targetAudience,
+        storyboard=recommendation.storyboard if options.storyboard else [],
+        uploadTips=recommendation.uploadTips if options.upload_tips else [],
+    )
+
+
 def _normalize_plan(raw: dict[str, Any], fallback: ContentPlan) -> ContentPlan:
     value = raw.get("plan") if isinstance(raw.get("plan"), dict) else raw
     if not isinstance(value, dict):
@@ -415,7 +500,9 @@ async def create_single_content_recommendation(
     channel_url: str,
     category: str | None,
     user_id: str | None = None,
+    options: RecommendationFieldOptions | None = None,
 ) -> SingleRecommendContentResponse:
+    selected_options = _selected_options(options)
     selected_from_request = normalize_category(category)
     if category and not selected_from_request:
         raise BackendApiError(f"category must be one of: {', '.join(CREATOR_CATEGORIES)}.", 400, "VALIDATION_ERROR")
@@ -442,22 +529,26 @@ async def create_single_content_recommendation(
         ),
         "user_recent_videos": json.dumps([_compact_video(video) for video in recent_videos[:10]], ensure_ascii=False),
         "category_database_videos": json.dumps([_compact_video(video) for video in filtered_videos[:24]], ensure_ascii=False),
-        "duplicate_guidelines": "사용자가 이미 올린 영상의 제목, 설명, 태그와 유사한 주제는 추천하지 않는다. 콘티는 6~10개 scene으로 작성하고 각 scene에 duration, visual, dialogue, caption, shootingTip을 모두 채운다.",
+        "duplicate_guidelines": "사용자가 이미 올린 영상의 제목, 설명, 태그와 유사한 주제는 추천하지 않는다. 선택된 추천 옵션과 JSON schema에 포함된 필드만 생성한다.",
     }
+    dynamic_schema = _recommendation_schema_for_options(selected_options)
     prompt_contract = "\n\n".join(
         [
             "Required response contract:",
             "Return valid JSON only. The root object must contain recommendation.",
-            "recommendation.storyboard must contain 6 to 10 scenes.",
-            "Every storyboard scene must include scene, duration, visual, dialogue, caption, and shootingTip.",
-            "Use detailed filming directions that a creator can follow on set.",
-            "Do not replace visual/dialogue/shootingTip with description-only scenes.",
+            "JSON schema:",
+            json.dumps(dynamic_schema, ensure_ascii=False, indent=2),
+            *(_option_instructions(selected_options)),
         ]
     )
     rendered_prompt = f"{render_prompt_template(prompt_template['userPromptTemplate'], values)}\n\n{prompt_contract}"
-    raw_text = await call_local_llm(rendered_prompt, system_prompt=prompt_template["systemPrompt"])
+    raw_text = await call_local_llm(
+        rendered_prompt,
+        system_prompt=prompt_template["systemPrompt"],
+        max_tokens=_max_tokens_for_options(selected_options),
+    )
     raw_json, parse_error = parse_llm_json_with_fallback(raw_text, {"recommendation": fallback.model_dump()})
-    recommendation = _normalize_single_recommendation(raw_json, fallback)
+    recommendation = _filter_recommendation_options(_normalize_single_recommendation(raw_json, fallback), selected_options)
     analysis_id = await save_channel_analysis(
         channel_url=channel_url,
         requested_category=category,
@@ -480,8 +571,13 @@ async def create_single_content_recommendation(
             "duplicateVideosExcluded": duplicate_count,
             "promptTemplateId": prompt_template.get("id"),
             "llmParseError": parse_error,
+            "options": selected_options.model_dump(mode="json", by_alias=True),
         },
-        llm_response={"recommendation": recommendation.model_dump(mode="json"), "raw": raw_json},
+        llm_response={
+            "recommendation": recommendation.model_dump(mode="json", exclude_none=True),
+            "options": selected_options.model_dump(mode="json", by_alias=True),
+            "raw": raw_json,
+        },
     )
     if not recommendation_id:
         raise BackendApiError("Recommendation was generated but could not be saved.", 502, "SUPABASE_ERROR")
@@ -498,6 +594,7 @@ async def create_single_content_recommendation(
             thumbnailUrl=channel.thumbnailUrl,
         ),
         recommendation=recommendation,
+        options=selected_options,
     )
 
 
