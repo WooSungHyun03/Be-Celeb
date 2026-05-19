@@ -498,6 +498,16 @@ export async function deleteProductionBoardChecklistItem(checklistItemId: string
   return response.data;
 }
 
+export async function deleteProductionBoardItem(itemId: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ deleted: true }>>(`/api/production-board/items/${itemId}`, {
+    method: "DELETE",
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data;
+}
+
 export async function getCalendarEvents(params: { start?: string; end?: string } = {}, signal?: AbortSignal) {
   const query = new URLSearchParams();
   if (params.start) {

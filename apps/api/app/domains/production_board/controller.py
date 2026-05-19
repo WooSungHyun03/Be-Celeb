@@ -16,6 +16,7 @@ from app.domains.production_board.schemas import (
 from app.domains.production_board.service import (
     ProductionBoardAlreadyAddedError,
     add_production_board_item,
+    delete_production_board_item,
     create_production_board_checklist_item,
     delete_production_board_checklist_item,
     list_production_board_items,
@@ -76,6 +77,17 @@ async def patch_production_board_item_memo(
     try:
         user = await require_user_from_access_token(access_token_from_authorization(authorization))
         return ApiResponse(success=True, data=await update_production_board_item_memo(user["id"], item_id, payload))
+    except Exception as error:
+        return error_response(error)
+
+
+async def remove_production_board_item(
+    item_id: str,
+    authorization: str | None = Header(default=None),
+) -> ApiResponse[Any] | JSONResponse:
+    try:
+        user = await require_user_from_access_token(access_token_from_authorization(authorization))
+        return ApiResponse(success=True, data=await delete_production_board_item(user["id"], item_id))
     except Exception as error:
         return error_response(error)
 

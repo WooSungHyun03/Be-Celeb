@@ -455,6 +455,18 @@ async def delete_production_board_checklist_item(user_id: str, checklist_item_id
     return {"deleted": True}
 
 
+async def delete_production_board_item(user_id: str, item_id: str) -> dict[str, Any]:
+    rows = await _request(
+        "DELETE",
+        "production_board_items",
+        params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
+        prefer="return=representation",
+    )
+    if not isinstance(rows, list) or not rows:
+        raise NotFoundException("Production board item not found.")
+    return {"deleted": True}
+
+
 async def add_production_board_item(user_id: str, payload: ProductionBoardCreatePayload) -> dict[str, Any]:
     if not payload.favorite_id and not payload.recommendation_id:
         raise BadRequestException("favoriteId or recommendationId is required.", "VALIDATION_ERROR")

@@ -2,6 +2,7 @@ export {
   addFavoriteToProductionBoard,
   createProductionBoardChecklistItem,
   deleteProductionBoardChecklistItem,
+  deleteProductionBoardItem,
   getProductionBoardChecklist,
   getProductionBoardItems,
   updateProductionBoardChecklistItem,

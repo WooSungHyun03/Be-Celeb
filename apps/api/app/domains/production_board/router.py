@@ -8,6 +8,7 @@ from app.domains.production_board.controller import (
     patch_production_board_item_status,
     production_board_checklist_items,
     production_board_items,
+    remove_production_board_item,
     remove_production_board_checklist_item,
 )
 
@@ -19,5 +20,6 @@ router.add_api_route("/items/{item_id}/checklist", production_board_checklist_it
 router.add_api_route("/items/{item_id}/checklist", add_production_board_checklist_item, methods=["POST"], response_model=None)
 router.add_api_route("/items/{item_id}/memo", patch_production_board_item_memo, methods=["PATCH"], response_model=None)
 router.add_api_route("/items/{item_id}/status", patch_production_board_item_status, methods=["PATCH"], response_model=None)
+router.add_api_route("/items/{item_id}", remove_production_board_item, methods=["DELETE"], response_model=None)
 router.add_api_route("/checklist/{checklist_item_id}", patch_production_board_checklist_item, methods=["PATCH"], response_model=None)
 router.add_api_route("/checklist/{checklist_item_id}", remove_production_board_checklist_item, methods=["DELETE"], response_model=None)
