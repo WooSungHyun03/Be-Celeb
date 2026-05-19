@@ -16,10 +16,23 @@ export type ProductionBoardItem = {
   status: ProductionBoardStatus;
   priority: ProductionBoardPriority;
   memo: string | null;
+  checklistTotal: number;
+  checklistDone: number;
   dueDate: string | null;
   uploadScheduledAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+export type ProductionBoardChecklistItem = {
+  id: string;
+  boardItemId: string;
+  userId: string;
+  text: string;
+  isDone: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt?: string | null;
 };
 
 export const PRODUCTION_BOARD_STATUS_LABELS: Record<ProductionBoardStatus, string> = {

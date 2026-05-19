@@ -23,6 +23,17 @@ class ProductionBoardMemoUpdatePayload(BaseModel):
     memo: str = Field(default="", max_length=1000)
 
 
+class ProductionBoardChecklistCreatePayload(BaseModel):
+    text: str = Field(min_length=1, max_length=200)
+
+
+class ProductionBoardChecklistUpdatePayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    text: str | None = Field(default=None, min_length=1, max_length=200)
+    is_done: bool | None = Field(default=None, alias="isDone")
+
+
 class ProductionBoardItem(BaseModel):
     id: str
     userId: str
@@ -37,6 +48,8 @@ class ProductionBoardItem(BaseModel):
     status: ProductionBoardStatus
     priority: ProductionBoardPriority
     memo: str | None = None
+    checklistTotal: int = 0
+    checklistDone: int = 0
     dueDate: str | None = None
     uploadScheduledAt: str | None = None
     createdAt: str | None = None

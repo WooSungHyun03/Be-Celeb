@@ -12,7 +12,7 @@ import type {
   TrendKeywordsResponse,
   TrendKeywordRange,
 } from "@/types/youtube-trends";
-import type { ProductionBoardItem, ProductionBoardStatus } from "@/types/production-board";
+import type { ProductionBoardChecklistItem, ProductionBoardItem, ProductionBoardStatus } from "@/types/production-board";
 import { getAuthorizationHeaders } from "@/lib/client/auth";
 
 export type ApiSuccess<T> = {
@@ -439,6 +439,63 @@ export async function updateProductionBoardItemMemo(itemId: string, memo: string
   );
 
   return response.data.item;
+}
+
+export async function getProductionBoardChecklist(boardItemId: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ items: ProductionBoardChecklistItem[] }>>(
+    `/api/production-board/items/${boardItemId}/checklist`,
+    {
+      headers: await getAuthorizationHeaders(),
+      signal,
+    },
+  );
+
+  return response.data.items;
+}
+
+export async function createProductionBoardChecklistItem(boardItemId: string, text: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ item: ProductionBoardChecklistItem }>>(
+    `/api/production-board/items/${boardItemId}/checklist`,
+    {
+      method: "POST",
+      body: JSON.stringify({ text }),
+      headers: await getAuthorizationHeaders(),
+      signal,
+    },
+  );
+
+  return response.data.item;
+}
+
+export async function updateProductionBoardChecklistItem(
+  checklistItemId: string,
+  payload: { text?: string; isDone?: boolean },
+  signal?: AbortSignal,
+) {
+  const response = await apiFetch<ApiSuccess<{ item: ProductionBoardChecklistItem }>>(
+    `/api/production-board/checklist/${checklistItemId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      headers: await getAuthorizationHeaders(),
+      signal,
+    },
+  );
+
+  return response.data.item;
+}
+
+export async function deleteProductionBoardChecklistItem(checklistItemId: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ deleted: true }>>(
+    `/api/production-board/checklist/${checklistItemId}`,
+    {
+      method: "DELETE",
+      headers: await getAuthorizationHeaders(),
+      signal,
+    },
+  );
+
+  return response.data;
 }
 
 export async function getCalendarEvents(params: { start?: string; end?: string } = {}, signal?: AbortSignal) {

@@ -8,6 +8,8 @@ import httpx
 from app.core.config import get_settings
 from app.core.exceptions import BackendApiError, BadRequestException, NotFoundException, missing_env
 from app.domains.production_board.schemas import (
+    ProductionBoardChecklistCreatePayload,
+    ProductionBoardChecklistUpdatePayload,
     ProductionBoardCreatePayload,
     ProductionBoardMemoUpdatePayload,
     ProductionBoardStatusUpdatePayload,
@@ -18,6 +20,7 @@ PRODUCTION_BOARD_SELECT = (
     "id,user_id,favorite_id,recommendation_id,title,hook,reason,hashtags,storyboard,category,"
     "status,priority,memo,due_date,upload_scheduled_at,created_at,updated_at"
 )
+CHECKLIST_SELECT = "id,board_item_id,user_id,text,is_done,sort_order,created_at,updated_at"
 PRODUCTION_BOARD_STATUSES = ("idea", "script", "filming", "editing", "uploaded")
 
 
@@ -96,8 +99,23 @@ def _item_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "status": row.get("status"),
         "priority": row.get("priority") or "normal",
         "memo": row.get("memo"),
+        "checklistTotal": row.get("checklist_total") if isinstance(row.get("checklist_total"), int) else 0,
+        "checklistDone": row.get("checklist_done") if isinstance(row.get("checklist_done"), int) else 0,
         "dueDate": row.get("due_date"),
         "uploadScheduledAt": row.get("upload_scheduled_at"),
+        "createdAt": row.get("created_at"),
+        "updatedAt": row.get("updated_at"),
+    }
+
+
+def _checklist_item_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row.get("id"),
+        "boardItemId": row.get("board_item_id"),
+        "userId": row.get("user_id"),
+        "text": row.get("text"),
+        "isDone": bool(row.get("is_done")),
+        "sortOrder": row.get("sort_order") if isinstance(row.get("sort_order"), int) else 0,
         "createdAt": row.get("created_at"),
         "updatedAt": row.get("updated_at"),
     }
@@ -211,7 +229,36 @@ async def list_production_board_items(user_id: str) -> dict[str, Any]:
             "order": "created_at.desc",
         },
     )
-    items = [_item_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    raw_items = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    item_ids = [row["id"] for row in raw_items if isinstance(row.get("id"), str)]
+    checklist_counts: dict[str, dict[str, int]] = {item_id: {"total": 0, "done": 0} for item_id in item_ids}
+    if item_ids:
+        checklist_rows = await _request(
+            "GET",
+            "production_board_checklist_items",
+            params={
+                "select": "board_item_id,is_done",
+                "user_id": f"eq.{user_id}",
+                "board_item_id": f"in.({','.join(item_ids)})",
+            },
+        )
+        if isinstance(checklist_rows, list):
+            for checklist_row in checklist_rows:
+                if not isinstance(checklist_row, dict):
+                    continue
+                board_item_id = checklist_row.get("board_item_id")
+                if not isinstance(board_item_id, str) or board_item_id not in checklist_counts:
+                    continue
+                checklist_counts[board_item_id]["total"] += 1
+                if checklist_row.get("is_done") is True:
+                    checklist_counts[board_item_id]["done"] += 1
+
+    for row in raw_items:
+        item_id = row.get("id")
+        if isinstance(item_id, str):
+            row["checklist_total"] = checklist_counts.get(item_id, {}).get("total", 0)
+            row["checklist_done"] = checklist_counts.get(item_id, {}).get("done", 0)
+    items = [_item_from_row(row) for row in raw_items]
     return {"items": items}
 
 
@@ -287,6 +334,125 @@ async def update_production_board_item_memo(
         if updated_row.get("memo") != memo:
             raise BackendApiError("메모 저장에 실패했습니다.", 502, "SUPABASE_ERROR")
     return {"item": _item_from_row(updated_row)}
+
+
+async def _find_checklist_item_by_id(user_id: str, checklist_item_id: str) -> dict[str, Any]:
+    rows = await _request(
+        "GET",
+        "production_board_checklist_items",
+        params={
+            "select": CHECKLIST_SELECT,
+            "id": f"eq.{checklist_item_id}",
+            "user_id": f"eq.{user_id}",
+            "limit": "1",
+        },
+    )
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not row:
+        raise NotFoundException("Checklist item not found.")
+    return row
+
+
+async def list_production_board_checklist_items(user_id: str, item_id: str) -> dict[str, Any]:
+    await _find_board_item_by_id(user_id, item_id)
+    rows = await _request(
+        "GET",
+        "production_board_checklist_items",
+        params={
+            "select": CHECKLIST_SELECT,
+            "board_item_id": f"eq.{item_id}",
+            "user_id": f"eq.{user_id}",
+            "order": "sort_order.asc,created_at.asc",
+        },
+    )
+    items = [_checklist_item_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    return {"items": items}
+
+
+async def create_production_board_checklist_item(
+    user_id: str,
+    item_id: str,
+    payload: ProductionBoardChecklistCreatePayload,
+) -> dict[str, Any]:
+    await _find_board_item_by_id(user_id, item_id)
+    text = payload.text.strip()
+    if not text:
+        raise BadRequestException("Checklist text is required.", "VALIDATION_ERROR")
+
+    rows = await _request(
+        "GET",
+        "production_board_checklist_items",
+        params={
+            "select": "sort_order",
+            "board_item_id": f"eq.{item_id}",
+            "user_id": f"eq.{user_id}",
+            "order": "sort_order.desc",
+            "limit": "1",
+        },
+    )
+    latest_order = rows[0].get("sort_order") if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    sort_order = latest_order + 1 if isinstance(latest_order, int) else 0
+
+    rows = await _request(
+        "POST",
+        f"production_board_checklist_items?select={CHECKLIST_SELECT}",
+        payload={
+            "board_item_id": item_id,
+            "user_id": user_id,
+            "text": text,
+            "is_done": False,
+            "sort_order": sort_order,
+        },
+        prefer="return=representation",
+    )
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not row:
+        raise BackendApiError("Checklist insert did not return a row.", 502, "SUPABASE_ERROR")
+    return {"item": _checklist_item_from_row(row)}
+
+
+async def update_production_board_checklist_item(
+    user_id: str,
+    checklist_item_id: str,
+    payload: ProductionBoardChecklistUpdatePayload,
+) -> dict[str, Any]:
+    await _find_checklist_item_by_id(user_id, checklist_item_id)
+    raw = payload.model_dump(exclude_unset=True, by_alias=False)
+    patch: dict[str, Any] = {}
+    if "text" in raw:
+        text = raw.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise BadRequestException("Checklist text is required.", "VALIDATION_ERROR")
+        patch["text"] = text.strip()
+    if "is_done" in raw and isinstance(raw.get("is_done"), bool):
+        patch["is_done"] = raw["is_done"]
+    if not patch:
+        raise BadRequestException("No fields to update.", "VALIDATION_ERROR")
+
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    rows = await _request(
+        "PATCH",
+        f"production_board_checklist_items?select={CHECKLIST_SELECT}",
+        params={"id": f"eq.{checklist_item_id}", "user_id": f"eq.{user_id}"},
+        payload=patch,
+        prefer="return=representation",
+    )
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not row:
+        raise BackendApiError("Checklist update did not return a row.", 502, "SUPABASE_ERROR")
+    return {"item": _checklist_item_from_row(row)}
+
+
+async def delete_production_board_checklist_item(user_id: str, checklist_item_id: str) -> dict[str, Any]:
+    rows = await _request(
+        "DELETE",
+        "production_board_checklist_items",
+        params={"id": f"eq.{checklist_item_id}", "user_id": f"eq.{user_id}"},
+        prefer="return=representation",
+    )
+    if not isinstance(rows, list) or not rows:
+        raise NotFoundException("Checklist item not found.")
+    return {"deleted": True}
 
 
 async def add_production_board_item(user_id: str, payload: ProductionBoardCreatePayload) -> dict[str, Any]:

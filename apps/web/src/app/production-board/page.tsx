@@ -26,7 +26,11 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Toast } from "@/components/common/Toast";
 import { ROUTES } from "@/constants/routes";
 import {
+  createProductionBoardChecklistItem,
+  deleteProductionBoardChecklistItem,
+  getProductionBoardChecklist,
   getProductionBoardItems,
+  updateProductionBoardChecklistItem,
   updateProductionBoardItemMemo,
   updateProductionBoardItemStatus,
 } from "@/lib/api/production-board";
@@ -36,6 +40,7 @@ import {
   PRODUCTION_BOARD_COLUMNS,
   PRODUCTION_BOARD_STATUS_LABELS,
   VALID_PRODUCTION_BOARD_STATUSES,
+  type ProductionBoardChecklistItem,
   type ProductionBoardItem,
   type ProductionBoardStatus,
 } from "@/types/production-board";
@@ -49,12 +54,31 @@ const statusTone: Record<ProductionBoardStatus, "brand" | "info" | "warning" | "
   uploaded: "default",
 };
 
+const DEFAULT_CHECKLIST_ITEMS = [
+  "대본 작성",
+  "촬영 장소 정하기",
+  "영상 촬영",
+  "컷 편집",
+  "자막 추가",
+  "썸네일/커버 확인",
+  "해시태그 확인",
+  "업로드 완료",
+];
+
 function normalizeHashtag(tag: string) {
   return tag.startsWith("#") ? tag : `#${tag}`;
 }
 
 function memoPreview(memo: string | null) {
   return memo?.trim().split(/\r?\n/).filter(Boolean).join(" ") ?? "";
+}
+
+function mergeBoardItemUpdate(currentItem: ProductionBoardItem, updatedItem: ProductionBoardItem) {
+  return {
+    ...updatedItem,
+    checklistTotal: currentItem.checklistTotal,
+    checklistDone: currentItem.checklistDone,
+  };
 }
 
 function getProductionBoardStatus(value: UniqueIdentifier | null | undefined): ProductionBoardStatus | null {
@@ -74,10 +98,11 @@ type ProductionBoardCardProps = {
   isMoving: boolean;
   isActiveDragItem: boolean;
   onEditMemo: (item: ProductionBoardItem) => void;
+  onOpenChecklist: (item: ProductionBoardItem) => void;
   onMoveNext: (item: ProductionBoardItem) => void;
 };
 
-function ProductionBoardCard({ item, isMoving, isActiveDragItem, onEditMemo, onMoveNext }: ProductionBoardCardProps) {
+function ProductionBoardCard({ item, isMoving, isActiveDragItem, onEditMemo, onOpenChecklist, onMoveNext }: ProductionBoardCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
     data: { status: item.status },
@@ -88,6 +113,9 @@ function ProductionBoardCard({ item, isMoving, isActiveDragItem, onEditMemo, onM
   const nextLabel = nextStatus ? PRODUCTION_BOARD_STATUS_LABELS[nextStatus] : null;
   const visibleTags = item.hashtags.slice(0, 4);
   const memoText = memoPreview(item.memo);
+  const checklistTotal = item.checklistTotal ?? 0;
+  const checklistDone = item.checklistDone ?? 0;
+  const checklistProgress = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0;
   const dragging = isDragging || isActiveDragItem;
   const style: CSSProperties = {
     transform: CSS.Translate.toString(transform),
@@ -152,6 +180,25 @@ function ProductionBoardCard({ item, isMoving, isActiveDragItem, onEditMemo, onM
             {memoText ? "메모 수정" : "메모 추가"}
           </Button>
         </div>
+        <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold uppercase text-slate-500">체크리스트</span>
+            <span className="text-xs font-bold text-slate-600">
+              {checklistTotal > 0 ? `${checklistDone}/${checklistTotal} 완료` : "없음"}
+            </span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${checklistProgress}%` }} />
+          </div>
+          <Button
+            className="mt-3 w-full"
+            onClick={() => onOpenChecklist(item)}
+            onPointerDown={(event) => event.stopPropagation()}
+            variant="ghost"
+          >
+            {checklistTotal > 0 ? "체크리스트" : "체크리스트 추가"}
+          </Button>
+        </div>
         {nextStatus && nextLabel ? (
           <Button
             className="mt-4 w-full"
@@ -174,10 +221,11 @@ type ProductionBoardColumnProps = {
   activeId: string | null;
   movingId: string | null;
   onEditMemo: (item: ProductionBoardItem) => void;
+  onOpenChecklist: (item: ProductionBoardItem) => void;
   onMoveNext: (item: ProductionBoardItem) => void;
 };
 
-function ProductionBoardColumn({ column, items, activeId, movingId, onEditMemo, onMoveNext }: ProductionBoardColumnProps) {
+function ProductionBoardColumn({ column, items, activeId, movingId, onEditMemo, onOpenChecklist, onMoveNext }: ProductionBoardColumnProps) {
   const { isOver, setNodeRef } = useDroppable({ id: column.status });
 
   return (
@@ -202,6 +250,7 @@ function ProductionBoardColumn({ column, items, activeId, movingId, onEditMemo, 
               item={item}
               key={item.id}
               onEditMemo={onEditMemo}
+              onOpenChecklist={onOpenChecklist}
               onMoveNext={onMoveNext}
             />
           ))}
@@ -265,6 +314,121 @@ function MemoDialog({ item, value, isSaving, onChange, onClose, onSave }: MemoDi
   );
 }
 
+type ChecklistDialogProps = {
+  item: ProductionBoardItem | null;
+  checklistItems: ProductionBoardChecklistItem[];
+  inputValue: string;
+  isLoading: boolean;
+  isAdding: boolean;
+  busyId: string | null;
+  onAdd: () => void;
+  onAddTemplate: () => void;
+  onChangeInput: (value: string) => void;
+  onClose: () => void;
+  onDelete: (checklistItem: ProductionBoardChecklistItem) => void;
+  onToggle: (checklistItem: ProductionBoardChecklistItem) => void;
+};
+
+function ChecklistDialog({
+  item,
+  checklistItems,
+  inputValue,
+  isLoading,
+  isAdding,
+  busyId,
+  onAdd,
+  onAddTemplate,
+  onChangeInput,
+  onClose,
+  onDelete,
+  onToggle,
+}: ChecklistDialogProps) {
+  if (!item) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6" role="presentation">
+      <div
+        aria-modal="true"
+        className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-950/20"
+        role="dialog"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <Badge tone="brand">Production tasks</Badge>
+            <h2 className="mt-3 text-xl font-bold text-ink">체크리스트</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">이 콘텐츠를 제작하기 위해 필요한 작업을 관리하세요.</p>
+            <p className="mt-4 line-clamp-2 text-sm font-semibold leading-6 text-slate-800">{item.title}</p>
+          </div>
+          <Button disabled={isAdding || isLoading} onClick={onAddTemplate} variant="secondary">
+            기본 체크리스트 추가
+          </Button>
+        </div>
+
+        <div className="mt-5 max-h-80 overflow-y-auto rounded-md border border-slate-200">
+          {isLoading ? (
+            <p className="px-4 py-8 text-center text-sm font-medium text-slate-500">체크리스트를 불러오는 중입니다.</p>
+          ) : checklistItems.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm font-medium text-slate-500">아직 추가된 할 일이 없습니다.</p>
+          ) : (
+            <ul className="divide-y divide-slate-200">
+              {checklistItems.map((checklistItem) => (
+                <li className="flex items-center gap-3 px-4 py-3" key={checklistItem.id}>
+                  <input
+                    checked={checklistItem.isDone}
+                    className="size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                    disabled={busyId === checklistItem.id}
+                    onChange={() => onToggle(checklistItem)}
+                    type="checkbox"
+                  />
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 text-sm leading-6 text-slate-700",
+                      checklistItem.isDone ? "text-slate-400 line-through" : "",
+                    )}
+                  >
+                    {checklistItem.text}
+                  </span>
+                  <Button disabled={busyId === checklistItem.id} onClick={() => onDelete(checklistItem)} variant="ghost">
+                    삭제
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+          <input
+            className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+            disabled={isAdding || isLoading}
+            maxLength={200}
+            onChange={(event) => onChangeInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onAdd();
+              }
+            }}
+            placeholder="새 할 일 추가"
+            value={inputValue}
+          />
+          <Button disabled={isAdding || isLoading || !inputValue.trim()} onClick={onAdd}>
+            {isAdding ? "추가 중" : "추가"}
+          </Button>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Button onClick={onClose} variant="secondary">
+            닫기
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProductionBoardPage() {
   const [items, setItems] = useState<ProductionBoardItem[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
@@ -275,6 +439,12 @@ export default function ProductionBoardPage() {
   const [memoItem, setMemoItem] = useState<ProductionBoardItem | null>(null);
   const [memoDraft, setMemoDraft] = useState("");
   const [memoSavingId, setMemoSavingId] = useState<string | null>(null);
+  const [checklistItem, setChecklistItem] = useState<ProductionBoardItem | null>(null);
+  const [checklistItems, setChecklistItems] = useState<ProductionBoardChecklistItem[]>([]);
+  const [checklistInput, setChecklistInput] = useState("");
+  const [checklistStatus, setChecklistStatus] = useState<"idle" | "loading" | "ready">("idle");
+  const [checklistAdding, setChecklistAdding] = useState(false);
+  const [checklistBusyId, setChecklistBusyId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
     useSensor(KeyboardSensor),
@@ -355,7 +525,7 @@ export default function ProductionBoardPage() {
     setItems((current) => current.map((currentItem) => (currentItem.id === item.id ? { ...currentItem, status: targetStatus } : currentItem)));
     try {
       const updatedItem = await updateProductionBoardItemStatus(item.id, targetStatus);
-      setItems((current) => current.map((currentItem) => (currentItem.id === updatedItem.id ? updatedItem : currentItem)));
+      setItems((current) => current.map((currentItem) => (currentItem.id === updatedItem.id ? mergeBoardItemUpdate(currentItem, updatedItem) : currentItem)));
       setToast({ message: successMessage, tone: "success" });
     } catch {
       setItems(previousItems);
@@ -420,7 +590,7 @@ export default function ProductionBoardPage() {
     setItems((current) => current.map((item) => (item.id === memoItem.id ? { ...item, memo } : item)));
     try {
       const updatedItem = await updateProductionBoardItemMemo(memoItem.id, memo);
-      setItems((current) => current.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+      setItems((current) => current.map((item) => (item.id === updatedItem.id ? mergeBoardItemUpdate(item, updatedItem) : item)));
       setToast({ message: "메모가 저장되었습니다.", tone: "success" });
       setMemoItem(null);
       setMemoDraft("");
@@ -429,6 +599,150 @@ export default function ProductionBoardPage() {
       setToast({ message: "메모 저장에 실패했습니다.", tone: "error" });
     } finally {
       setMemoSavingId(null);
+    }
+  }
+
+  function syncChecklistSummary(boardItemId: string, nextChecklistItems: ProductionBoardChecklistItem[]) {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === boardItemId
+          ? {
+              ...item,
+              checklistTotal: nextChecklistItems.length,
+              checklistDone: nextChecklistItems.filter((checklistItem) => checklistItem.isDone).length,
+            }
+          : item,
+      ),
+    );
+  }
+
+  async function handleOpenChecklist(item: ProductionBoardItem) {
+    setChecklistItem(item);
+    setChecklistItems([]);
+    setChecklistInput("");
+    setChecklistStatus("loading");
+    try {
+      const loadedItems = await getProductionBoardChecklist(item.id);
+      setChecklistItems(loadedItems);
+      syncChecklistSummary(item.id, loadedItems);
+    } catch {
+      setToast({ message: "체크리스트 처리에 실패했습니다.", tone: "error" });
+    } finally {
+      setChecklistStatus("ready");
+    }
+  }
+
+  function handleCloseChecklist() {
+    if (checklistAdding || checklistBusyId) {
+      return;
+    }
+    setChecklistItem(null);
+    setChecklistItems([]);
+    setChecklistInput("");
+    setChecklistStatus("idle");
+  }
+
+  async function handleAddChecklistItem() {
+    if (!checklistItem) {
+      return;
+    }
+    const text = checklistInput.trim();
+    if (!text) {
+      return;
+    }
+
+    setChecklistAdding(true);
+    setToast(null);
+    try {
+      const createdItem = await createProductionBoardChecklistItem(checklistItem.id, text);
+      const nextItems = [...checklistItems, createdItem].sort((left, right) => left.sortOrder - right.sortOrder);
+      setChecklistItems(nextItems);
+      syncChecklistSummary(checklistItem.id, nextItems);
+      setChecklistInput("");
+      setToast({ message: "체크리스트가 추가되었습니다.", tone: "success" });
+    } catch {
+      setToast({ message: "체크리스트 처리에 실패했습니다.", tone: "error" });
+    } finally {
+      setChecklistAdding(false);
+    }
+  }
+
+  async function handleAddDefaultChecklist() {
+    if (!checklistItem) {
+      return;
+    }
+
+    const existingTexts = new Set(checklistItems.map((item) => item.text.trim().toLowerCase()));
+    const itemsToAdd = DEFAULT_CHECKLIST_ITEMS.filter((text) => !existingTexts.has(text.toLowerCase()));
+    if (itemsToAdd.length === 0) {
+      setToast({ message: "이미 기본 체크리스트가 추가되어 있습니다.", tone: "info" });
+      return;
+    }
+
+    setChecklistAdding(true);
+    setToast(null);
+    try {
+      const createdItems: ProductionBoardChecklistItem[] = [];
+      for (const text of itemsToAdd) {
+        createdItems.push(await createProductionBoardChecklistItem(checklistItem.id, text));
+      }
+      const nextItems = [...checklistItems, ...createdItems].sort((left, right) => left.sortOrder - right.sortOrder);
+      setChecklistItems(nextItems);
+      syncChecklistSummary(checklistItem.id, nextItems);
+      setToast({ message: "체크리스트가 추가되었습니다.", tone: "success" });
+    } catch {
+      setToast({ message: "체크리스트 처리에 실패했습니다.", tone: "error" });
+    } finally {
+      setChecklistAdding(false);
+    }
+  }
+
+  async function handleToggleChecklistItem(item: ProductionBoardChecklistItem) {
+    if (!checklistItem) {
+      return;
+    }
+
+    const previousItems = checklistItems;
+    const nextItems = checklistItems.map((currentItem) => (currentItem.id === item.id ? { ...currentItem, isDone: !item.isDone } : currentItem));
+    setChecklistBusyId(item.id);
+    setChecklistItems(nextItems);
+    syncChecklistSummary(checklistItem.id, nextItems);
+    setToast(null);
+    try {
+      const updatedItem = await updateProductionBoardChecklistItem(item.id, { isDone: !item.isDone });
+      const reconciledItems = nextItems.map((currentItem) => (currentItem.id === updatedItem.id ? updatedItem : currentItem));
+      setChecklistItems(reconciledItems);
+      syncChecklistSummary(checklistItem.id, reconciledItems);
+      setToast({ message: "체크리스트가 업데이트되었습니다.", tone: "success" });
+    } catch {
+      setChecklistItems(previousItems);
+      syncChecklistSummary(checklistItem.id, previousItems);
+      setToast({ message: "체크리스트 처리에 실패했습니다.", tone: "error" });
+    } finally {
+      setChecklistBusyId(null);
+    }
+  }
+
+  async function handleDeleteChecklistItem(item: ProductionBoardChecklistItem) {
+    if (!checklistItem) {
+      return;
+    }
+
+    const previousItems = checklistItems;
+    const nextItems = checklistItems.filter((currentItem) => currentItem.id !== item.id);
+    setChecklistBusyId(item.id);
+    setChecklistItems(nextItems);
+    syncChecklistSummary(checklistItem.id, nextItems);
+    setToast(null);
+    try {
+      await deleteProductionBoardChecklistItem(item.id);
+      setToast({ message: "체크리스트가 삭제되었습니다.", tone: "success" });
+    } catch {
+      setChecklistItems(previousItems);
+      syncChecklistSummary(checklistItem.id, previousItems);
+      setToast({ message: "체크리스트 처리에 실패했습니다.", tone: "error" });
+    } finally {
+      setChecklistBusyId(null);
     }
   }
 
@@ -495,6 +809,7 @@ export default function ProductionBoardPage() {
                 key={column.status}
                 movingId={movingId}
                 onEditMemo={handleOpenMemo}
+                onOpenChecklist={(item) => void handleOpenChecklist(item)}
                 onMoveNext={handleMoveNext}
               />
             ))}
@@ -508,6 +823,20 @@ export default function ProductionBoardPage() {
         onClose={handleCloseMemo}
         onSave={() => void handleSaveMemo()}
         value={memoDraft}
+      />
+      <ChecklistDialog
+        busyId={checklistBusyId}
+        checklistItems={checklistItems}
+        inputValue={checklistInput}
+        isAdding={checklistAdding}
+        isLoading={checklistStatus === "loading"}
+        item={checklistItem}
+        onAdd={() => void handleAddChecklistItem()}
+        onAddTemplate={() => void handleAddDefaultChecklist()}
+        onChangeInput={setChecklistInput}
+        onClose={handleCloseChecklist}
+        onDelete={(item) => void handleDeleteChecklistItem(item)}
+        onToggle={(item) => void handleToggleChecklistItem(item)}
       />
     </div>
   );
