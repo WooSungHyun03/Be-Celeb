@@ -19,6 +19,10 @@ class ProductionBoardStatusUpdatePayload(BaseModel):
     status: str = Field(min_length=1)
 
 
+class ProductionBoardMemoUpdatePayload(BaseModel):
+    memo: str = Field(default="", max_length=1000)
+
+
 class ProductionBoardItem(BaseModel):
     id: str
     userId: str

@@ -1,3 +1,8 @@
-export { addFavoriteToProductionBoard, getProductionBoardItems, updateProductionBoardItemStatus } from "@/lib/client/api";
+export {
+  addFavoriteToProductionBoard,
+  getProductionBoardItems,
+  updateProductionBoardItemMemo,
+  updateProductionBoardItemStatus,
+} from "@/lib/client/api";
 export type { AddProductionBoardItemPayload } from "@/lib/client/api";
 export type { ProductionBoardItem, ProductionBoardPriority, ProductionBoardStatus } from "@/types/production-board";

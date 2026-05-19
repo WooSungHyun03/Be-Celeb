@@ -7,7 +7,11 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.exceptions import BackendApiError, BadRequestException, NotFoundException, missing_env
-from app.domains.production_board.schemas import ProductionBoardCreatePayload, ProductionBoardStatusUpdatePayload
+from app.domains.production_board.schemas import (
+    ProductionBoardCreatePayload,
+    ProductionBoardMemoUpdatePayload,
+    ProductionBoardStatusUpdatePayload,
+)
 from app.services.database_service import fetch_content_recommendation_detail
 
 PRODUCTION_BOARD_SELECT = (
@@ -257,6 +261,31 @@ async def update_production_board_item_status(
         updated_row = await _find_board_item_by_id(user_id, item_id)
         if updated_row.get("status") != requested_status:
             raise BackendApiError("상태 변경에 실패했습니다.", 502, "SUPABASE_ERROR")
+    return {"item": _item_from_row(updated_row)}
+
+
+async def update_production_board_item_memo(
+    user_id: str,
+    item_id: str,
+    payload: ProductionBoardMemoUpdatePayload,
+) -> dict[str, Any]:
+    await _find_board_item_by_id(user_id, item_id)
+    memo = payload.memo
+    rows = await _request(
+        "PATCH",
+        f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+        params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
+        payload={
+            "memo": memo,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        prefer="return=representation",
+    )
+    updated_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not updated_row:
+        updated_row = await _find_board_item_by_id(user_id, item_id)
+        if updated_row.get("memo") != memo:
+            raise BackendApiError("메모 저장에 실패했습니다.", 502, "SUPABASE_ERROR")
     return {"item": _item_from_row(updated_row)}
 
 

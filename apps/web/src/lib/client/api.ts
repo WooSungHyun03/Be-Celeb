@@ -427,6 +427,20 @@ export async function updateProductionBoardItemStatus(
   return response.data.item;
 }
 
+export async function updateProductionBoardItemMemo(itemId: string, memo: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ item: ProductionBoardItem }>>(
+    `/api/production-board/items/${itemId}/memo`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ memo }),
+      headers: await getAuthorizationHeaders(),
+      signal,
+    },
+  );
+
+  return response.data.item;
+}
+
 export async function getCalendarEvents(params: { start?: string; end?: string } = {}, signal?: AbortSignal) {
   const query = new URLSearchParams();
   if (params.start) {
