@@ -13,6 +13,7 @@ export const ROUTES = {
   recommendations: "/recommendations",
   favorites: "/favorites",
   saved: "/favorites",
+  productionBoard: "/production-board",
   calendar: "/calendar",
   growthReport: "/growth-report",
   pricing: "/pricing",

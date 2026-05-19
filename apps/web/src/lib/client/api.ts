@@ -12,6 +12,7 @@ import type {
   TrendKeywordsResponse,
   TrendKeywordRange,
 } from "@/types/youtube-trends";
+import type { ProductionBoardItem } from "@/types/production-board";
 import { getAuthorizationHeaders } from "@/lib/client/auth";
 
 export type ApiSuccess<T> = {
@@ -97,6 +98,11 @@ export type CalendarEventPayload = {
   status?: CalendarEventStatus;
   platform?: string;
   metadata?: Record<string, unknown>;
+};
+
+export type AddProductionBoardItemPayload = {
+  favoriteId?: string;
+  recommendationId?: string;
 };
 
 export type GrowthVideoStat = {
@@ -381,6 +387,26 @@ export async function deleteFavoriteByTarget(type: FavoriteType, targetId: strin
   );
 
   return response.data;
+}
+
+export async function getProductionBoardItems(signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ items: ProductionBoardItem[] }>>("/api/production-board/items", {
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data.items;
+}
+
+export async function addFavoriteToProductionBoard(payload: AddProductionBoardItemPayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ item: ProductionBoardItem }>>("/api/production-board/items", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data.item;
 }
 
 export async function getCalendarEvents(params: { start?: string; end?: string } = {}, signal?: AbortSignal) {

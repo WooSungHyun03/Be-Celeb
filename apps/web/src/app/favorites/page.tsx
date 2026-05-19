@@ -8,10 +8,13 @@ import { Card } from "@/components/common/Card";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Loading } from "@/components/common/Loading";
 import { PageHeader } from "@/components/common/PageHeader";
+import { Toast } from "@/components/common/Toast";
 import { ROUTES } from "@/constants/routes";
 import { createCalendarEvent } from "@/lib/api/calendar";
 import { deleteFavorite, getFavorites, type FavoriteItem } from "@/lib/api/favorites";
+import { addFavoriteToProductionBoard, getProductionBoardItems, type ProductionBoardItem } from "@/lib/api/production-board";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+import { ApiClientError } from "@/lib/client/api";
 
 type FavoriteView = {
   title: string;
@@ -21,6 +24,11 @@ type FavoriteView = {
   channelUrl: string;
   hashtags: string[];
   storyboardSummary: string[];
+};
+
+type ToastState = {
+  message: string;
+  tone: "success" | "error" | "info";
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -67,12 +75,24 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function findBoardItemForFavorite(item: FavoriteItem, boardItems: ProductionBoardItem[]) {
+  const recommendationId = item.recommendationId ?? item.targetId;
+  return boardItems.find((boardItem) => {
+    const matchesRecommendation = Boolean(recommendationId && boardItem.recommendationId === recommendationId);
+    const matchesFavorite = Boolean(boardItem.favoriteId && boardItem.favoriteId === item.id);
+    return matchesRecommendation || matchesFavorite;
+  });
+}
+
 export default function FavoritesPage() {
   const [items, setItems] = useState<FavoriteItem[]>([]);
+  const [boardItems, setBoardItems] = useState<ProductionBoardItem[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
   const [message, setMessage] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
+  const [boardAddingId, setBoardAddingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [scheduleDates, setScheduleDates] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -111,9 +131,13 @@ export default function FavoritesPage() {
           return;
         }
 
-        const favorites = await getFavorites({ type: "recommendation" }, controller.signal);
+        const [favorites, productionBoardItems] = await Promise.all([
+          getFavorites({ type: "recommendation" }, controller.signal),
+          getProductionBoardItems(controller.signal),
+        ]);
         if (active) {
           setItems(favorites);
+          setBoardItems(productionBoardItems);
           setStatus("ready");
         }
       } catch (error) {
@@ -131,6 +155,15 @@ export default function FavoritesPage() {
       controller.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   async function handleDelete(favoriteId: string) {
     setDeletingId(favoriteId);
@@ -171,6 +204,38 @@ export default function FavoritesPage() {
     }
   }
 
+  async function handleAddToBoard(item: FavoriteItem) {
+    const recommendationId = item.recommendationId ?? item.targetId;
+    if (!recommendationId) {
+      setToast({ message: "제작 보드에 추가할 추천 ID를 찾지 못했습니다.", tone: "error" });
+      return;
+    }
+
+    setBoardAddingId(item.id);
+    setMessage("");
+    try {
+      const boardItem = await addFavoriteToProductionBoard({
+        favoriteId: item.id,
+        recommendationId,
+      });
+      setBoardItems((current) => (current.some((existing) => existing.id === boardItem.id) ? current : [boardItem, ...current]));
+      setToast({ message: "제작 보드에 추가되었습니다.", tone: "success" });
+    } catch (error) {
+      if (error instanceof ApiClientError && error.code === "ALREADY_ADDED") {
+        setToast({ message: "이미 제작 보드에 추가된 아이디어입니다.", tone: "info" });
+        try {
+          setBoardItems(await getProductionBoardItems());
+        } catch {
+          // The duplicate response already gave the user the important state.
+        }
+        return;
+      }
+      setToast({ message: "제작 보드 추가에 실패했습니다.", tone: "error" });
+    } finally {
+      setBoardAddingId(null);
+    }
+  }
+
   if (status === "loading") {
     return <Loading label="찜 목록을 불러오는 중입니다." />;
   }
@@ -197,15 +262,25 @@ export default function FavoritesPage() {
     <div className="space-y-8">
       <PageHeader
         action={
-          <Link href={ROUTES.dashboard}>
-            <Button>새 추천 생성</Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={ROUTES.productionBoard}>
+              <Button variant="secondary">제작 보드</Button>
+            </Link>
+            <Link href={ROUTES.dashboard}>
+              <Button>새 추천 생성</Button>
+            </Link>
+          </div>
         }
         description="추천 결과에서 저장한 콘텐츠 아이디어를 모아보고 업로드 일정을 바로 만들 수 있습니다."
         title="찜 목록"
       />
 
-      {message ? <p className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">{message}</p> : null}
+      {toast || message ? (
+        <div className="grid gap-2">
+          {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
+          {message ? <p className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">{message}</p> : null}
+        </div>
+      ) : null}
 
       {items.length === 0 ? (
         <EmptyState
@@ -256,6 +331,7 @@ export default function FavoritesPage() {
               {filteredItems.map((item) => {
                 const favorite = getFavoriteView(item);
                 const detailId = item.recommendationId ?? item.targetId;
+                const boardItem = findBoardItemForFavorite(item, boardItems);
                 return (
                   <Card className="flex h-full flex-col" key={item.id}>
                     <div className="flex flex-wrap items-center gap-2">
@@ -298,6 +374,17 @@ export default function FavoritesPage() {
                         </Button>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
+                        {item.targetType === "recommendation" ? (
+                          boardItem ? (
+                            <Link href={ROUTES.productionBoard}>
+                              <Button variant="secondary">보드에서 보기</Button>
+                            </Link>
+                          ) : (
+                            <Button disabled={boardAddingId === item.id} onClick={() => void handleAddToBoard(item)}>
+                              {boardAddingId === item.id ? "추가 중" : "제작 보드에 추가"}
+                            </Button>
+                          )
+                        ) : null}
                         {detailId ? (
                           <Link href={`/recommendations/${detailId}`}>
                             <Button variant="secondary">상세 보기</Button>
