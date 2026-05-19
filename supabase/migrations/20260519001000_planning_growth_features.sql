@@ -9,10 +9,14 @@ alter table public.favorites
   add column if not exists updated_at timestamptz not null default now();
 
 update public.favorites
-set recommendation_id = target_id::uuid
+set recommendation_id = target_id
 where recommendation_id is null
   and type = 'recommendation'
-  and target_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+  and exists (
+    select 1
+    from public.content_recommendations
+    where content_recommendations.id = favorites.target_id
+  );
 
 update public.favorites
 set source = metadata
