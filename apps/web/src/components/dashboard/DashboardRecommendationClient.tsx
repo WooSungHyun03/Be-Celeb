@@ -131,6 +131,17 @@ export function DashboardRecommendationClient() {
         description="저장된 채널 설정을 불러오거나 새로운 URL을 입력해 콘텐츠 추천 결과를 생성합니다."
       />
 
+      {isLoading ? <LoadingSteps activeIndex={stageIndex} steps={loadingSteps} /> : null}
+
+      {isLoading ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800 shadow-sm shadow-amber-100">
+          <p className="font-bold">분석에 시간이 걸릴 수 있습니다.</p>
+          <p className="mt-1">
+            채널 정보와 트렌드 데이터를 함께 분석하는 중입니다. 보통 수십 초 정도 걸릴 수 있으니 창을 닫지 말고 잠시만 기다려 주세요.
+          </p>
+        </div>
+      ) : null}
+
       <ChannelAnalysisCard
         category={category}
         channelUrl={channelUrl}
@@ -142,7 +153,6 @@ export function DashboardRecommendationClient() {
         options={options}
       />
 
-      {isLoading ? <LoadingSteps activeIndex={stageIndex} steps={loadingSteps} /> : null}
       {error ? <ErrorState message={error} /> : null}
     </div>
   );

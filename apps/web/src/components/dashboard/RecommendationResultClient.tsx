@@ -13,6 +13,7 @@ import { RecommendationResult } from "@/components/dashboard/RecommendationResul
 import { ROUTES } from "@/constants/routes";
 import { getRecommendation } from "@/lib/api/recommendations";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+import { hasSupabasePublicEnv } from "@/lib/config/env";
 import type { RecommendationDetailResponse } from "@/types/content-recommendation";
 
 type RecommendationResultClientProps = {
@@ -30,6 +31,15 @@ export function RecommendationResultClient({ recommendationId }: RecommendationR
 
     async function loadRecommendation() {
       try {
+        if (!hasSupabasePublicEnv()) {
+          setAuthStatus("authenticated");
+          const data = await getRecommendation(recommendationId, controller.signal);
+          if (active) {
+            setResult(data);
+          }
+          return;
+        }
+
         const {
           data: { session },
         } = await getSupabaseBrowserClient().auth.getSession();
@@ -97,15 +107,17 @@ export function RecommendationResultClient({ recommendationId }: RecommendationR
       {error ? <ErrorState message={error} /> : null}
       {!error && !result ? <LoadingSteps activeIndex={0} steps={["추천 결과 불러오는 중"]} /> : null}
       {result ? (
-        <>
-          <div className="flex flex-wrap items-start justify-end gap-2">
-            <RecommendationFavoriteButton result={result} />
-            <Link href={ROUTES.favorites}>
-              <Button variant="secondary">찜 목록</Button>
-            </Link>
-          </div>
-          <RecommendationResult result={result} />
-        </>
+        <RecommendationResult
+          action={
+            <>
+              <RecommendationFavoriteButton result={result} />
+              <Link href={ROUTES.favorites}>
+                <Button variant="secondary">찜 목록</Button>
+              </Link>
+            </>
+          }
+          result={result}
+        />
       ) : null}
     </div>
   );

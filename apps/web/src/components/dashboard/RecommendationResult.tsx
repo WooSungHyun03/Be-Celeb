@@ -2,12 +2,14 @@ import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
 import { StoryboardRenderer } from "@/components/dashboard/StoryboardRenderer";
 import type { SingleRecommendContentResponse } from "@/types/content-recommendation";
+import type { ReactNode } from "react";
 
 type RecommendationResultProps = {
   result: SingleRecommendContentResponse;
+  action?: ReactNode;
 };
 
-export function RecommendationResult({ result }: RecommendationResultProps) {
+export function RecommendationResult({ result, action }: RecommendationResultProps) {
   const { recommendation } = result;
   const options = result.options;
   const hashtags = recommendation.hashtags ?? [];
@@ -21,12 +23,15 @@ export function RecommendationResult({ result }: RecommendationResultProps) {
   const showUploadTips = (options?.uploadTips ?? options?.upload_tips) ?? uploadTips.length > 0;
 
   return (
-    <Card title="콘텐츠 추천 결과">
-      <div className="flex flex-wrap gap-2">
-        <Badge tone="brand">{result.selectedCategory}</Badge>
-        <Badge>{recommendation.format}</Badge>
+    <Card action={action} title="콘텐츠 추천 결과">
+      <div className="rounded-2xl border border-violet-100 bg-[linear-gradient(135deg,#ffffff_0%,#faf5ff_100%)] p-5 shadow-sm shadow-violet-100/70">
+        <p className="text-xs font-black uppercase text-violet-700">추천 제목</p>
+        <h2 className="mt-2 text-2xl font-black leading-8 text-ink">{recommendation.title}</h2>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Badge tone="brand">{result.selectedCategory}</Badge>
+          <Badge>{recommendation.format}</Badge>
+        </div>
       </div>
-      <h2 className="mt-5 text-2xl font-bold leading-8 text-ink">{recommendation.title}</h2>
 
       <div className="mt-6 grid gap-5">
         {showHook && recommendation.hook ? (
@@ -37,11 +42,14 @@ export function RecommendationResult({ result }: RecommendationResultProps) {
         ) : null}
 
         {showReason ? (
-          <section>
-            <p className="text-sm font-bold text-slate-500">추천 이유</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">{recommendation.reason || "추천 이유 정보가 없습니다."}</p>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/70">
+            <div className="flex items-center gap-2">
+              <span className="flex size-8 items-center justify-center rounded-lg bg-violet-50 text-sm font-black text-violet-700">?</span>
+              <p className="text-sm font-black text-ink">추천 이유</p>
+            </div>
+            <p className="mt-3 text-sm leading-7 text-slate-700">{recommendation.reason || "추천 이유 정보가 없습니다."}</p>
             {recommendation.whyNotDuplicate ? (
-              <p className="mt-2 text-sm leading-6 text-slate-500">{recommendation.whyNotDuplicate}</p>
+              <p className="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">{recommendation.whyNotDuplicate}</p>
             ) : null}
           </section>
         ) : null}

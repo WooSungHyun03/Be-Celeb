@@ -6,35 +6,46 @@ type StoryboardRendererProps = {
 
 export function StoryboardRenderer({ scenes }: StoryboardRendererProps) {
   if (scenes.length === 0) {
-    return <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">콘티 정보가 없습니다.</p>;
+    return <p className="rounded-xl border border-dashed border-violet-200 bg-violet-50 px-4 py-4 text-sm text-slate-600">콘티 정보가 없습니다.</p>;
   }
 
   return (
-    <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+    <div className="grid gap-4">
       {scenes.map((scene) => (
-        <article className="grid gap-3 p-4 md:grid-cols-[96px_minmax(0,1fr)]" key={`${scene.scene}-${scene.duration}`}>
-          <div>
-            <p className="text-xs font-semibold uppercase text-slate-500">Scene {scene.scene}</p>
-            <p className="mt-1 text-sm font-bold text-violet-700">{scene.duration}</p>
-          </div>
-          <div className="grid gap-3 text-sm leading-6 text-slate-700">
-            <div>
-              <p className="font-semibold text-ink">화면 구성</p>
-              <p className="mt-1 break-words">{scene.visual || scene.description || "화면 구성이 없습니다."}</p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
+        <article
+          className="overflow-hidden rounded-2xl border border-violet-100 bg-[linear-gradient(135deg,#ffffff_0%,#faf5ff_100%)] shadow-sm shadow-violet-100/70"
+          key={`${scene.scene}-${scene.duration}`}
+        >
+          <div className="grid gap-0 md:grid-cols-[132px_minmax(0,1fr)]">
+            <div className="flex flex-row items-center justify-between gap-3 border-b border-violet-100 bg-violet-600 px-4 py-4 text-white md:flex-col md:items-start md:justify-start md:border-b-0 md:border-r">
               <div>
-                <p className="font-semibold text-ink">대사</p>
-                <p className="mt-1 break-words">{scene.dialogue || "-"}</p>
+                <p className="text-xs font-bold uppercase text-violet-100">Scene</p>
+                <p className="mt-1 text-3xl font-black leading-none">{scene.scene}</p>
               </div>
-              <div>
-                <p className="font-semibold text-ink">자막</p>
-                <p className="mt-1 break-words">{scene.caption || "-"}</p>
-              </div>
+              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white shadow-inner">
+                {scene.duration}
+              </span>
             </div>
-            <div>
-              <p className="font-semibold text-ink">촬영 포인트</p>
-              <p className="mt-1 break-words">{scene.shootingTip || "-"}</p>
+
+            <div className="grid gap-4 p-5 text-sm leading-6 text-slate-700">
+              <div className="rounded-xl border border-violet-100 bg-white p-4">
+                <p className="text-xs font-black uppercase text-violet-700">화면 구성</p>
+                <p className="mt-2 break-words font-medium text-ink">{scene.visual || scene.description || "화면 구성이 없습니다."}</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl bg-white p-4">
+                  <p className="text-xs font-black uppercase text-slate-500">대사</p>
+                  <p className="mt-2 break-words">{scene.dialogue || "-"}</p>
+                </div>
+                <div className="rounded-xl bg-white p-4">
+                  <p className="text-xs font-black uppercase text-slate-500">자막</p>
+                  <p className="mt-2 break-words">{scene.caption || "-"}</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-white p-4">
+                <p className="text-xs font-black uppercase text-slate-500">촬영 포인트</p>
+                <p className="mt-2 break-words">{scene.shootingTip || "-"}</p>
+              </div>
             </div>
           </div>
         </article>
