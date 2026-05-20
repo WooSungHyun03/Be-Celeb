@@ -155,7 +155,9 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <article className={`rounded-xl border border-slate-200 bg-white text-ink shadow-sm shadow-slate-200/70 ${className}`}>
+    <article
+      className={`relative rounded-xl border border-violet-100/80 bg-white text-ink shadow-[0_18px_46px_rgba(88,28,135,0.08),0_2px_10px_rgba(15,23,42,0.04)] ring-1 ring-white/80 transition-shadow duration-300 before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(237,233,254,0.18)_48%,rgba(255,255,255,0))] before:content-[''] hover:shadow-[0_24px_60px_rgba(88,28,135,0.13),0_4px_14px_rgba(15,23,42,0.06)] ${className}`}
+    >
       {children}
     </article>
   );
@@ -226,12 +228,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
           <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-2 lg:grid-cols-5">
             {workflow.map((item, index) => (
-              <Card className="relative p-6 transition duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-md hover:shadow-violet-100" key={item.step}>
-                <div className="mb-3 text-5xl font-black text-violet-500">
-                  {item.step}
+              <Card className="p-6 transition duration-300 hover:-translate-y-1 hover:border-violet-200" key={item.step}>
+                <div className="relative">
+                  <div className="mb-3 text-5xl font-black text-violet-500">{item.step}</div>
+                  <h3 className="mb-2 font-bold">{item.title}</h3>
+                  <p className="text-sm leading-relaxed text-slate-500">{item.description}</p>
                 </div>
-                <h3 className="mb-2 font-bold">{item.title}</h3>
-                <p className="text-sm leading-relaxed text-slate-500">{item.description}</p>
                 {index < workflow.length - 1 ? (
                   <Icon className="absolute -right-8 top-1/2 hidden h-5 w-5 -translate-y-1/2 text-violet-300 lg:block" name="arrow" />
                 ) : null}
@@ -250,12 +252,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
           <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-2 lg:grid-cols-4">
             {features.map((feature) => (
-              <Card className="group p-8 transition duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-md hover:shadow-violet-100" key={feature.title}>
-                <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-violet-50 text-violet-700 transition group-hover:bg-violet-100">
-                  <Icon className="h-7 w-7" name={feature.icon} />
+              <Card className="group p-8 transition duration-300 hover:-translate-y-1 hover:border-violet-200" key={feature.title}>
+                <div className="relative">
+                  <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-violet-50 text-violet-700 shadow-inner shadow-violet-100 transition group-hover:bg-violet-100">
+                    <Icon className="h-7 w-7" name={feature.icon} />
+                  </div>
+                  <h3 className="mb-3 text-xl font-bold">{feature.title}</h3>
+                  <p className="leading-relaxed text-slate-500">{feature.description}</p>
                 </div>
-                <h3 className="mb-3 text-xl font-bold">{feature.title}</h3>
-                <p className="leading-relaxed text-slate-500">{feature.description}</p>
               </Card>
             ))}
           </div>
@@ -271,10 +275,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </div>
 
             <Card className="p-8">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {keywords.map((item) => (
                   <div
-                    className="flex items-center justify-between rounded-lg bg-slate-50 p-4 transition hover:bg-violet-50"
+                    className="flex items-center justify-between rounded-lg border border-violet-50 bg-slate-50 p-4 shadow-sm shadow-slate-200/60 transition hover:border-violet-100 hover:bg-violet-50 hover:shadow-md hover:shadow-violet-100"
                     key={item.keyword}
                   >
                     <div className="flex min-w-0 items-center gap-3">
@@ -290,7 +294,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   </div>
                 ))}
               </div>
-              <div className="mt-6 text-center">
+              <div className="relative mt-6 text-center">
                 <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold transition hover:border-violet-300 hover:bg-violet-50" href={ROUTES.trends}>
                   전체 트렌드 보기
                   <Icon className="h-4 w-4" name="arrow" />
@@ -303,7 +307,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
       <section className="border-t border-slate-200 py-20 sm:py-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Card className="relative overflow-hidden border-violet-200 bg-[linear-gradient(135deg,#f5f3ff_0%,#faf5ff_48%,#ffffff_100%)] p-12 text-center sm:p-16">
+          <Card className="overflow-hidden border-violet-200 bg-[linear-gradient(135deg,#f5f3ff_0%,#faf5ff_48%,#ffffff_100%)] p-12 text-center shadow-[0_28px_80px_rgba(88,28,135,0.14),0_8px_22px_rgba(15,23,42,0.06)] sm:p-16">
             <div className="relative mx-auto max-w-3xl">
               <h2 className="mb-4 text-3xl font-black sm:text-4xl">지금 바로 시작하세요</h2>
               <p className="mb-8 text-lg leading-relaxed text-slate-600">
