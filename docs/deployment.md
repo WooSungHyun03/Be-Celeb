@@ -298,7 +298,8 @@ combinedScore = normalizedYoutubeTagCount * 0.4
 `/api/trends/popular-videos`는 `influencer_videos` 데이터를 조회한다. 운영 중 빈 DB, category join 누락, nullable `view_count`, 누락된 thumbnail/published_at 때문에 500이 나면 안 된다. 현재 구현은 Supabase 쿼리 실패를 서버 로그에 남기고 빈 배열을 반환하며, row별 매핑은 다음 fallback을 사용한다.
 
 - 배포 DB와 코드의 컬럼명이 다를 수 있어 `youtube_video_id`, `video_id`, `thumbnail_url`, `thumbnails`, `category_name`, `category` 조합으로 select를 재시도
-- category join 실패: `category_name`, `category`, `"미분류"` 순서로 fallback
+- endpoint 컨트롤러까지 예외가 올라와도 화면이 깨지지 않도록 `{ "videos": [] }` fallback 반환
+- category join 실패: `category_name`, `category`, `"기타"` 순서로 fallback
 - `view_count`, `like_count`, `comment_count` null: `0`
 - thumbnail json 누락: `thumbnailUrl: null`
 - `published_at` 누락: `publishedAt: null`
@@ -431,7 +432,7 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?limit=8"
 curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?equipmentCategory=%EC%B9%B4%EB%A9%94%EB%9D%BC&limit=8&refresh=true"
 ```
 
-404가 아니고 섹션별 상품, cache, fallback 중 하나가 나오면 path 연결은 정상이다. Naver 인증 오류가 있어도 `/shop` 화면은 “실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다.” 또는 “네이버 쇼핑 API 인증 설정이 올바르지 않습니다. 관리자에게 문의하세요.” 안내를 표시해야 한다.
+404가 아니고 섹션별 상품, cache, fallback 중 하나가 나오면 path 연결은 정상이다. Naver 인증 오류가 있어도 `/shop` 화면은 “실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다.” 안내와 fallback 상품을 표시해야 한다. 실제 401 `errorCode: 024`, query, env 존재 여부는 backend logger에만 남긴다.
 
 ## Cron
 

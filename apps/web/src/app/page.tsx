@@ -25,8 +25,6 @@ const heroStats = [
   { label: "일정 관리", value: "14", change: "plan" },
 ];
 
-const sidebarItems = ["개요", "추천", "찜 목록", "캘린더", "성장 리포트", "트렌드", "상점"];
-
 const insightCards = [
   { icon: "spark", title: "콘텐츠 추천", description: "채널 URL과 카테고리로 다음 아이디어를 생성합니다.", tone: "violet" },
   { icon: "trend", title: "트렌드 분석", description: "YouTube 인기 영상과 검색 관심도를 함께 확인합니다.", tone: "pink" },
@@ -627,7 +625,7 @@ function ServicePagesSection() {
   );
 }
 
-function HeroDashboardPreview({ mainData }: { mainData: MainPageData | null }) {
+function RecommendationPreviewCard({ mainData }: { mainData: MainPageData | null }) {
   const stats = getHeroStats(mainData);
   const topTrend = mainData?.popularTrends[0];
   const sample = mainData?.sampleRecommendation;
@@ -637,77 +635,92 @@ function HeroDashboardPreview({ mainData }: { mainData: MainPageData | null }) {
     .slice(0, 4);
 
   return (
-    <div className="relative rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80">
-      <div className="grid gap-4 lg:grid-cols-[92px_1fr]">
-        <aside className="hidden rounded-2xl bg-slate-50 p-3 text-[11px] font-bold text-slate-500 lg:block">
-          <div className="mb-4 flex items-center gap-2 text-ink">
-            <img alt="" className="size-5 rounded-md object-contain" src="/android-icon-192x192.png" />
-            <span>Be Celeb</span>
+    <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80">
+      <div className="absolute inset-x-0 top-0 h-24 bg-[linear-gradient(90deg,#ede9fe_0%,#fce7f3_60%,#fff7ed_100%)]" />
+      <div className="relative grid gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-violet-600">Dashboard Preview</p>
+            <h2 className="mt-1 text-lg font-black text-ink">채널 분석 시작</h2>
+            <p className="mt-1 text-xs font-medium text-slate-500">실제 대시보드와 같은 입력 흐름입니다.</p>
           </div>
-          <div className="space-y-1.5">
-            {sidebarItems.map((item, index) => (
-              <div className={`rounded-lg px-2 py-2 ${index === 0 ? "bg-violet-100 text-violet-700" : ""}`} key={item}>
-                {item}
+          <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-black text-violet-700">제목 기본 포함</span>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_160px]">
+            <label className="block text-sm font-semibold text-slate-700">
+              <span>YouTube 채널 URL</span>
+              <input
+                className="mt-2 block h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                defaultValue="https://www.youtube.com/@beceleb"
+                readOnly
+                type="url"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              <span>카테고리</span>
+              <select
+                className="mt-2 block h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                defaultValue="IT"
+                aria-label="카테고리 미리보기"
+              >
+                <option>자동 선정</option>
+                <option>IT</option>
+                <option>일상</option>
+                <option>뷰티</option>
+              </select>
+            </label>
+          </div>
+
+          <section className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm font-bold text-ink">추천 옵션</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">선택한 항목만 추천 결과에 표시됩니다.</p>
               </div>
-            ))}
-          </div>
-        </aside>
-
-        <div className="min-w-0 space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-base font-extrabold text-ink">다시 오신 걸 환영해요, Alex</p>
-              <p className="mt-1 text-xs font-medium text-slate-500">당신의 YouTube 콘텐츠를 위한 트렌드 브리핑입니다.</p>
             </div>
-            <span className="rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-500">2024년 5월 12일 - 5월 18일</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            {stats.map((stat) => (
-              <div className="rounded-2xl border border-slate-200 bg-white p-3" key={stat.label}>
-                <p className="text-[11px] font-bold text-slate-500">{stat.label}</p>
-                <div className="mt-2 flex items-end gap-2">
-                  <p className="text-xl font-extrabold text-ink">{stat.value}</p>
-                  <span className="pb-1 text-[10px] font-bold text-emerald-500">{stat.change}</span>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {["추천이유", "해시태그", "콘티"].map((item) => (
+                <div className="flex min-h-12 items-center gap-2 rounded-md border border-violet-200 bg-white px-3 text-sm font-bold text-ink shadow-sm" key={item}>
+                  <span className="flex size-4 items-center justify-center rounded border border-violet-500 bg-violet-600 text-[10px] text-white">✓</span>
+                  {item}
                 </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-extrabold text-ink">{topTrend ? cleanLandingText(topTrend.title) : "트렌드 개요"}</p>
-                <span className="text-[11px] font-bold text-slate-400">{topTrend ? `점수 ${topTrend.score}` : "상승률 96%"}</span>
-              </div>
-              <svg className="h-32 w-full" role="img" viewBox="0 0 280 120">
-                <path d="M8 96 C38 42 55 86 82 54 S128 76 150 41 S196 82 220 45 S252 32 272 16" fill="none" stroke="#8b5cf6" strokeLinecap="round" strokeWidth="4" />
-                <path d="M8 96 C38 42 55 86 82 54 S128 76 150 41 S196 82 220 45 S252 32 272 16" fill="none" opacity="0.16" stroke="#8b5cf6" strokeLinecap="round" strokeWidth="12" />
-                {[40, 80, 120, 160, 200, 240].map((x) => (
-                  <line key={x} opacity="0.12" stroke="#64748b" x1={x} x2={x} y1="8" y2="112" />
-                ))}
-              </svg>
+              ))}
             </div>
+          </section>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-extrabold text-ink">추천 콘텐츠 아이디어</p>
-              <div className="mt-3 flex gap-3">
-                <div className="h-20 w-16 shrink-0 rounded-xl bg-[linear-gradient(135deg,#ddd6fe,#fbcfe8)]" />
-                <div className="min-w-0">
-                  <p className="text-sm font-extrabold leading-5 text-ink">{sample ? cleanLandingText(sample.title) : "내 삶을 담는 콘텐츠 메이커 되기"}</p>
-                  <p className="mt-2 text-[11px] leading-4 text-slate-500">{sample?.summary ? cleanLandingText(sample.summary) : "일상 장면도 다음 업로드 아이디어로 정리해보세요."}</p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <AvatarStack />
-                    <span className="text-[11px] font-bold text-slate-400">
-                      {sample ? `${sample.expectedScore}점` : "+8K"}
-                    </span>
-                  </div>
-                </div>
+          <Link className={`${primaryLinkClass} mt-4 w-full`} href={ROUTES.dashboard}>
+            나에게 맞는 콘텐츠 추천 <span aria-hidden="true">→</span>
+          </Link>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-4">
+          {stats.map((stat) => (
+            <div className="rounded-2xl border border-slate-200 bg-white p-3" key={stat.label}>
+              <p className="text-[11px] font-bold text-slate-500">{stat.label}</p>
+              <div className="mt-2 flex items-end gap-2">
+                <p className="text-xl font-extrabold text-ink">{stat.value}</p>
+                <span className="pb-1 text-[10px] font-bold text-emerald-500">{stat.change}</span>
               </div>
             </div>
-          </div>
+          ))}
+        </div>
 
-          <div className="flex flex-wrap gap-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex items-start gap-3">
+            <div className="h-20 w-16 shrink-0 rounded-xl bg-[linear-gradient(135deg,#ddd6fe,#fbcfe8)]" />
+            <div className="min-w-0">
+              <p className="text-sm font-extrabold text-ink">추천 결과 미리보기</p>
+              <p className="mt-1 line-clamp-1 text-sm font-bold text-slate-700">
+                {sample ? cleanLandingText(sample.title) : "내 채널에서 바로 시도할 다음 콘텐츠"}
+              </p>
+              <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-500">
+                {sample?.summary ? cleanLandingText(sample.summary) : "제목, 추천 이유, 해시태그, 콘티를 선택 옵션에 맞춰 정리합니다."}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
             {previewTags.map((tag) => (
               <span className="rounded-full bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700" key={tag}>
                 {tag}
@@ -774,7 +787,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </div>
           </div>
 
-          <HeroDashboardPreview mainData={mainData} />
+          <RecommendationPreviewCard mainData={mainData} />
         </div>
       </section>
 

@@ -18,7 +18,6 @@ NAVER_SHOP_URL = "https://openapi.naver.com/v1/search/shop.json"
 SHOP_JOB_NAME = "creator_shop_products_daily_collection"
 DEFAULT_LIMIT = 8
 MAX_LIMIT = 20
-NAVER_AUTH_ERROR_MESSAGE = "네이버 쇼핑 API 인증 설정이 올바르지 않습니다. 관리자에게 문의하세요."
 SHOP_FALLBACK_MESSAGE = "실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다."
 
 EQUIPMENT_KEYWORDS: dict[str, list[str]] = {
@@ -35,7 +34,7 @@ EQUIPMENT_KEYWORDS: dict[str, list[str]] = {
 
 class NaverShoppingAuthError(ExternalAPIException):
     def __init__(self) -> None:
-        super().__init__(NAVER_AUTH_ERROR_MESSAGE, "NAVER_SHOPPING_AUTH_ERROR")
+        super().__init__(SHOP_FALLBACK_MESSAGE, "NAVER_SHOPPING_AUTH_ERROR")
 
 
 def _supabase_url() -> str:
@@ -349,7 +348,7 @@ def _fallback_products(equipment_category: str, limit: int) -> list[ShopProduct]
 def _fallback_message(error: Exception) -> str:
     text = str(error)
     if isinstance(error, NaverShoppingAuthError) or "NAVER_CLIENT" in text or "NAVER_SHOPPING_AUTH_ERROR" in text:
-        return NAVER_AUTH_ERROR_MESSAGE
+        return SHOP_FALLBACK_MESSAGE
     return SHOP_FALLBACK_MESSAGE
 
 

@@ -148,7 +148,7 @@ export default function ShopPage() {
           }
           description={
             message.includes("NAVER_CLIENT")
-              ? "네이버 쇼핑 API 인증 설정이 올바르지 않습니다. 관리자에게 문의하세요."
+              ? "실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다."
               : message || "실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다."
           }
           title="상품 목록을 불러오지 못했습니다"

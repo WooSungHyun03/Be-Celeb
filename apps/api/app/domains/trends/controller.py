@@ -6,6 +6,7 @@ from fastapi import Header, Query
 from fastapi.responses import JSONResponse
 
 from app.api.routes.trends import list_trends
+from app.core.logging import get_logger
 from app.core.responses import ApiResponse, error_response
 from app.core.security import verify_cron_secret
 from app.domains.trends.schemas import CombinedTrendsResponse, NaverCollectionSummary, NaverTrendKeywordsResponse
@@ -19,12 +20,19 @@ from app.domains.trends.service import (
 )
 from app.schemas.youtube_content import PopularVideosResponse, TrendKeywordRange, TrendKeywordsResponse
 
+logger = get_logger(__name__)
+
 
 async def popular_videos() -> ApiResponse[PopularVideosResponse] | JSONResponse:
     try:
         return ApiResponse(success=True, data=await get_popular_videos_by_category())
     except Exception as error:
-        return error_response(error)
+        logger.exception("Popular videos endpoint failed; returning an empty list fallback.")
+        return ApiResponse(
+            success=True,
+            data=PopularVideosResponse(videos=[]),
+            message="현재 인기 영상 데이터를 불러오지 못해 빈 목록을 반환했습니다.",
+        )
 
 
 async def trend_keywords(range_value: str = Query(default="daily", alias="range")) -> ApiResponse[TrendKeywordsResponse] | JSONResponse:

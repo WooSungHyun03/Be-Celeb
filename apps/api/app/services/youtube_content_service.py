@@ -827,8 +827,38 @@ def _first_str(row: dict[str, Any], *keys: str) -> str:
     return ""
 
 
+def _raw_snippet(row: dict[str, Any]) -> dict[str, Any]:
+    raw = row.get("raw")
+    return raw.get("snippet") if isinstance(raw, dict) and isinstance(raw.get("snippet"), dict) else {}
+
+
+def _first_int(row: dict[str, Any], *keys: str) -> int:
+    for key in keys:
+        parsed = _as_int(row.get(key))
+        if parsed is not None:
+            return parsed
+    return 0
+
+
+def _first_tags(row: dict[str, Any]) -> list[str]:
+    for value in (row.get("tags"), row.get("tag_list"), _raw_snippet(row).get("tags")):
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, str)]
+        if isinstance(value, str):
+            return [item.strip().lstrip("#") for item in re.split(r"[,#]", value) if item.strip()]
+    return []
+
+
 def _popular_video_id(row: dict[str, Any]) -> str:
-    return _first_str(row, "youtube_video_id", "youtubeVideoId", "video_id", "videoId")
+    raw = row.get("raw")
+    content_details = raw.get("contentDetails") if isinstance(raw, dict) and isinstance(raw.get("contentDetails"), dict) else {}
+    resource_id = _raw_snippet(row).get("resourceId")
+    resource_id = resource_id if isinstance(resource_id, dict) else {}
+    return (
+        _first_str(row, "youtube_video_id", "youtubeVideoId", "video_id", "videoId")
+        or _as_str(content_details.get("videoId"))
+        or _as_str(resource_id.get("videoId"))
+    )
 
 
 def _thumbnail_url_from_row(row: dict[str, Any]) -> str | None:
@@ -840,25 +870,31 @@ def _thumbnail_url_from_row(row: dict[str, Any]) -> str | None:
         thumbnail_url = _best_thumbnail_url(thumbnails)
         if thumbnail_url:
             return thumbnail_url
-    raw = row.get("raw")
-    snippet = raw.get("snippet") if isinstance(raw, dict) and isinstance(raw.get("snippet"), dict) else {}
+    snippet = _raw_snippet(row)
     raw_thumbnails = snippet.get("thumbnails") if isinstance(snippet, dict) else None
     return _best_thumbnail_url(raw_thumbnails) if isinstance(raw_thumbnails, dict) else None
 
 
+def _popular_category(row: dict[str, Any], category_map: dict[str, str]) -> str:
+    category_id = row.get("category_id") or row.get("categoryId")
+    mapped = category_map.get(category_id) if isinstance(category_id, str) else None
+    return mapped or _first_str(row, "category_name", "categoryName", "category", "creator_category", "creatorCategory") or "기타"
+
+
 def _popular_video_from_row(row: dict[str, Any], category: str) -> PopularTrendVideo:
     video_id = _popular_video_id(row)
+    snippet = _raw_snippet(row)
     return PopularTrendVideo(
-        category=category or _as_str(row.get("category_name"), _as_str(row.get("category"), "미분류")),
+        category=category or "기타",
         youtubeVideoId=video_id,
-        title=_as_str(row.get("title"), "Untitled video"),
-        description=_as_str(row.get("description")),
+        title=_first_str(row, "title", "video_title") or _as_str(snippet.get("title"), "Untitled video"),
+        description=_first_str(row, "description", "video_description") or _as_str(snippet.get("description")),
         thumbnailUrl=_as_str(row.get("thumbnail_url")) or _thumbnail_url_from_row(row),
-        tags=_as_str_list(row.get("tags")),
-        viewCount=_as_int(row.get("view_count")) or 0,
-        likeCount=_as_int(row.get("like_count")) or 0,
-        commentCount=_as_int(row.get("comment_count")) or 0,
-        publishedAt=_as_str(row.get("published_at")) or None,
+        tags=_first_tags(row),
+        viewCount=_first_int(row, "view_count", "viewCount", "views"),
+        likeCount=_first_int(row, "like_count", "likeCount", "likes"),
+        commentCount=_first_int(row, "comment_count", "commentCount", "comments"),
+        publishedAt=_first_str(row, "published_at", "publishedAt", "published") or _as_str(snippet.get("publishedAt")) or None,
         youtubeUrl=_to_video_url(video_id) if video_id else "",
     )
 
@@ -916,8 +952,12 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
         if not video_id:
             logger.warning("Skipping popular video row without a YouTube video id.")
             continue
-        category = category_map.get(row.get("category_id")) or _as_str(row.get("category_name"), _as_str(row.get("category"), "미분류"))
-        normalized = _popular_video_from_row(row, category)
+        category = _popular_category(row, category_map)
+        try:
+            normalized = _popular_video_from_row(row, category)
+        except Exception as error:
+            logger.warning("Failed to normalize popular video row: %s", error)
+            continue
         current = best_by_category.get(category)
         current_score = (current.viewCount or 0, current.publishedAt or "")
         normalized_score = (normalized.viewCount or 0, normalized.publishedAt or "")
