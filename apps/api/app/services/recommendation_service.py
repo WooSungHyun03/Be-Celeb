@@ -33,6 +33,7 @@ from app.services.database_service import (
 )
 from app.services.llm_service import call_local_llm, parse_llm_json_with_fallback
 from app.services.prompt_template_service import get_active_prompt_template, render_prompt_template
+from app.services.text_sanitizer import KOREAN_ONLY_OUTPUT_INSTRUCTION, sanitize_user_facing_text
 from app.services.youtube_content_service import CATEGORY_KEYWORDS, CREATOR_CATEGORIES
 from app.services.youtube_service import get_channel_info, get_recent_videos
 
@@ -157,6 +158,7 @@ def build_options_prompt(
             "Analyze the user channel and category influencer database.",
             "Recommend exactly 3 content ideas.",
             "Do not recommend content similar to the user's existing videos.",
+            KOREAN_ONLY_OUTPUT_INSTRUCTION,
             "Return valid JSON only.",
             "JSON schema:",
             json.dumps(schema, ensure_ascii=False, indent=2),
@@ -208,6 +210,7 @@ def build_content_plan_prompt(
             "Based on the selected idea and category influencer database, create a detailed YouTube content plan.",
             "Generate title, hashtags, thumbnail idea, hook, storyboard, and upload tips.",
             "Do not copy or closely repeat the user's existing uploaded topics.",
+            KOREAN_ONLY_OUTPUT_INSTRUCTION,
             "Return valid JSON only.",
             "JSON schema:",
             json.dumps(schema, ensure_ascii=False, indent=2),
@@ -259,12 +262,12 @@ def _normalize_options(raw: dict[str, Any], fallback: list[RecommendationOption]
             options.append(
                 RecommendationOption(
                     optionId=value.get("optionId") if isinstance(value.get("optionId"), str) else f"option-{index + 1}",
-                    ideaTitle=title,
-                    format=value.get("format") if isinstance(value.get("format"), str) else "YouTube video",
-                    summary=value.get("summary") if isinstance(value.get("summary"), str) else "",
-                    reason=value.get("reason") if isinstance(value.get("reason"), str) else "",
-                    whyNotDuplicate=value.get("whyNotDuplicate") if isinstance(value.get("whyNotDuplicate"), str) else "",
-                    expectedAudience=value.get("expectedAudience") if isinstance(value.get("expectedAudience"), str) else "",
+                    ideaTitle=sanitize_user_facing_text(title),
+                    format=sanitize_user_facing_text(value.get("format")) if isinstance(value.get("format"), str) else "YouTube video",
+                    summary=sanitize_user_facing_text(value.get("summary")) if isinstance(value.get("summary"), str) else "",
+                    reason=sanitize_user_facing_text(value.get("reason")) if isinstance(value.get("reason"), str) else "",
+                    whyNotDuplicate=sanitize_user_facing_text(value.get("whyNotDuplicate")) if isinstance(value.get("whyNotDuplicate"), str) else "",
+                    expectedAudience=sanitize_user_facing_text(value.get("expectedAudience")) if isinstance(value.get("expectedAudience"), str) else "",
                 )
             )
     merged = options[:3]
@@ -416,22 +419,22 @@ def _normalize_plan(raw: dict[str, Any], fallback: ContentPlan) -> ContentPlan:
                 StoryboardScene(
                     scene=scene.get("scene") if isinstance(scene.get("scene"), int) else index + 1,
                     duration=scene.get("duration") if isinstance(scene.get("duration"), str) else f"{index * 3}-{index * 3 + 3}s",
-                    visual=scene.get("visual") if isinstance(scene.get("visual"), str) else scene.get("description") if isinstance(scene.get("description"), str) else "",
-                    dialogue=scene.get("dialogue") if isinstance(scene.get("dialogue"), str) else "",
-                    caption=scene.get("caption") if isinstance(scene.get("caption"), str) else "",
-                    shootingTip=scene.get("shootingTip") if isinstance(scene.get("shootingTip"), str) else "",
-                    description=scene.get("description") if isinstance(scene.get("description"), str) else "",
+                    visual=sanitize_user_facing_text(scene.get("visual")) if isinstance(scene.get("visual"), str) else sanitize_user_facing_text(scene.get("description")) if isinstance(scene.get("description"), str) else "",
+                    dialogue=sanitize_user_facing_text(scene.get("dialogue")) if isinstance(scene.get("dialogue"), str) else "",
+                    caption=sanitize_user_facing_text(scene.get("caption")) if isinstance(scene.get("caption"), str) else "",
+                    shootingTip=sanitize_user_facing_text(scene.get("shootingTip")) if isinstance(scene.get("shootingTip"), str) else "",
+                    description=sanitize_user_facing_text(scene.get("description")) if isinstance(scene.get("description"), str) else "",
                 )
             )
     return ContentPlan(
-        title=value.get("title") if isinstance(value.get("title"), str) else fallback.title,
-        format=value.get("format") if isinstance(value.get("format"), str) else fallback.format,
-        hashtags=[item for item in value.get("hashtags", []) if isinstance(item, str)] if isinstance(value.get("hashtags"), list) else fallback.hashtags,
-        thumbnailIdea=value.get("thumbnailIdea") if isinstance(value.get("thumbnailIdea"), str) else fallback.thumbnailIdea,
-        targetAudience=value.get("targetAudience") if isinstance(value.get("targetAudience"), str) else fallback.targetAudience,
-        hook=value.get("hook") if isinstance(value.get("hook"), str) else fallback.hook,
+        title=sanitize_user_facing_text(value.get("title")) if isinstance(value.get("title"), str) else fallback.title,
+        format=sanitize_user_facing_text(value.get("format")) if isinstance(value.get("format"), str) else fallback.format,
+        hashtags=[sanitize_user_facing_text(item) for item in value.get("hashtags", []) if isinstance(item, str)] if isinstance(value.get("hashtags"), list) else fallback.hashtags,
+        thumbnailIdea=sanitize_user_facing_text(value.get("thumbnailIdea")) if isinstance(value.get("thumbnailIdea"), str) else fallback.thumbnailIdea,
+        targetAudience=sanitize_user_facing_text(value.get("targetAudience")) if isinstance(value.get("targetAudience"), str) else fallback.targetAudience,
+        hook=sanitize_user_facing_text(value.get("hook")) if isinstance(value.get("hook"), str) else fallback.hook,
         storyboard=storyboard or fallback.storyboard,
-        uploadTips=[item for item in value.get("uploadTips", []) if isinstance(item, str)] if isinstance(value.get("uploadTips"), list) else fallback.uploadTips,
+        uploadTips=[sanitize_user_facing_text(item) for item in value.get("uploadTips", []) if isinstance(item, str)] if isinstance(value.get("uploadTips"), list) else fallback.uploadTips,
     )
 
 
@@ -442,8 +445,8 @@ def _normalize_single_recommendation(raw: dict[str, Any], fallback: SingleConten
     base_plan = _normalize_plan(value, fallback)
     return SingleContentRecommendation(
         **base_plan.model_dump(),
-        reason=value.get("reason") if isinstance(value.get("reason"), str) else fallback.reason,
-        whyNotDuplicate=value.get("whyNotDuplicate") if isinstance(value.get("whyNotDuplicate"), str) else fallback.whyNotDuplicate,
+        reason=sanitize_user_facing_text(value.get("reason")) if isinstance(value.get("reason"), str) else fallback.reason,
+        whyNotDuplicate=sanitize_user_facing_text(value.get("whyNotDuplicate")) if isinstance(value.get("whyNotDuplicate"), str) else fallback.whyNotDuplicate,
     )
 
 
@@ -536,6 +539,7 @@ async def create_single_content_recommendation(
         [
             "Required response contract:",
             "Return valid JSON only. The root object must contain recommendation.",
+            KOREAN_ONLY_OUTPUT_INSTRUCTION,
             "JSON schema:",
             json.dumps(dynamic_schema, ensure_ascii=False, indent=2),
             *(_option_instructions(selected_options)),
@@ -544,7 +548,7 @@ async def create_single_content_recommendation(
     rendered_prompt = f"{render_prompt_template(prompt_template['userPromptTemplate'], values)}\n\n{prompt_contract}"
     raw_text = await call_local_llm(
         rendered_prompt,
-        system_prompt=prompt_template["systemPrompt"],
+        system_prompt=f"{prompt_template['systemPrompt']}\n{KOREAN_ONLY_OUTPUT_INSTRUCTION}",
         max_tokens=_max_tokens_for_options(selected_options),
     )
     raw_json, parse_error = parse_llm_json_with_fallback(raw_text, {"recommendation": fallback.model_dump()})

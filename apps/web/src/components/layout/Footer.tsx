@@ -4,6 +4,27 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ROUTES } from "@/constants/routes";
 
+const footerGroups = [
+  {
+    title: "Product",
+    links: [
+      { label: "트렌드 분석", href: ROUTES.trends },
+      { label: "콘텐츠 추천", href: ROUTES.dashboard },
+      { label: "찜 목록", href: ROUTES.favorites },
+      { label: "제작 보드", href: ROUTES.productionBoard },
+    ],
+  },
+  {
+    title: "Account",
+    links: [
+      { label: "로그인", href: ROUTES.login },
+      { label: "회원가입", href: ROUTES.signup },
+      { label: "마이페이지", href: ROUTES.profile },
+      { label: "요금 안내", href: ROUTES.pricing },
+    ],
+  },
+];
+
 function SparklesIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -37,23 +58,23 @@ export function Footer() {
           </p>
           <p className="mt-4 text-xs text-slate-400">© 2026 BE CELEB. All rights reserved.</p>
         </div>
-        <div>
-          <p className="font-semibold text-ink">Product</p>
-          <div className="mt-3 grid gap-2">
-            <Link href={ROUTES.trends} className="hover:text-ink">트렌드</Link>
-            <Link href={ROUTES.trendingItems} className="hover:text-ink">샵</Link>
-            <Link href={ROUTES.recommendations} className="hover:text-ink">추천</Link>
-            <Link href={ROUTES.pricing} className="hover:text-ink">요금</Link>
+
+        {footerGroups.map((group) => (
+          <div key={group.title}>
+            <p className="font-semibold text-ink">{group.title}</p>
+            <div className="mt-3 grid gap-2">
+              {group.links.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="w-fit text-slate-500 transition hover:text-violet-700"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
-        <div>
-          <p className="font-semibold text-ink">Account</p>
-          <div className="mt-3 grid gap-2">
-            <Link href={ROUTES.login} className="hover:text-ink">로그인</Link>
-            <Link href={ROUTES.signup} className="hover:text-ink">회원가입</Link>
-            <Link href={ROUTES.profile} className="hover:text-ink">마이페이지</Link>
-          </div>
-        </div>
+        ))}
       </div>
     </footer>
   );

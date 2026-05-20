@@ -31,6 +31,7 @@ from app.schemas.youtube_content import (
     YouTubeThumbnail,
     YouTubeVideoAnalysis,
 )
+from app.services.text_sanitizer import KOREAN_ONLY_OUTPUT_INSTRUCTION, sanitize_user_facing_text
 
 YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3"
 logger = get_logger(__name__)
@@ -586,6 +587,7 @@ def _build_llm_prompt(
             "Be-Celeb은 유튜브 크리에이터의 다음 콘텐츠 아이디어와 콘티를 추천하는 서비스다.",
             "아래 JSON 데이터를 분석해서 사용자가 이미 올린 콘텐츠와 중복되지 않는 다음 업로드 아이디어를 추천하라.",
             "카테고리별 인플루언서 최근 영상은 참고용 트렌드 데이터이며, 그대로 복제하지 말고 차별화된 아이디어로 재구성하라.",
+            KOREAN_ONLY_OUTPUT_INSTRUCTION,
             "반드시 JSON만 반환하라. 마크다운, 설명 문장, 코드펜스를 포함하지 말라.",
             "JSON schema:",
             json.dumps(schema, ensure_ascii=False, indent=2),
@@ -615,8 +617,8 @@ def _normalize_storyboard(value: Any) -> list[StoryboardScene]:
             StoryboardScene(
                 scene=_as_int(item.get("scene")) or index + 1,
                 duration=_as_str(item.get("duration"), f"{index * 3}-{index * 3 + 3}s"),
-                description=_as_str(item.get("description")),
-                caption=_as_str(item.get("caption")),
+                description=sanitize_user_facing_text(_as_str(item.get("description"))),
+                caption=sanitize_user_facing_text(_as_str(item.get("caption"))),
             )
         )
     return scenes
@@ -626,13 +628,13 @@ def _normalize_recommendation(value: Any) -> ContentRecommendation | None:
     if not isinstance(value, dict) or not isinstance(value.get("title"), str):
         return None
     return ContentRecommendation(
-        title=value["title"],
-        format=_as_str(value.get("format"), "short-form"),
-        reason=_as_str(value.get("reason")),
-        whyNotDuplicate=_as_str(value.get("whyNotDuplicate")),
-        targetAudience=_as_str(value.get("targetAudience")),
-        hashtags=_as_str_list(value.get("hashtags")),
-        thumbnailIdea=_as_str(value.get("thumbnailIdea")),
+        title=sanitize_user_facing_text(value["title"]),
+        format=sanitize_user_facing_text(_as_str(value.get("format"), "short-form")),
+        reason=sanitize_user_facing_text(_as_str(value.get("reason"))),
+        whyNotDuplicate=sanitize_user_facing_text(_as_str(value.get("whyNotDuplicate"))),
+        targetAudience=sanitize_user_facing_text(_as_str(value.get("targetAudience"))),
+        hashtags=[sanitize_user_facing_text(item) for item in _as_str_list(value.get("hashtags"))],
+        thumbnailIdea=sanitize_user_facing_text(_as_str(value.get("thumbnailIdea"))),
         storyboard=_normalize_storyboard(value.get("storyboard")),
     )
 
@@ -653,7 +655,7 @@ def _parse_llm_recommendation(
         return (
             LlmRecommendationResponse(
                 selectedCategory=_as_str(parsed.get("selectedCategory"), selected_category),
-                summary=_as_str(parsed.get("summary")),
+                summary=sanitize_user_facing_text(_as_str(parsed.get("summary"))),
                 recommendations=recommendations,
             ),
             None,
