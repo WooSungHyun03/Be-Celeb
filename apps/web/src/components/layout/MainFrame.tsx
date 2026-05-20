@@ -19,8 +19,7 @@ const fullBleedRoutes = new Set([
 
 export function MainFrame({ children }: MainFrameProps) {
   const pathname = usePathname();
-  const isProductionBoard = pathname === ROUTES.productionBoard || pathname.startsWith(`${ROUTES.productionBoard}/`);
-  const isFullBleed = fullBleedRoutes.has(pathname) || isProductionBoard;
+  const isFullBleed = fullBleedRoutes.has(pathname);
 
   if (isFullBleed) {
     return <main className="min-h-[calc(100vh-180px)] w-full">{children}</main>;
