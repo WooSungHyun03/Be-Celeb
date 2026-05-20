@@ -303,6 +303,12 @@ export function testLLM() {
   });
 }
 
+export function testShop() {
+  return adminData<AdminTestResult>("/api/admin/test-shop", {
+    method: "POST",
+  });
+}
+
 export function deleteVideosByCategory(categoryId: string, confirm: string) {
   return adminData<{ deleted: number }>("/api/admin/danger/delete-videos-by-category", {
     method: "POST",

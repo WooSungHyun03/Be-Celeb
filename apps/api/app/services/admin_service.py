@@ -10,6 +10,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.errors import BackendApiError, missing_env
+from app.domains.shop.service import check_naver_shopping_connection
 from app.schemas.admin import AdminCollectionSummary, AdminOverview, AdminSystemStatus, AdminTestResult
 from app.services.llm_service import call_local_llm
 from app.services.youtube_service import get_channel_info, get_recent_videos
@@ -745,6 +746,12 @@ async def get_admin_system_status() -> AdminSystemStatus:
         "YOUTUBE_API_KEY": bool(settings.youtube_api_key),
         "NAVER_CLIENT_ID": bool(settings.naver_client_id),
         "NAVER_CLIENT_SECRET": bool(settings.naver_client_secret),
+        "NAVER_SHOPPING_CLIENT_ID": bool(settings.naver_shopping_client_id),
+        "NAVER_SHOPPING_CLIENT_SECRET": bool(settings.naver_shopping_client_secret),
+        "NAVER_SHOPPING_API_CREDENTIALS": bool(
+            (settings.naver_shopping_client_id or settings.naver_client_id)
+            and (settings.naver_shopping_client_secret or settings.naver_client_secret)
+        ),
         "LOCAL_LLM_API_URL": bool(settings.local_llm_api_url),
         "LOCAL_LLM_API_KEY": bool(settings.local_llm_api_key),
         "ADMIN_SECRET": bool(settings.admin_secret),
@@ -788,6 +795,11 @@ async def test_admin_llm() -> AdminTestResult:
         return AdminTestResult(ok=True, message="Local LLM API connection succeeded.", detail={"sample": raw[:500]})
     except Exception as error:
         return AdminTestResult(ok=False, message=str(error))
+
+
+async def test_admin_shop() -> AdminTestResult:
+    result = await check_naver_shopping_connection()
+    return AdminTestResult(ok=bool(result.get("ok")), message=str(result.get("message")), detail=result.get("detail"))
 
 
 async def danger_delete_videos_by_category(category_id: str, confirm: str) -> dict[str, Any]:

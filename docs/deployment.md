@@ -26,6 +26,8 @@ Vercel에는 다음 값을 넣지 않는다.
 - `YOUTUBE_API_KEY`
 - `NAVER_CLIENT_ID`
 - `NAVER_CLIENT_SECRET`
+- `NAVER_SHOPPING_CLIENT_ID` (optional, 쇼핑 검색 전용)
+- `NAVER_SHOPPING_CLIENT_SECRET` (optional, 쇼핑 검색 전용)
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `LOCAL_LLM_API_KEY`
 - `CRON_SECRET`
@@ -47,6 +49,8 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 YOUTUBE_API_KEY=your-youtube-api-key
 NAVER_CLIENT_ID=your-naver-client-id
 NAVER_CLIENT_SECRET=your-naver-client-secret
+NAVER_SHOPPING_CLIENT_ID=your-shopping-search-client-id
+NAVER_SHOPPING_CLIENT_SECRET=your-shopping-search-client-secret
 LOCAL_LLM_API_URL=https://llm-api.be-celeb.org/v1/chat/completions
 LOCAL_LLM_API_KEY=your-local-llm-key
 LOCAL_LLM_MODEL=local-model
@@ -199,9 +203,11 @@ GET https://openapi.naver.com/v1/search/shop.json
 요청 header:
 
 ```text
-X-Naver-Client-Id: NAVER_CLIENT_ID
-X-Naver-Client-Secret: NAVER_CLIENT_SECRET
+X-Naver-Client-Id: NAVER_SHOPPING_CLIENT_ID 또는 NAVER_CLIENT_ID
+X-Naver-Client-Secret: NAVER_SHOPPING_CLIENT_SECRET 또는 NAVER_CLIENT_SECRET
 ```
+
+검색어트렌드 DataLab은 `POST /v1/datalab/search`를 사용하지만 `/shop` 상품 카드는 `GET /v1/search/shop.json`을 사용한다. 두 API는 Naver Developers 권한이 다르다. DataLab 검색어트렌드가 정상이어도 “검색 API / 쇼핑 검색” 권한이 없는 키면 `/shop`은 fallback을 표시한다. 운영에서는 쇼핑 검색 권한이 있는 별도 앱 키를 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 넣는 것을 권장한다. 이 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`으로 fallback한다.
 
 저장 테이블은 migration `supabase/migrations/20260519002000_creator_shop_products.sql`와 장비 섹션 전환 migration `supabase/migrations/20260520001000_shop_equipment_store.sql`에 포함되어 있다.
 
@@ -236,17 +242,18 @@ Naver Shopping 401 `errorCode: 024`는 보통 “Scope Status Invalid / Authenti
 
 ```text
 GET https://openapi.naver.com/v1/search/shop.json
-X-Naver-Client-Id: NAVER_CLIENT_ID
-X-Naver-Client-Secret: NAVER_CLIENT_SECRET
+X-Naver-Client-Id: NAVER_SHOPPING_CLIENT_ID 또는 NAVER_CLIENT_ID
+X-Naver-Client-Secret: NAVER_SHOPPING_CLIENT_SECRET 또는 NAVER_CLIENT_SECRET
 ```
 
 401/024 체크리스트:
 
-- `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 Vercel이 아니라 Render Backend 환경변수에 넣었는지 확인
+- `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET` 또는 fallback용 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 Vercel이 아니라 Render Backend 환경변수에 넣었는지 확인
 - Render 환경변수 수정 후 Backend 서비스를 재배포했는지 확인
 - Naver Developers 앱에 “검색 API / 쇼핑 검색 API” 권한이 활성화되어 있는지 확인
 - DataLab API 권한/키와 Shopping Search API 권한/키를 혼동하지 않았는지 확인
 - 코드 로그에는 client id/secret 값이 아니라 존재 여부 boolean, status code, errorCode, query만 남긴다
+- Admin `/admin`의 시스템 섹션에서 `Naver Shopping API 테스트`를 실행해 status code, errorCode, credential source를 확인한다.
 
 ## Naver DataLab 검색 트렌드
 

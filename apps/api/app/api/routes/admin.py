@@ -51,6 +51,7 @@ from app.services.admin_service import (
     list_admin_videos,
     sync_admin_influencer_channel,
     test_admin_llm,
+    test_admin_shop,
     test_admin_youtube,
     update_admin_category,
     update_admin_influencer_channel,
@@ -411,6 +412,14 @@ async def test_youtube(_: None = AdminAuth) -> ApiResponse[Any] | JSONResponse:
 async def test_llm(_: None = AdminAuth) -> ApiResponse[Any] | JSONResponse:
     try:
         return ApiResponse(success=True, data=await test_admin_llm())
+    except Exception as error:
+        return admin_error_response(error)
+
+
+@router.post("/test-shop", response_model=None)
+async def test_shop(_: None = AdminAuth) -> ApiResponse[Any] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await test_admin_shop())
     except Exception as error:
         return admin_error_response(error)
 

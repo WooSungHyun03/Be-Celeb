@@ -122,21 +122,28 @@ def _safe_text(value: Any) -> str:
     return strip_html_tags(str(value or "")).strip()
 
 
-def _naver_credentials() -> tuple[str, str]:
+def _naver_credentials() -> tuple[str, str, str]:
     settings = get_settings()
-    has_client_id = bool(settings.naver_client_id)
-    has_client_secret = bool(settings.naver_client_secret)
+    client_id = settings.naver_shopping_client_id or settings.naver_client_id
+    client_secret = settings.naver_shopping_client_secret or settings.naver_client_secret
+    credential_source = "NAVER_SHOPPING_CLIENT_*" if settings.naver_shopping_client_id or settings.naver_shopping_client_secret else "NAVER_CLIENT_*"
+    has_client_id = bool(client_id)
+    has_client_secret = bool(client_secret)
     if not has_client_id or not has_client_secret:
         logger.warning(
-            "Naver Shopping credentials missing: hasClientId=%s hasClientSecret=%s",
+            "Naver Shopping credentials missing: hasClientId=%s hasClientSecret=%s hasDedicatedClientId=%s hasDedicatedClientSecret=%s hasSharedClientId=%s hasSharedClientSecret=%s",
             has_client_id,
             has_client_secret,
+            bool(settings.naver_shopping_client_id),
+            bool(settings.naver_shopping_client_secret),
+            bool(settings.naver_client_id),
+            bool(settings.naver_client_secret),
         )
-    if not settings.naver_client_id:
-        raise missing_env("NAVER_CLIENT_ID")
-    if not settings.naver_client_secret:
-        raise missing_env("NAVER_CLIENT_SECRET")
-    return settings.naver_client_id, settings.naver_client_secret
+    if not client_id:
+        raise missing_env("NAVER_SHOPPING_CLIENT_ID or NAVER_CLIENT_ID")
+    if not client_secret:
+        raise missing_env("NAVER_SHOPPING_CLIENT_SECRET or NAVER_CLIENT_SECRET")
+    return client_id, client_secret, credential_source
 
 
 def _product_from_row(row: dict[str, Any]) -> ShopProduct:
@@ -247,7 +254,7 @@ async def _cached_products(equipment_category: str, limit: int) -> list[ShopProd
 
 
 async def _fetch_naver_shop(keyword: str, display: int) -> list[dict[str, Any]]:
-    client_id, client_secret = _naver_credentials()
+    client_id, client_secret, credential_source = _naver_credentials()
     params = {
         "query": keyword,
         "display": str(min(max(display, 1), 100)),
@@ -275,12 +282,13 @@ async def _fetch_naver_shop(keyword: str, display: int) -> list[dict[str, Any]]:
     if response.status_code >= 400:
         error_code = payload.get("errorCode")
         logger.warning(
-            "Naver Shopping API failed: status=%s errorCode=%s query=%s hasClientId=%s hasClientSecret=%s",
+            "Naver Shopping API failed: status=%s errorCode=%s query=%s hasClientId=%s hasClientSecret=%s credentialSource=%s",
             response.status_code,
             error_code,
             keyword,
             bool(client_id),
             bool(client_secret),
+            credential_source,
         )
         if response.status_code == 401 and error_code == "024":
             raise NaverShoppingAuthError()
@@ -288,6 +296,75 @@ async def _fetch_naver_shop(keyword: str, display: int) -> list[dict[str, Any]]:
 
     items = payload.get("items")
     return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
+async def check_naver_shopping_connection(keyword: str = "유튜브 마이크") -> dict[str, Any]:
+    settings = get_settings()
+    detail: dict[str, Any] = {
+        "endpoint": NAVER_SHOP_URL,
+        "query": keyword,
+        "hasDedicatedClientId": bool(settings.naver_shopping_client_id),
+        "hasDedicatedClientSecret": bool(settings.naver_shopping_client_secret),
+        "hasSharedClientId": bool(settings.naver_client_id),
+        "hasSharedClientSecret": bool(settings.naver_client_secret),
+        "credentialSource": "NAVER_SHOPPING_CLIENT_*" if settings.naver_shopping_client_id or settings.naver_shopping_client_secret else "NAVER_CLIENT_*",
+    }
+
+    try:
+        client_id, client_secret, credential_source = _naver_credentials()
+    except Exception as error:
+        detail["credentialError"] = str(error)
+        return {
+            "ok": False,
+            "message": "Naver Shopping API credentials are not configured for the backend runtime.",
+            "detail": detail,
+        }
+
+    detail["credentialSource"] = credential_source
+    params = {"query": keyword, "display": "1", "start": "1", "sort": "sim"}
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                NAVER_SHOP_URL,
+                headers={
+                    "X-Naver-Client-Id": client_id,
+                    "X-Naver-Client-Secret": client_secret,
+                },
+                params=params,
+            )
+    except Exception as error:
+        logger.warning("Naver Shopping API connectivity check failed: query=%s error=%s", keyword, error)
+        detail["networkError"] = str(error)
+        return {"ok": False, "message": "Naver Shopping API request failed before receiving a response.", "detail": detail}
+
+    payload: dict[str, Any] = {}
+    if response.content:
+        try:
+            parsed = response.json()
+            payload = parsed if isinstance(parsed, dict) else {}
+        except ValueError:
+            payload = {}
+
+    items = payload.get("items")
+    detail.update(
+        {
+            "statusCode": response.status_code,
+            "errorCode": payload.get("errorCode"),
+            "errorMessage": payload.get("errorMessage"),
+            "itemCount": len(items) if isinstance(items, list) else 0,
+        }
+    )
+    if response.status_code >= 400:
+        logger.warning(
+            "Naver Shopping API connectivity check returned failure: status=%s errorCode=%s query=%s credentialSource=%s",
+            response.status_code,
+            payload.get("errorCode"),
+            keyword,
+            credential_source,
+        )
+        return {"ok": False, "message": f"Naver Shopping API request failed ({response.status_code}).", "detail": detail}
+
+    return {"ok": True, "message": "Naver Shopping API connection succeeded.", "detail": detail}
 
 
 async def _upsert_products(rows: list[dict[str, Any]]) -> int:

@@ -38,6 +38,8 @@ SUPABASE_SERVICE_ROLE_KEY=
 YOUTUBE_API_KEY=
 NAVER_CLIENT_ID=
 NAVER_CLIENT_SECRET=
+NAVER_SHOPPING_CLIENT_ID=
+NAVER_SHOPPING_CLIENT_SECRET=
 LOCAL_LLM_API_URL=
 LOCAL_LLM_API_KEY=
 ADMIN_SECRET=
@@ -94,6 +96,10 @@ GitHub Actions 또는 Render Cron은 기존 `CRON_SECRET` 기반 수집 endpoint
 - `POST /api/cron/collect-shop-products`
 
 `creator_shop_keywords` 관리 UI는 아직 admin에 붙이지 않았다. 운영자가 keyword를 자주 바꾸는 단계가 되면 장비 섹션 기준 `/api/admin/shop-keywords` CRUD와 admin 섹션을 추가한다.
+
+`/shop` 상품 카드는 Naver DataLab 검색어트렌드가 아니라 Naver 검색 API의 쇼핑 검색 endpoint를 사용한다. DataLab 검색어트렌드가 정상이어도 쇼핑 검색 권한이 없으면 `/shop`은 “실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다.” fallback을 보여준다. 쇼핑 검색 권한이 있는 별도 앱 키가 있으면 Render Backend에 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 설정한다. 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 사용한다.
+
+Admin의 `시스템` 섹션에서 `Naver Shopping API 테스트`를 실행하면 secret 값을 노출하지 않고 status code, errorCode, credential source를 확인할 수 있다.
 
 ## 위험 작업
 
