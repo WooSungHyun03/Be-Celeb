@@ -264,25 +264,27 @@ type ProductionBoardColumnProps = {
   column: { status: ProductionBoardStatus; label: string };
   items: ProductionBoardItem[];
   activeId: string | null;
+  isDetailOpen: boolean;
   movingId: string | null;
   onOpenDetail: (item: ProductionBoardItem) => void;
   onMoveNext: (item: ProductionBoardItem) => void;
 };
 
-function ProductionBoardColumn({ column, items, activeId, movingId, onOpenDetail, onMoveNext }: ProductionBoardColumnProps) {
+function ProductionBoardColumn({ column, items, activeId, isDetailOpen, movingId, onOpenDetail, onMoveNext }: ProductionBoardColumnProps) {
   const { isOver, setNodeRef } = useDroppable({ id: column.status });
 
   return (
     <section
       className={cn(
-        "min-h-[280px] w-[300px] shrink-0 rounded-lg border border-slate-200 bg-slate-50 p-3 transition duration-200",
+        "min-h-[280px] rounded-lg border border-slate-200 bg-slate-50 p-3 transition duration-200",
+        isDetailOpen ? "w-[300px] shrink-0" : "min-w-0",
         isOver ? "border-violet-300 bg-violet-50/70 shadow-sm ring-2 ring-violet-100" : "",
       )}
       key={column.status}
       ref={setNodeRef}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-ink">{column.label}</h2>
+        <h2 className="whitespace-nowrap text-sm font-bold text-ink">{column.label}</h2>
         <Badge>{items.length}</Badge>
       </div>
       {items.length > 0 ? (
@@ -718,6 +720,7 @@ export default function ProductionBoardPage() {
   }, [filteredItems]);
 
   const hasActiveFilters = Boolean(normalizedQuery || selectedStatus !== "all" || selectedCategory !== "all");
+  const isDetailOpen = Boolean(detailItem);
 
   function resetFilters() {
     setSearchQuery("");
@@ -1017,7 +1020,7 @@ export default function ProductionBoardPage() {
   }
 
   return (
-    <div className={cn("space-y-8 transition-[padding] duration-200", detailItem ? "xl:pr-[520px]" : "")}>
+    <div className={cn("min-h-[calc(100vh-80px)] space-y-8 transition-[padding] duration-200", isDetailOpen ? "xl:pr-[520px]" : "")}>
       <PageHeader
         action={
           <Link href={ROUTES.favorites}>
@@ -1121,12 +1124,13 @@ export default function ProductionBoardPage() {
             onDragStart={handleDragStart}
             sensors={sensors}
           >
-            <div className="overflow-x-auto pb-3">
-              <div className="flex min-w-max gap-4">
+            <div className={cn("min-h-[calc(100vh-360px)] pb-3", isDetailOpen ? "overflow-x-auto" : "overflow-x-visible")}>
+              <div className={cn(isDetailOpen ? "flex min-w-max gap-4" : "grid grid-cols-5 gap-4")}>
                 {PRODUCTION_BOARD_COLUMNS.map((column) => (
                   <ProductionBoardColumn
                     activeId={activeId}
                     column={column}
+                    isDetailOpen={isDetailOpen}
                     items={itemsByStatus[column.status]}
                     key={column.status}
                     movingId={movingId}

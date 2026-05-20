@@ -1,9 +1,19 @@
+"use client";
+
 // Provides the global footer with product links and project messaging.
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { BrandLogo } from "@/components/common/BrandLogo";
 import { ROUTES } from "@/constants/routes";
 
 export function Footer() {
+  const pathname = usePathname();
+  const shouldHideFooter = pathname === ROUTES.productionBoard || pathname.startsWith(`${ROUTES.productionBoard}/`);
+
+  if (shouldHideFooter) {
+    return null;
+  }
+
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 text-sm text-slate-500 sm:px-6 md:grid-cols-[1.2fr_1fr_auto] lg:px-8">
