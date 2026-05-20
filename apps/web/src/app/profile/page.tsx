@@ -273,8 +273,14 @@ export default function ProfilePage() {
             </form>
           </Card>
 
-          <Card title="비밀번호 변경">
+          <Card
+            title="비밀번호 변경"
+            className="border-violet-200 bg-[linear-gradient(180deg,#ffffff_0%,#faf5ff_100%)] shadow-violet-100"
+          >
             <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+              <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3 text-sm leading-6 text-slate-600">
+                계정 보안을 위해 현재 비밀번호를 한 번 더 확인한 뒤 새 비밀번호를 저장합니다.
+              </div>
               <Input
                 autoComplete="current-password"
                 label="현재 비밀번호"
