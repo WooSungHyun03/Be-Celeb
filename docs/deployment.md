@@ -462,6 +462,13 @@ DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-prod
 CRON_SECRET=your-cron-secret
 ```
 
+`curl: (3) URL rejected: Malformed input to a URL function`가 발생하면 backend API가 실행되기 전 단계에서 URL secret 값 자체가 잘못된 것이다. GitHub repository secret의 `DAILY_SHOP_PRODUCTS_ENDPOINT`를 다시 저장한다.
+
+- 값은 한 줄짜리 절대 URL이어야 한다.
+- 따옴표, 백슬래시(`\`), trailing slash 뒤의 공백, 줄바꿈을 넣지 않는다.
+- 예: `https://api.be-celeb.org/api/cron/collect-shop-products`
+- Vercel frontend URL이 아니라 Render Backend API URL을 넣는다.
+
 수동 Naver 수집 확인:
 
 ```bash

@@ -118,10 +118,14 @@ GitHub repository secrets:
 
 ```txt
 DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
+DAILY_NAVER_TRENDS_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-naver-trends
+DAILY_SHOP_PRODUCTS_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-shop-products
 CRON_SECRET=your-secret
 ```
 
-Vercel Frontend의 `/api` route는 원칙적으로 호출하지 않습니다. `DAILY_COLLECT_ENDPOINT`는 Render Backend API URL로 설정합니다.
+Vercel Frontend의 `/api` route는 원칙적으로 호출하지 않습니다. 모든 `DAILY_*_ENDPOINT`는 Render Backend API URL로 설정합니다.
+
+`curl: (3) URL rejected: Malformed input to a URL function`가 나오면 `DAILY_*_ENDPOINT` secret 값이 비어 있거나 URL이 아닌 문자열이다. GitHub Secrets에는 따옴표나 줄바꿈 없이 `https://.../api/cron/...` 한 줄만 저장합니다.
 
 ## 수동 테스트
 
