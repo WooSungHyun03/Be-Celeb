@@ -211,7 +211,7 @@ function ProductionBoardCard({ item, isMoving, isActiveDragItem, onOpenDetail, o
         {visibleTags.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {visibleTags.map((tag) => (
-              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" key={tag}>
+              <span className="max-w-[7.5rem] truncate rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" key={tag}>
                 {normalizeHashtag(tag)}
               </span>
             ))}
@@ -275,7 +275,7 @@ function ProductionBoardColumn({ column, items, activeId, movingId, onOpenDetail
   return (
     <section
       className={cn(
-        "min-h-[280px] rounded-lg border border-slate-200 bg-slate-50 p-3 transition duration-200",
+        "min-h-[280px] w-[300px] shrink-0 rounded-lg border border-slate-200 bg-slate-50 p-3 transition duration-200",
         isOver ? "border-violet-300 bg-violet-50/70 shadow-sm ring-2 ring-violet-100" : "",
       )}
       key={column.status}
@@ -1121,18 +1121,20 @@ export default function ProductionBoardPage() {
             onDragStart={handleDragStart}
             sensors={sensors}
           >
-            <div className="grid gap-4 xl:grid-cols-5">
-              {PRODUCTION_BOARD_COLUMNS.map((column) => (
-                <ProductionBoardColumn
-                  activeId={activeId}
-                  column={column}
-                  items={itemsByStatus[column.status]}
-                  key={column.status}
-                  movingId={movingId}
-                  onOpenDetail={(item) => void handleOpenDetail(item)}
-                  onMoveNext={handleMoveNext}
-                />
-              ))}
+            <div className="overflow-x-auto pb-3">
+              <div className="flex min-w-max gap-4">
+                {PRODUCTION_BOARD_COLUMNS.map((column) => (
+                  <ProductionBoardColumn
+                    activeId={activeId}
+                    column={column}
+                    items={itemsByStatus[column.status]}
+                    key={column.status}
+                    movingId={movingId}
+                    onOpenDetail={(item) => void handleOpenDetail(item)}
+                    onMoveNext={handleMoveNext}
+                  />
+                ))}
+              </div>
             </div>
           </DndContext>
         </div>
