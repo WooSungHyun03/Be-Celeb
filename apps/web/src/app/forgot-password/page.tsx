@@ -2,11 +2,20 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
-import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+
+function SparklesIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
+      <path
+        d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3Zm6 12 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1L18 15Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -37,86 +46,79 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-[720px] w-full items-center justify-center bg-[linear-gradient(180deg,#ffffff_0%,#faf5ff_48%,#f8fafc_100%)] px-4 py-12 sm:px-6">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-violet-100 bg-white shadow-xl shadow-violet-100/70 lg:grid-cols-[0.9fr_1.1fr]">
-        <aside className="hidden min-h-[620px] flex-col justify-between border-r border-violet-100 bg-[linear-gradient(180deg,#ffffff_0%,#fbf8ff_100%)] p-10 lg:flex">
-          <Link className="inline-flex w-fit rounded-2xl bg-white px-3 py-2 shadow-sm" href={ROUTES.home}>
-            <BrandLogo size="sm" />
+    <div className="flex min-h-[calc(100vh-4rem)] w-full items-center justify-center bg-white bg-[radial-gradient(circle_at_top,#ede9fe_0%,rgba(237,233,254,0.72)_34%,transparent_68%)] px-4 py-12 text-ink">
+      <section className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-8 shadow-2xl shadow-slate-200/70">
+        <div className="mb-8 text-center">
+          <Link className="mb-6 inline-flex items-center gap-2 transition hover:opacity-80" href={ROUTES.home}>
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-sm shadow-violet-200">
+              <SparklesIcon />
+            </span>
+            <span className="bg-gradient-to-r from-ink to-violet-700 bg-clip-text text-2xl font-bold text-transparent">
+              BE CELEB
+            </span>
           </Link>
-
-          <div>
-            <p className="text-sm font-bold uppercase text-violet-700">Password Reset</p>
-            <h2 className="mt-4 text-4xl font-black leading-tight tracking-tight text-ink">
-              안전하게 인증하고
-              <br />새 비밀번호로 시작하세요
-            </h2>
-            <p className="mt-5 max-w-sm text-sm font-medium leading-7 text-slate-600">
-              가입한 이메일로 재설정 링크를 보내드립니다. 링크는 보안을 위해 제한된 시간 동안만 사용할 수 있습니다.
-            </p>
-          </div>
-
-          <div className="grid gap-3">
-            {["인증 메일 발송", "메일 링크 확인", "새 비밀번호 설정"].map((item, index) => (
-              <div className="flex items-center gap-3 rounded-2xl border border-violet-100 bg-white p-4 shadow-sm" key={item}>
-                <span className="flex size-8 items-center justify-center rounded-full bg-violet-600 text-xs font-black text-white">
-                  {index + 1}
-                </span>
-                <span className="text-sm font-bold text-ink">{item}</span>
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        <section className="p-6 sm:p-10">
-          <div className="mb-8 lg:hidden">
-            <Link className="inline-flex" href={ROUTES.home}>
-              <BrandLogo />
-            </Link>
-          </div>
-
-          <span className="inline-flex rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">비밀번호 찾기</span>
-          <h1 className="mt-5 text-3xl font-black tracking-tight text-ink">재설정 링크를 보내드릴게요.</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            가입한 이메일 주소를 입력하면 비밀번호를 다시 설정할 수 있는 안내 메일을 받을 수 있습니다.
+          <span className="mb-4 inline-flex rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
+            비밀번호 찾기
+          </span>
+          <h1 className="mb-2 text-2xl font-black">재설정 링크를 보내드릴게요</h1>
+          <p className="text-sm leading-6 text-slate-500">
+            가입한 이메일을 입력하면 새 비밀번호를 설정할 수 있는 안내 메일을 보내드립니다.
           </p>
+        </div>
 
-          <form className="mt-8 rounded-2xl border border-violet-100 bg-violet-50/40 p-5 sm:p-6" onSubmit={handleSubmit}>
-            <div className="space-y-4">
-              <Input
-                autoComplete="email"
-                label="이메일"
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-                required
-                type="email"
-                value={email}
-              />
-              {message ? (
-                <p className={`text-sm font-medium ${status === "error" ? "text-rose-600" : "text-emerald-700"}`}>
-                  {message}
-                </p>
-              ) : null}
-              <Button className="min-h-11 w-full" disabled={status === "loading"} type="submit">
-                {status === "loading" ? "발송 중..." : "재설정 안내 받기"}
-              </Button>
-            </div>
-          </form>
+        <form className="space-y-5" onSubmit={handleSubmit}>
+          <label className="block text-sm font-semibold text-slate-700" htmlFor="forgot-email">
+            이메일
+            <input
+              autoComplete="email"
+              className="mt-2 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              id="forgot-email"
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="your@email.com"
+              required
+              type="email"
+              value={email}
+            />
+          </label>
 
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm text-slate-500">
-            <Link href={ROUTES.login} className="font-semibold text-ink hover:underline">
-              로그인
-            </Link>
-            <span className="text-slate-300">|</span>
-            <Link href={ROUTES.findId} className="font-semibold text-ink hover:underline">
-              아이디 찾기
-            </Link>
-            <span className="text-slate-300">|</span>
-            <Link href={ROUTES.signup} className="font-semibold text-ink hover:underline">
-              회원가입
-            </Link>
+          {message ? (
+            <p className={`rounded-lg px-3 py-2 text-sm font-medium ${status === "error" ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>
+              {message}
+            </p>
+          ) : null}
+
+          <Button
+            className="min-h-11 w-full bg-violet-600 text-white shadow-lg shadow-violet-200 hover:bg-violet-700"
+            disabled={status === "loading"}
+            type="submit"
+          >
+            {status === "loading" ? "발송 중..." : "재설정 안내 받기"}
+          </Button>
+        </form>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-200" />
           </div>
-        </section>
-      </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-white px-2 text-slate-500">계정이 기억나셨나요?</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-slate-500">
+          <Link href={ROUTES.login} className="font-semibold text-violet-700 hover:underline">
+            로그인
+          </Link>
+          <span className="text-slate-300">|</span>
+          <Link href={ROUTES.findId} className="font-semibold text-violet-700 hover:underline">
+            아이디 찾기
+          </Link>
+          <span className="text-slate-300">|</span>
+          <Link href={ROUTES.signup} className="font-semibold text-violet-700 hover:underline">
+            회원가입
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }
