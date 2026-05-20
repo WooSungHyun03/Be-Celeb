@@ -34,6 +34,10 @@ export function getSupabasePublicEnv() {
   };
 }
 
+export function hasSupabasePublicEnv() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim());
+}
+
 export function getSiteUrlEnv() {
   return {
     siteUrl: requireValue("NEXT_PUBLIC_SITE_URL", process.env.NEXT_PUBLIC_SITE_URL),
