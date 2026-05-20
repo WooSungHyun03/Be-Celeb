@@ -66,12 +66,44 @@ const DEFAULT_CHECKLIST_ITEMS = [
   "업로드 완료",
 ];
 
+type StatusFilter = "all" | ProductionBoardStatus;
+type DetailTab = "recommendation" | "memo" | "checklist";
+
+const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "전체" },
+  ...PRODUCTION_BOARD_COLUMNS.map((column) => ({ value: column.status, label: column.label })),
+];
+
+const DETAIL_TABS: Array<{ value: DetailTab; label: string }> = [
+  { value: "recommendation", label: "추천 내용" },
+  { value: "memo", label: "메모" },
+  { value: "checklist", label: "체크리스트" },
+];
+
 function normalizeHashtag(tag: string) {
   return tag.startsWith("#") ? tag : `#${tag}`;
 }
 
+function getCategoryLabel(item: ProductionBoardItem) {
+  return item.category?.trim() || "미분류";
+}
+
 function memoPreview(memo: string | null) {
   return memo?.trim().split(/\r?\n/).filter(Boolean).join(" ") ?? "";
+}
+
+function itemMatchesSearch(item: ProductionBoardItem, normalizedQuery: string) {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return Boolean(
+    item.title.toLowerCase().includes(normalizedQuery) ||
+      item.hook?.toLowerCase().includes(normalizedQuery) ||
+      getCategoryLabel(item).toLowerCase().includes(normalizedQuery) ||
+      item.memo?.toLowerCase().includes(normalizedQuery) ||
+      item.hashtags.some((tag) => tag.toLowerCase().includes(normalizedQuery)),
+  );
 }
 
 function mergeBoardItemUpdate(currentItem: ProductionBoardItem, updatedItem: ProductionBoardItem) {
@@ -275,8 +307,9 @@ function ProductionBoardColumn({ column, items, activeId, movingId, onOpenDetail
   );
 }
 
-type ProductionBoardDetailDialogProps = {
+type ProductionBoardDetailPanelProps = {
   item: ProductionBoardItem | null;
+  activeTab: DetailTab;
   memoValue: string;
   isMemoSaving: boolean;
   checklistItems: ProductionBoardChecklistItem[];
@@ -288,6 +321,7 @@ type ProductionBoardDetailDialogProps = {
   isMoving: boolean;
   onAddChecklistItem: () => void;
   onAddDefaultChecklist: () => void;
+  onChangeTab: (tab: DetailTab) => void;
   onChangeChecklistInput: (value: string) => void;
   onChangeMemo: (value: string) => void;
   onClose: () => void;
@@ -298,8 +332,9 @@ type ProductionBoardDetailDialogProps = {
   onToggleChecklistItem: (checklistItem: ProductionBoardChecklistItem) => void;
 };
 
-function ProductionBoardDetailDialog({
+function ProductionBoardDetailPanel({
   item,
+  activeTab,
   memoValue,
   isMemoSaving,
   checklistItems,
@@ -311,6 +346,7 @@ function ProductionBoardDetailDialog({
   isMoving,
   onAddChecklistItem,
   onAddDefaultChecklist,
+  onChangeTab,
   onChangeChecklistInput,
   onChangeMemo,
   onClose,
@@ -319,7 +355,13 @@ function ProductionBoardDetailDialog({
   onMoveNext,
   onSaveMemo,
   onToggleChecklistItem,
-}: ProductionBoardDetailDialogProps) {
+}: ProductionBoardDetailPanelProps) {
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMoreOpen(false);
+  }, [item?.id]);
+
   if (!item) {
     return null;
   }
@@ -332,32 +374,49 @@ function ProductionBoardDetailDialog({
     checklistItems.length > 0 ? checklistItems.filter((checklistItem) => checklistItem.isDone).length : item.checklistDone || 0;
   const checklistProgress = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0;
   const storyboardLines = storyboardPreview(item.storyboard);
+  const disabled = isMemoSaving || checklistAdding || Boolean(checklistBusyId) || isDeleting;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6" role="presentation">
-      <div
-        aria-modal="true"
-        className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl shadow-slate-950/20"
-        role="dialog"
-      >
-        <div className="border-b border-slate-200 px-5 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={statusTone[item.status]}>{label}</Badge>
-                {item.category ? <Badge>{item.category}</Badge> : null}
-                {item.status === "uploaded" ? <Badge tone="signal">완료됨</Badge> : null}
-              </div>
-              <h2 className="mt-3 text-xl font-bold leading-7 text-ink">{item.title}</h2>
+    <aside
+      aria-modal="false"
+      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[520px] flex-col border-l border-slate-200 bg-white shadow-2xl shadow-slate-950/20"
+      role="dialog"
+    >
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={statusTone[item.status]}>{label}</Badge>
+              <Badge>{getCategoryLabel(item)}</Badge>
+              {item.status === "uploaded" ? <Badge tone="signal">완료됨</Badge> : null}
             </div>
-            <Button disabled={isMemoSaving || checklistAdding || Boolean(checklistBusyId) || isDeleting} onClick={onClose} variant="secondary">
-              닫기
-            </Button>
+            <h2 className="mt-3 line-clamp-3 text-xl font-bold leading-7 text-ink">{item.title}</h2>
           </div>
+          <Button aria-label="상세 패널 닫기" className="size-10 shrink-0 px-0" disabled={disabled} onClick={onClose} variant="ghost">
+            X
+          </Button>
         </div>
 
-        <div className="overflow-y-auto px-5 py-5">
-          <section className="space-y-4">
+        <div className="mt-4 grid grid-cols-3 rounded-lg bg-slate-100 p-1">
+          {DETAIL_TABS.map((tab) => (
+            <button
+              className={cn(
+                "min-h-9 rounded-md px-2 text-sm font-bold transition",
+                activeTab === tab.value ? "bg-white text-violet-700 shadow-sm" : "text-slate-600 hover:text-ink",
+              )}
+              key={tab.value}
+              onClick={() => onChangeTab(tab.value)}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-5 py-5">
+        {activeTab === "recommendation" ? (
+          <section className="space-y-5">
             {item.hook ? (
               <div>
                 <h3 className="text-xs font-bold uppercase text-slate-500">후킹 문장</h3>
@@ -404,8 +463,10 @@ function ProductionBoardDetailDialog({
               </Link>
             ) : null}
           </section>
+        ) : null}
 
-          <section className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        {activeTab === "memo" ? (
+          <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold text-ink">메모</h3>
@@ -427,8 +488,10 @@ function ProductionBoardDetailDialog({
               </Button>
             </div>
           </section>
+        ) : null}
 
-          <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+        {activeTab === "checklist" ? (
+          <section className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="text-sm font-bold text-ink">체크리스트</h3>
@@ -450,7 +513,7 @@ function ProductionBoardDetailDialog({
               </Button>
             </div>
 
-            <div className="mt-4 max-h-80 overflow-y-auto rounded-md border border-slate-200">
+            <div className="mt-4 max-h-72 overflow-y-auto rounded-md border border-slate-200">
               {checklistStatus === "loading" ? (
                 <p className="px-4 py-8 text-center text-sm font-medium text-slate-500">체크리스트를 불러오는 중입니다.</p>
               ) : checklistItems.length === 0 ? (
@@ -507,25 +570,41 @@ function ProductionBoardDetailDialog({
               </Button>
             </div>
           </section>
-        </div>
-
-        <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-between">
-          <Button disabled={isMemoSaving || checklistAdding || Boolean(checklistBusyId) || isDeleting} onClick={() => onDeleteItem(item)} variant="danger">
-            {isDeleting ? "삭제 중" : "카드 삭제"}
-          </Button>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            {nextStatus && nextLabel ? (
-              <Button disabled={isMoving || isDeleting} onClick={() => onMoveNext(item)} variant="secondary">
-                {isMoving ? "이동 중" : `${nextLabel}으로 이동`}
-              </Button>
-            ) : null}
-            <Button disabled={isMemoSaving || checklistAdding || Boolean(checklistBusyId) || isDeleting} onClick={onClose} variant="secondary">
-              닫기
-            </Button>
-          </div>
-        </div>
+        ) : null}
       </div>
-    </div>
+
+      <footer className="sticky bottom-0 flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-between">
+        <div className="relative">
+          <Button disabled={disabled} onClick={() => setIsMoreOpen((current) => !current)} variant="secondary">
+            더보기
+          </Button>
+          {isMoreOpen ? (
+            <div className="absolute bottom-12 left-0 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+              <button
+                className="flex w-full rounded-md px-3 py-2 text-left text-sm font-bold text-rose-600 hover:bg-rose-50"
+                onClick={() => {
+                  setIsMoreOpen(false);
+                  onDeleteItem(item);
+                }}
+                type="button"
+              >
+                카드 삭제
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button disabled={disabled} onClick={onClose} variant="secondary">
+            닫기
+          </Button>
+          {nextStatus && nextLabel ? (
+            <Button disabled={isMoving || isDeleting} onClick={() => onMoveNext(item)}>
+              {isMoving ? "이동 중" : `${nextLabel}으로 이동`}
+            </Button>
+          ) : null}
+        </div>
+      </footer>
+    </aside>
   );
 }
 
@@ -538,6 +617,10 @@ export default function ProductionBoardPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [detailItem, setDetailItem] = useState<ProductionBoardItem | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("recommendation");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [memoDraft, setMemoDraft] = useState("");
   const [memoSavingId, setMemoSavingId] = useState<string | null>(null);
   const [checklistItems, setChecklistItems] = useState<ProductionBoardChecklistItem[]>([]);
@@ -598,10 +681,30 @@ export default function ProductionBoardPage() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const categoryOptions = useMemo(() => {
+    return Array.from(new Set(items.map(getCategoryLabel))).sort((left, right) => left.localeCompare(right));
+  }, [items]);
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (!itemMatchesSearch(item, normalizedQuery)) {
+        return false;
+      }
+      if (selectedStatus !== "all" && item.status !== selectedStatus) {
+        return false;
+      }
+      if (selectedCategory !== "all" && getCategoryLabel(item) !== selectedCategory) {
+        return false;
+      }
+      return true;
+    });
+  }, [items, normalizedQuery, selectedCategory, selectedStatus]);
+
   const itemsByStatus = useMemo(() => {
     return PRODUCTION_BOARD_COLUMNS.reduce<Record<ProductionBoardStatus, ProductionBoardItem[]>>(
       (grouped, column) => {
-        grouped[column.status] = items.filter((item) => item.status === column.status);
+        grouped[column.status] = filteredItems.filter((item) => item.status === column.status);
         return grouped;
       },
       {
@@ -612,7 +715,15 @@ export default function ProductionBoardPage() {
         uploaded: [],
       },
     );
-  }, [items]);
+  }, [filteredItems]);
+
+  const hasActiveFilters = Boolean(normalizedQuery || selectedStatus !== "all" || selectedCategory !== "all");
+
+  function resetFilters() {
+    setSearchQuery("");
+    setSelectedStatus("all");
+    setSelectedCategory("all");
+  }
 
   async function moveItemToStatus(item: ProductionBoardItem, targetStatus: ProductionBoardStatus, successMessage: string) {
     if (movingId || item.status === targetStatus) {
@@ -690,6 +801,7 @@ export default function ProductionBoardPage() {
   async function handleOpenDetail(item: ProductionBoardItem) {
     const latestItem = items.find((currentItem) => currentItem.id === item.id) ?? item;
     setDetailItem(latestItem);
+    setDetailTab("recommendation");
     setMemoDraft(latestItem.memo ?? "");
     setChecklistItems([]);
     setChecklistInput("");
@@ -710,6 +822,7 @@ export default function ProductionBoardPage() {
       return;
     }
     setDetailItem(null);
+    setDetailTab("recommendation");
     setMemoDraft("");
     setChecklistItems([]);
     setChecklistInput("");
@@ -864,6 +977,7 @@ export default function ProductionBoardPage() {
     setToast(null);
     setItems((current) => current.filter((currentItem) => currentItem.id !== item.id));
     setDetailItem(null);
+    setDetailTab("recommendation");
     setChecklistItems([]);
     setChecklistInput("");
     setChecklistStatus("idle");
@@ -903,7 +1017,7 @@ export default function ProductionBoardPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className={cn("space-y-8 transition-[padding] duration-200", detailItem ? "xl:pr-[520px]" : "")}>
       <PageHeader
         action={
           <Link href={ROUTES.favorites}>
@@ -916,6 +1030,67 @@ export default function ProductionBoardPage() {
 
       {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
 
+      {items.length > 0 ? (
+        <Card className="p-4">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="relative">
+              <input
+                className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 pr-11 text-sm font-medium text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="제목, 해시태그, 메모 검색..."
+                value={searchQuery}
+              />
+              {searchQuery ? (
+                <button
+                  aria-label="검색어 초기화"
+                  className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sm font-bold text-slate-500 hover:bg-slate-100 hover:text-ink"
+                  onClick={() => setSearchQuery("")}
+                  type="button"
+                >
+                  X
+                </button>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <Button
+                  className="min-h-9 px-3"
+                  key={option.value}
+                  onClick={() => setSelectedStatus(option.value)}
+                  variant={selectedStatus === option.value ? "primary" : "secondary"}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <select
+                className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                onChange={(event) => setSelectedCategory(event.target.value)}
+                value={selectedCategory}
+              >
+                <option value="all">카테고리 전체</option>
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+              <Button disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
+                필터 초기화
+              </Button>
+            </div>
+            <p className="text-sm font-semibold text-slate-500">
+              {filteredItems.length} / {items.length}개 표시
+            </p>
+          </div>
+        </Card>
+      ) : null}
+
       {items.length === 0 ? (
         <EmptyState
           action={
@@ -927,29 +1102,43 @@ export default function ProductionBoardPage() {
           title="아직 제작 보드에 추가된 아이디어가 없습니다"
         />
       ) : (
-        <DndContext
-          collisionDetection={closestCenter}
-          onDragCancel={() => setActiveId(null)}
-          onDragEnd={(event) => void handleDragEnd(event)}
-          onDragStart={handleDragStart}
-          sensors={sensors}
-        >
-          <div className="grid gap-4 xl:grid-cols-5">
-            {PRODUCTION_BOARD_COLUMNS.map((column) => (
-              <ProductionBoardColumn
-                activeId={activeId}
-                column={column}
-                items={itemsByStatus[column.status]}
-                key={column.status}
-                movingId={movingId}
-                onOpenDetail={(item) => void handleOpenDetail(item)}
-                onMoveNext={handleMoveNext}
-              />
-            ))}
-          </div>
-        </DndContext>
+        <div className="space-y-4">
+          {filteredItems.length === 0 ? (
+            <EmptyState
+              action={
+                <Button onClick={resetFilters} variant="secondary">
+                  필터 초기화
+                </Button>
+              }
+              description="다른 키워드나 필터를 사용해보세요."
+              title="검색 결과가 없습니다."
+            />
+          ) : null}
+          <DndContext
+            collisionDetection={closestCenter}
+            onDragCancel={() => setActiveId(null)}
+            onDragEnd={(event) => void handleDragEnd(event)}
+            onDragStart={handleDragStart}
+            sensors={sensors}
+          >
+            <div className="grid gap-4 xl:grid-cols-5">
+              {PRODUCTION_BOARD_COLUMNS.map((column) => (
+                <ProductionBoardColumn
+                  activeId={activeId}
+                  column={column}
+                  items={itemsByStatus[column.status]}
+                  key={column.status}
+                  movingId={movingId}
+                  onOpenDetail={(item) => void handleOpenDetail(item)}
+                  onMoveNext={handleMoveNext}
+                />
+              ))}
+            </div>
+          </DndContext>
+        </div>
       )}
-      <ProductionBoardDetailDialog
+      <ProductionBoardDetailPanel
+        activeTab={detailTab}
         checklistAdding={checklistAdding}
         checklistBusyId={checklistBusyId}
         checklistInput={checklistInput}
@@ -962,6 +1151,7 @@ export default function ProductionBoardPage() {
         memoValue={memoDraft}
         onAddChecklistItem={() => void handleAddChecklistItem()}
         onAddDefaultChecklist={() => void handleAddDefaultChecklist()}
+        onChangeTab={setDetailTab}
         onChangeChecklistInput={setChecklistInput}
         onChangeMemo={setMemoDraft}
         onClose={handleCloseDetail}
