@@ -133,7 +133,7 @@ export default function GrowthReportPage() {
       <PageHeader
         action={
           <Button disabled={refreshing} onClick={() => void handleRefresh()}>
-            {refreshing ? "갱신 중" : "지금 갱신"}
+            {refreshing ? "갱신 중..." : "지금 갱신"}
           </Button>
         }
         description="저장된 YouTube 채널 URL을 기준으로 구독자, 조회수, 영상 수와 최근 영상 성과를 추적합니다."
@@ -141,7 +141,7 @@ export default function GrowthReportPage() {
         title="성장 리포트"
       />
 
-      {message ? <p className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">{message}</p> : null}
+      {message ? <p className="rounded-xl border border-violet-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700">{message}</p> : null}
 
       {!report?.hasChannelSettings ? (
         <EmptyState
@@ -159,7 +159,7 @@ export default function GrowthReportPage() {
         <EmptyState
           action={
             <Button disabled={refreshing} onClick={() => void handleRefresh()}>
-              {refreshing ? "갱신 중" : "첫 스냅샷 저장"}
+              {refreshing ? "갱신 중..." : "첫 스냅샷 저장"}
             </Button>
           }
           description="아직 저장된 성장 스냅샷이 없습니다. 지금 갱신을 눌러 현재 YouTube 지표를 저장하세요."
@@ -172,17 +172,17 @@ export default function GrowthReportPage() {
           <section className="grid gap-4 md:grid-cols-3">
             <Card>
               <p className="text-sm font-bold text-slate-500">구독자 수</p>
-              <p className="mt-2 text-3xl font-bold text-ink">{formatInteger(latest.subscriberCount)}</p>
+              <p className="mt-2 text-3xl font-black text-ink">{formatInteger(latest.subscriberCount)}</p>
               <p className="mt-2 text-sm font-semibold text-violet-700">이전 대비 {formatDelta(deltas.subscriberCount)}</p>
             </Card>
             <Card>
               <p className="text-sm font-bold text-slate-500">전체 조회수</p>
-              <p className="mt-2 text-3xl font-bold text-ink">{formatInteger(latest.viewCount)}</p>
+              <p className="mt-2 text-3xl font-black text-ink">{formatInteger(latest.viewCount)}</p>
               <p className="mt-2 text-sm font-semibold text-violet-700">이전 대비 {formatDelta(deltas.viewCount)}</p>
             </Card>
             <Card>
               <p className="text-sm font-bold text-slate-500">영상 수</p>
-              <p className="mt-2 text-3xl font-bold text-ink">{formatInteger(latest.videoCount)}</p>
+              <p className="mt-2 text-3xl font-black text-ink">{formatInteger(latest.videoCount)}</p>
               <p className="mt-2 text-sm font-semibold text-violet-700">이전 대비 {formatDelta(deltas.videoCount)}</p>
             </Card>
           </section>
@@ -215,7 +215,7 @@ export default function GrowthReportPage() {
                   <div className="h-72 min-w-0">
                     <ResponsiveContainer height="100%" width="100%">
                       <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 16, top: 8 }}>
-                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                        <CartesianGrid stroke="#ede9fe" strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="period" tick={{ fontSize: 11 }} tickMargin={8} />
                         <YAxis tick={{ fontSize: 11 }} tickFormatter={metricLabel} width={48} />
                         <Tooltip formatter={(value) => [metricLabel(value), "구독자"]} />
@@ -226,11 +226,11 @@ export default function GrowthReportPage() {
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-2">
-                  <div className="h-72 min-w-0 rounded-lg border border-slate-200 p-3">
+                  <div className="h-72 min-w-0 rounded-xl border border-violet-100 p-3">
                     <p className="mb-3 text-sm font-bold text-slate-500">전체 조회수 추이</p>
                     <ResponsiveContainer height="88%" width="100%">
                       <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 16, top: 8 }}>
-                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                        <CartesianGrid stroke="#ede9fe" strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="period" tick={{ fontSize: 11 }} tickMargin={8} />
                         <YAxis tick={{ fontSize: 11 }} tickFormatter={metricLabel} width={48} />
                         <Tooltip formatter={(value) => [metricLabel(value), "조회수"]} />
@@ -238,11 +238,11 @@ export default function GrowthReportPage() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="h-72 min-w-0 rounded-lg border border-slate-200 p-3">
+                  <div className="h-72 min-w-0 rounded-xl border border-violet-100 p-3">
                     <p className="mb-3 text-sm font-bold text-slate-500">영상 수 추이</p>
                     <ResponsiveContainer height="88%" width="100%">
                       <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 16, top: 8 }}>
-                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                        <CartesianGrid stroke="#ede9fe" strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="period" tick={{ fontSize: 11 }} tickMargin={8} />
                         <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickFormatter={metricLabel} width={48} />
                         <Tooltip formatter={(value) => [metricLabel(value), "영상 수"]} />
@@ -255,7 +255,7 @@ export default function GrowthReportPage() {
               </div>
             ) : (
               <EmptyState
-                description="성장 추이를 그래프로 보려면 최소 2개 이상의 snapshot이 필요합니다. 하루 뒤 다시 갱신하거나 운영 스케줄을 확인하세요."
+                description="성장 추이를 그래프로 보려면 최소 2개 이상의 스냅샷이 필요합니다. 하루 뒤 다시 갱신하거나 운영 일정을 확인하세요."
                 title="추이 데이터가 더 필요합니다"
               />
             )}
@@ -263,7 +263,7 @@ export default function GrowthReportPage() {
 
           <Card title="최근 영상 성과">
             {latest.recentVideoStats.length > 0 ? (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-violet-100">
                 {latest.recentVideoStats.map((video) => (
                   <article className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_auto]" key={video.youtubeVideoId}>
                     <div>
@@ -271,9 +271,9 @@ export default function GrowthReportPage() {
                       <p className="mt-1 text-xs text-slate-500">{formatDate(video.publishedAt)}</p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-600 md:justify-end">
-                      <span className="rounded bg-slate-100 px-2 py-1">조회 {formatInteger(video.viewCount)}</span>
-                      <span className="rounded bg-slate-100 px-2 py-1">좋아요 {formatInteger(video.likeCount)}</span>
-                      <span className="rounded bg-slate-100 px-2 py-1">댓글 {formatInteger(video.commentCount)}</span>
+                      <span className="rounded-md bg-violet-50 px-2 py-1 text-violet-700">조회 {formatInteger(video.viewCount)}</span>
+                      <span className="rounded-md bg-slate-100 px-2 py-1">좋아요 {formatInteger(video.likeCount)}</span>
+                      <span className="rounded-md bg-slate-100 px-2 py-1">댓글 {formatInteger(video.commentCount)}</span>
                     </div>
                   </article>
                 ))}

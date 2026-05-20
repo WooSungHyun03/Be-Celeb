@@ -146,7 +146,7 @@ export default function ProfilePage() {
 
     try {
       if (!currentPassword || !newPassword || !confirmPassword) {
-        throw new Error("현재 비밀번호, 새 비밀번호, 확인 값을 모두 입력하세요.");
+        throw new Error("현재 비밀번호, 새 비밀번호, 확인 값을 모두 입력해 주세요.");
       }
       if (newPassword.length < 8) {
         throw new Error("새 비밀번호는 8자 이상이어야 합니다.");
@@ -155,7 +155,7 @@ export default function ProfilePage() {
         throw new Error("새 비밀번호와 확인 값이 일치하지 않습니다.");
       }
       if (!email) {
-        throw new Error("로그인 이메일을 확인하지 못했습니다. 다시 로그인한 뒤 시도하세요.");
+        throw new Error("로그인 이메일을 확인하지 못했습니다. 다시 로그인한 뒤 시도해 주세요.");
       }
 
       const supabase = getSupabaseBrowserClient();
@@ -192,7 +192,7 @@ export default function ProfilePage() {
             <Button>로그인하기</Button>
           </Link>
         }
-        description="계정 설정은 로그인 후 확인할 수 있습니다."
+        description="계정 설정은 로그인한 사용자만 확인할 수 있습니다."
         title="로그인이 필요합니다"
       />
     );
@@ -206,7 +206,7 @@ export default function ProfilePage() {
             <Button variant="secondary">대시보드로 이동</Button>
           </Link>
         }
-        description={message || "Supabase 환경 변수 또는 인증 상태를 확인해주세요."}
+        description={message || "Supabase 환경 변수 또는 인증 상태를 확인해 주세요."}
         title="계정 설정을 불러오지 못했습니다"
       />
     );
@@ -214,9 +214,11 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="계정 설정" description="프로필과 기본 YouTube 채널 설정을 관리합니다." />
-      {message ? <p className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{message}</p> : null}
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <PageHeader title="계정 설정" description="프로필, 기본 YouTube 채널 설정, 비밀번호를 한 곳에서 관리합니다." />
+
+      {message ? <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{message}</p> : null}
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
           <Card title="프로필 정보">
             <form className="space-y-4" onSubmit={handleProfileSubmit}>
@@ -228,7 +230,7 @@ export default function ProfilePage() {
                 </p>
               ) : null}
               <Button disabled={profileStatus === "saving"} type="submit">
-                {profileStatus === "saving" ? "저장 중" : "프로필 저장"}
+                {profileStatus === "saving" ? "저장 중..." : "프로필 저장"}
               </Button>
             </form>
           </Card>
@@ -236,7 +238,7 @@ export default function ProfilePage() {
           <Card title="채널 설정 변경">
             <form className="space-y-4" onSubmit={handleChannelSubmit}>
               <Input
-                helperText="dashboard 추천 요청 시 이 값이 자동으로 채워집니다."
+                helperText="대시보드 추천 요청 시 이 값이 기본 채널로 사용됩니다."
                 label="YouTube 채널 URL"
                 onChange={(event) => setChannelUrl(event.target.value)}
                 placeholder="https://www.youtube.com/@..."
@@ -246,7 +248,7 @@ export default function ProfilePage() {
               <label className="block text-sm font-semibold text-slate-700" htmlFor="profile-category">
                 <span>카테고리</span>
                 <select
-                  className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink"
+                  className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
                   id="profile-category"
                   onChange={(event) => setCategory(event.target.value)}
                   required
@@ -266,7 +268,7 @@ export default function ProfilePage() {
                 </p>
               ) : null}
               <Button disabled={channelStatus === "saving"} type="submit">
-                {channelStatus === "saving" ? "저장 중" : "채널 설정 저장"}
+                {channelStatus === "saving" ? "저장 중..." : "채널 설정 저장"}
               </Button>
             </form>
           </Card>
@@ -306,21 +308,26 @@ export default function ProfilePage() {
                 </p>
               ) : null}
               <Button disabled={passwordStatus === "saving"} type="submit">
-                {passwordStatus === "saving" ? "변경 중" : "비밀번호 변경"}
+                {passwordStatus === "saving" ? "변경 중..." : "비밀번호 변경"}
               </Button>
             </form>
           </Card>
         </div>
 
-        <div className="space-y-4">
+        <aside className="space-y-4">
           <Card title="저장된 채널">
             <div className="space-y-3">
-              <Badge tone="info">{settings?.category ?? "카테고리 없음"}</Badge>
-              <p className="break-all text-sm font-semibold text-ink">{settings?.channelTitle ?? settings?.channelUrl ?? "저장된 채널 없음"}</p>
+              <Badge tone="brand">{settings?.category ?? "카테고리 없음"}</Badge>
+              <p className="break-all text-sm font-semibold text-ink">
+                {settings?.channelTitle ?? settings?.channelUrl ?? "저장된 채널 없음"}
+              </p>
+              <p className="text-xs leading-5 text-slate-500">
+                이 정보는 대시보드 추천과 콘텐츠 분석의 기본값으로 사용됩니다.
+              </p>
             </div>
           </Card>
           <DeleteAccountSection onError={setMessage} />
-        </div>
+        </aside>
       </div>
     </div>
   );

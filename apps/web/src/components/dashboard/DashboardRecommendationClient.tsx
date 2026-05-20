@@ -16,7 +16,7 @@ import { getUserChannelSettings } from "@/lib/api/users";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 import type { RecommendationFieldOptions } from "@/types/content-recommendation";
 
-const loadingSteps = ["채널 분석 중", "카테고리 데이터 분석 중", "AI가 콘텐츠 추천 생성 중"];
+const loadingSteps = ["채널 분석 중", "카테고리 데이터 분석 중", "AI 콘텐츠 추천 생성 중"];
 const defaultRecommendationOptions: RecommendationFieldOptions = {
   reason: true,
   hashtags: true,
@@ -128,7 +128,7 @@ export function DashboardRecommendationClient() {
       <PageHeader
         eyebrow={<Badge tone="brand">YouTube AI 콘텐츠 추천</Badge>}
         title="대시보드"
-        description="저장된 채널 설정을 불러와 한 번의 분석으로 바로 콘텐츠 추천 결과를 생성합니다."
+        description="저장된 채널 설정을 불러오거나 새로운 URL을 입력해 콘텐츠 추천 결과를 생성합니다."
       />
 
       <ChannelAnalysisCard

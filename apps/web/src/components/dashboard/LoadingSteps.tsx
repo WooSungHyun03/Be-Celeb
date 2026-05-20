@@ -7,7 +7,7 @@ type LoadingStepsProps = {
 
 export function LoadingSteps({ steps, activeIndex }: LoadingStepsProps) {
   return (
-    <div className="rounded-lg border border-violet-100 bg-violet-50 p-4">
+    <div className="rounded-xl border border-violet-100 bg-violet-50 p-4 shadow-sm shadow-violet-100/60">
       <div className="flex flex-wrap gap-2">
         {steps.map((step, index) => (
           <Badge key={step} tone={index <= activeIndex ? "brand" : "default"}>

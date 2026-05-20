@@ -21,7 +21,6 @@ type FavoriteView = {
   reason: string;
   category: string;
   channelTitle: string;
-  channelUrl: string;
   hashtags: string[];
   storyboardSummary: string[];
 };
@@ -61,11 +60,10 @@ function getFavoriteView(item: FavoriteItem): FavoriteView {
   const channel = asRecord(metadata.channel ?? source.channel);
 
   return {
-    title: asString(item.title, asString(recommendation.title, "찜한 추천 콘텐츠")),
+    title: asString(item.title, asString(recommendation.title, "저장한 추천 콘텐츠")),
     reason: asString(item.reason, asString(recommendation.reason, "추천 이유 정보가 없습니다.")),
     category: asString(metadata.selectedCategory, asString(source.selectedCategory, "추천")),
     channelTitle: asString(channel.title, "YouTube 채널"),
-    channelUrl: asString(channel.channelUrl),
     hashtags: (item.hashtags?.length ? item.hashtags : asStringArray(recommendation.hashtags)).slice(0, 6),
     storyboardSummary: storyboardSummary(item),
   };
@@ -172,7 +170,7 @@ export default function FavoritesPage() {
       await deleteFavorite(favoriteId);
       setItems((current) => current.filter((item) => item.id !== favoriteId));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "찜 해제에 실패했습니다.");
+      setMessage(error instanceof Error ? error.message : "찜 삭제에 실패했습니다.");
     } finally {
       setDeletingId(null);
     }
@@ -219,14 +217,14 @@ export default function FavoritesPage() {
         recommendationId,
       });
       setBoardItems((current) => (current.some((existing) => existing.id === boardItem.id) ? current : [boardItem, ...current]));
-      setToast({ message: "제작 보드에 추가되었습니다.", tone: "success" });
+      setToast({ message: "제작 보드에 추가했습니다.", tone: "success" });
     } catch (error) {
       if (error instanceof ApiClientError && error.code === "ALREADY_ADDED") {
         setToast({ message: "이미 제작 보드에 추가된 아이디어입니다.", tone: "info" });
         try {
           setBoardItems(await getProductionBoardItems());
         } catch {
-          // The duplicate response already gave the user the important state.
+          // Duplicate state is already enough for the user.
         }
         return;
       }
@@ -271,14 +269,14 @@ export default function FavoritesPage() {
             </Link>
           </div>
         }
-        description="추천 결과에서 저장한 콘텐츠 아이디어를 모아보고 업로드 일정을 바로 만들 수 있습니다."
+        description="추천 결과에서 저장한 콘텐츠 아이디어를 모아보고 업로드 일정이나 제작 보드로 바로 연결할 수 있습니다."
         title="찜 목록"
       />
 
       {toast || message ? (
         <div className="grid gap-2">
           {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
-          {message ? <p className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">{message}</p> : null}
+          {message ? <p className="rounded-xl border border-violet-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700">{message}</p> : null}
         </div>
       ) : null}
 
@@ -294,7 +292,7 @@ export default function FavoritesPage() {
         />
       ) : (
         <>
-          <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[1fr_220px_auto] lg:items-end">
+          <section className="grid gap-3 rounded-xl border border-violet-100 bg-white p-4 shadow-sm lg:grid-cols-[1fr_220px_auto] lg:items-end">
             <label className="block text-sm font-semibold text-slate-700">
               <span>검색</span>
               <input
@@ -325,7 +323,7 @@ export default function FavoritesPage() {
           </section>
 
           {filteredItems.length === 0 ? (
-            <EmptyState title="조건에 맞는 찜이 없습니다" description="검색어나 카테고리 필터를 조정해 보세요." />
+            <EmptyState title="조건에 맞는 찜이 없습니다" description="검색어와 카테고리 필터를 조정해 보세요." />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {filteredItems.map((item) => {
@@ -338,19 +336,19 @@ export default function FavoritesPage() {
                       <Badge tone="brand">{favorite.category}</Badge>
                       <Badge>{favorite.channelTitle}</Badge>
                     </div>
-                    <h2 className="mt-4 text-xl font-bold leading-7 text-ink">{favorite.title}</h2>
+                    <h2 className="mt-4 text-xl font-black leading-7 text-ink">{favorite.title}</h2>
                     <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">{favorite.reason}</p>
                     {favorite.hashtags.length > 0 ? (
                       <div className="mt-4 flex flex-wrap gap-2">
                         {favorite.hashtags.map((tag) => (
-                          <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" key={tag}>
+                          <span className="rounded-md bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700" key={tag}>
                             {tag.startsWith("#") ? tag : `#${tag}`}
                           </span>
                         ))}
                       </div>
                     ) : null}
                     {favorite.storyboardSummary.length > 0 ? (
-                      <div className="mt-4 rounded-md bg-slate-50 p-3">
+                      <div className="mt-4 rounded-xl bg-slate-50 p-3">
                         <p className="text-xs font-bold uppercase text-slate-500">콘티 요약</p>
                         <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-700">
                           {favorite.storyboardSummary.map((summary) => (
@@ -370,7 +368,7 @@ export default function FavoritesPage() {
                           value={scheduleDates[item.id] ?? todayIsoDate()}
                         />
                         <Button disabled={schedulingId === item.id} onClick={() => void handleSchedule(item)} variant="secondary">
-                          {schedulingId === item.id ? "추가 중" : "캘린더에 추가"}
+                          {schedulingId === item.id ? "추가 중..." : "캘린더에 추가"}
                         </Button>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -381,7 +379,7 @@ export default function FavoritesPage() {
                             </Link>
                           ) : (
                             <Button disabled={boardAddingId === item.id} onClick={() => void handleAddToBoard(item)}>
-                              {boardAddingId === item.id ? "추가 중" : "제작 보드에 추가"}
+                              {boardAddingId === item.id ? "추가 중..." : "제작 보드에 추가"}
                             </Button>
                           )
                         ) : null}
@@ -391,7 +389,7 @@ export default function FavoritesPage() {
                           </Link>
                         ) : null}
                         <Button disabled={deletingId === item.id} onClick={() => void handleDelete(item.id)} variant="ghost">
-                          {deletingId === item.id ? "삭제 중" : "삭제"}
+                          {deletingId === item.id ? "삭제 중..." : "삭제"}
                         </Button>
                       </div>
                     </div>

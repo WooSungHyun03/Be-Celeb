@@ -1,4 +1,3 @@
-// Renders the polished landing page for Be Celeb.
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ROUTES } from "@/constants/routes";
@@ -8,112 +7,90 @@ type HomePageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+type IconName =
+  | "sparkles"
+  | "trending"
+  | "target"
+  | "chart"
+  | "calendar"
+  | "arrow"
+  | "hash";
+
+const features = [
+  {
+    icon: "trending" as const,
+    title: "트렌드 분석",
+    description: "카테고리별 실시간 YouTube 트렌드와 검색 관심도를 한눈에 파악하세요",
+  },
+  {
+    icon: "target" as const,
+    title: "AI 콘텐츠 추천",
+    description: "채널 분석을 통해 다음 영상 아이디어, 훅, 구성, 해시태그를 자동 생성합니다",
+  },
+  {
+    icon: "chart" as const,
+    title: "성장 리포트",
+    description: "데이터 기반의 성장 분석으로 채널 성과를 체계적으로 관리하세요",
+  },
+  {
+    icon: "calendar" as const,
+    title: "제작 캘린더",
+    description: "콘텐츠 제작 일정을 효율적으로 관리하고 업로드를 계획하세요",
+  },
+];
+
+const workflow = [
+  {
+    step: "01",
+    title: "YouTube 채널 입력",
+    description: "분석하고 싶은 YouTube 채널 링크를 입력합니다",
+  },
+  {
+    step: "02",
+    title: "카테고리 선택",
+    description: "IT, 일상, 뷰티 등 채널 카테고리를 선택합니다",
+  },
+  {
+    step: "03",
+    title: "AI 추천 생성",
+    description: "AI가 트렌드를 분석하여 콘텐츠 아이디어를 생성합니다",
+  },
+  {
+    step: "04",
+    title: "즐겨찾기 저장",
+    description: "마음에 드는 추천을 즐겨찾기에 저장합니다",
+  },
+  {
+    step: "05",
+    title: "캘린더 등록",
+    description: "제작 일정을 캘린더에 등록하고 관리합니다",
+  },
+];
+
+const fallbackStats = [
+  { label: "활성 크리에이터", value: "10,000+" },
+  { label: "생성된 추천", value: "50,000+" },
+  { label: "분석된 트렌드", value: "100,000+" },
+];
+
+const fallbackKeywords = [
+  { keyword: "#GRWM", score: 92, trend: "+12%" },
+  { keyword: "#패션아이템", score: 88, trend: "+8%" },
+  { keyword: "#데일리룩", score: 85, trend: "+15%" },
+  { keyword: "#뷰티팁", score: 82, trend: "+5%" },
+  { keyword: "#IT리뷰", score: 79, trend: "+20%" },
+  { keyword: "#브이로그", score: 76, trend: "+3%" },
+];
+
+const primaryCtaClass =
+  "inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-violet-600 px-8 text-base font-bold text-white shadow-lg shadow-violet-200 transition hover:-translate-y-0.5 hover:bg-violet-700";
+
+const outlineCtaClass =
+  "inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-8 text-base font-bold text-ink shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:bg-violet-50";
+
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
-
-const primaryLinkClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[linear-gradient(180deg,#8b5cf6_0%,#7c3aed_54%,#6d28d9_100%)] px-7 py-3 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-10px_18px_rgba(76,29,149,0.24),0_12px_22px_rgba(124,58,237,0.22)] transition hover:-translate-y-0.5 hover:bg-[linear-gradient(180deg,#9f7aea_0%,#7c3aed_54%,#5b21b6_100%)]";
-
-const secondaryLinkClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-7 py-3 text-sm font-bold text-violet-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-violet-50";
-
-const heroStats = [
-  { label: "추천 생성", value: "85", change: "ideas" },
-  { label: "트렌드 지표", value: "92", change: "live" },
-  { label: "찜한 아이디어", value: "24", change: "saved" },
-  { label: "일정 관리", value: "14", change: "plan" },
-];
-
-const insightCards = [
-  { icon: "spark", title: "콘텐츠 추천", description: "채널 URL과 카테고리로 다음 아이디어를 생성합니다.", tone: "violet" },
-  { icon: "trend", title: "트렌드 분석", description: "YouTube 인기 영상과 검색 관심도를 함께 확인합니다.", tone: "pink" },
-  { icon: "search", title: "찜 목록", description: "마음에 드는 추천 결과를 저장해 다시 꺼내봅니다.", tone: "orange" },
-  { icon: "hash", title: "업로드 캘린더", description: "찜한 아이디어를 날짜별 업로드 일정으로 관리합니다.", tone: "violet" },
-  { icon: "people", title: "성장 리포트", description: "구독자, 조회수, 영상 수 변화를 스냅샷으로 확인합니다.", tone: "blue" },
-  { icon: "book", title: "크리에이터 상점", description: "촬영·편집에 필요한 장비를 섹션별로 둘러봅니다.", tone: "green" },
-];
-
-const popularTags = [
-  { label: "#클린걸메이크업", value: "2.4M", width: "w-full", color: "bg-violet-500" },
-  { label: "#감성카페룩", value: "1.8M", width: "w-4/5", color: "bg-pink-500" },
-  { label: "#생성형AI", value: "1.2M", width: "w-3/5", color: "bg-amber-400" },
-  { label: "#출근룩", value: "982K", width: "w-1/2", color: "bg-blue-500" },
-  { label: "#홈테크", value: "754K", width: "w-2/5", color: "bg-emerald-500" },
-];
-
-const platformStats = [
-  { label: "채널 분석", value: "URL", color: "bg-violet-500" },
-  { label: "콘텐츠 추천", value: "AI", color: "bg-pink-500" },
-  { label: "아이디어 저장", value: "찜", color: "bg-orange-400" },
-  { label: "업로드 일정", value: "캘린더", color: "bg-sky-500" },
-  { label: "성장 확인", value: "리포트", color: "bg-emerald-500" },
-];
-
-const risingTopics = [
-  { label: "채널 기반 추천", icon: "↑" },
-  { label: "검색 관심도 결합", icon: "↑" },
-  { label: "찜한 아이디어 관리", icon: "→" },
-  { label: "업로드 일정화", icon: "→" },
-  { label: "성장 지표 확인", icon: "→" },
-];
-
-type VideoRecommendationItem = {
-  title: string;
-  image: string;
-  badge: string;
-  creator: string;
-  stats: string;
-  tags: string[];
-};
-
-const videoRecommendations: VideoRecommendationItem[] = [
-  {
-    title: "30분 만에 콘텐츠 기획하는 방법",
-    image: "desk",
-    badge: "추천 아이디어",
-    creator: "콘텐츠 메이커",
-    stats: "예상 도달 12.4K",
-    tags: ["루틴", "생산성", "기획"],
-  },
-  {
-    title: "콘텐츠 크리에이터의 하루",
-    image: "studio",
-    badge: "콘티 추천",
-    creator: "브이로그 채널",
-    stats: "참여율 9.8%",
-    tags: ["브이로그", "성장", "일상"],
-  },
-  {
-    title: "시간을 아껴주는 필수 앱 5가지",
-    image: "phone",
-    badge: "업로드 후보",
-    creator: "생산성 크리에이터",
-    stats: "저장률 높음",
-    tags: ["앱추천", "꿀팁", "생산성"],
-  },
-];
-
-const workflowSteps = [
-  { step: "01", title: "채널 입력", description: "YouTube 채널 URL을 넣어 현재 채널 맥락을 불러옵니다." },
-  { step: "02", title: "카테고리 선택", description: "게임, IT, 뷰티 등 내 콘텐츠에 맞는 기준을 선택합니다." },
-  { step: "03", title: "추천 생성", description: "제목, 추천 이유, 해시태그, 콘티 등 필요한 항목만 체크해 받습니다." },
-  { step: "04", title: "찜 목록 저장", description: "마음에 드는 결과를 저장하고 나중에 다시 비교합니다." },
-  { step: "05", title: "일정 등록", description: "찜한 아이디어를 업로드 캘린더에 바로 배치합니다." },
-];
-
-const servicePages = [
-  { title: "Dashboard", description: "내 YouTube 채널을 기반으로 콘텐츠 추천을 생성합니다.", href: ROUTES.dashboard },
-  { title: "Trends", description: "YouTube 인기 영상과 검색 관심도 흐름을 함께 확인합니다.", href: ROUTES.trends },
-  { title: "Favorites", description: "마음에 드는 아이디어를 저장하고 제작 후보로 관리합니다.", href: ROUTES.favorites },
-  { title: "Calendar", description: "업로드 일정을 월간 캘린더에서 만들고 수정합니다.", href: ROUTES.calendar },
-  { title: "Growth Report", description: "구독자, 조회수, 영상 수의 성장 흐름을 확인합니다.", href: ROUTES.growthReport },
-  { title: "Shop", description: "촬영·편집 장비를 섹션별로 빠르게 둘러봅니다.", href: ROUTES.trendingItems },
-];
-
-const dynamicWidths = ["w-full", "w-4/5", "w-3/5", "w-1/2", "w-2/5"];
-const dynamicColors = ["bg-violet-500", "bg-pink-500", "bg-amber-400", "bg-blue-500", "bg-emerald-500"];
-const dynamicImages = ["desk", "studio", "phone"];
 
 function formatCompactValue(value: number) {
   return new Intl.NumberFormat("ko-KR", {
@@ -122,614 +99,65 @@ function formatCompactValue(value: number) {
   }).format(value);
 }
 
-function cleanTag(value: string) {
-  const tag = cleanLandingText(value).trim();
-  if (!tag) {
-    return "";
-  }
-
-  return tag.startsWith("#") ? tag : `#${tag}`;
-}
-
-function cleanLandingText(value: string) {
-  return value
-    .replace(/YouTube\s*Shorts/gi, "YouTube 콘텐츠")
-    .replace(/Shorts|쇼츠/gi, "콘텐츠")
-    .replace(/Instagram|TikTok|Reels/gi, "YouTube")
-    .trim();
-}
-
-function getHeroStats(mainData: MainPageData | null) {
+function getStats(mainData: MainPageData | null) {
   if (!mainData) {
-    return heroStats;
+    return fallbackStats;
   }
-
-  const topTrendScore = mainData.popularTrends[0]?.score ?? 0;
 
   return [
-    { label: "누적 사용자", value: formatCompactValue(mainData.stats.totalUsers), change: "live" },
-    { label: "추천 생성", value: formatCompactValue(mainData.stats.totalRecommendations), change: "DB" },
-    { label: "활성 트렌드", value: formatCompactValue(mainData.stats.activeTrendsCount), change: "now" },
-    { label: "상위 점수", value: topTrendScore ? `${topTrendScore}` : "-", change: topTrendScore ? "score" : "-" },
+    { label: "활성 크리에이터", value: formatCompactValue(mainData.stats.totalUsers) },
+    { label: "생성된 추천", value: formatCompactValue(mainData.stats.totalRecommendations) },
+    { label: "분석된 트렌드", value: formatCompactValue(mainData.stats.activeTrendsCount) },
   ];
 }
 
-function getInsightCards(mainData: MainPageData | null) {
-  void mainData;
-  return insightCards;
-}
-
-function getPopularTags(mainData: MainPageData | null) {
+function getKeywords(mainData: MainPageData | null) {
   const trends = mainData?.popularTrends ?? [];
 
-  if (trends.length === 0) {
-    return popularTags;
+  if (!trends.length) {
+    return fallbackKeywords;
   }
 
-  return trends.slice(0, 5).map((trend, index) => ({
-    label: cleanTag(trend.tags[0] ?? trend.title),
-    value: `${trend.score}점`,
-    width: dynamicWidths[index % dynamicWidths.length],
-    color: dynamicColors[index % dynamicColors.length],
+  return trends.slice(0, 6).map((trend) => ({
+    keyword: trend.tags[0] ? (trend.tags[0].startsWith("#") ? trend.tags[0] : `#${trend.tags[0]}`) : `#${trend.title}`,
+    score: trend.score,
+    trend: `${trend.growthRate > 0 ? "+" : ""}${trend.growthRate}%`,
   }));
 }
 
-function getRisingTopics(mainData: MainPageData | null) {
-  const trends = mainData?.popularTrends ?? [];
-
-  if (trends.length === 0) {
-    return risingTopics;
-  }
-
-  return trends.slice(0, 5).map((trend) => ({
-    label: cleanLandingText(trend.title),
-    icon: trend.direction === "rising" ? "↑" : trend.direction === "stable" ? "→" : "•",
-  }));
-}
-
-function getVideoRecommendations(mainData: MainPageData | null): VideoRecommendationItem[] {
-  const sample = mainData?.sampleRecommendation;
-  const trendItems = mainData?.popularTrends ?? [];
-
-  if (!sample && trendItems.length === 0) {
-    return videoRecommendations;
-  }
-
-  const items: VideoRecommendationItem[] = [];
-
-  if (sample) {
-    items.push({
-      title: cleanLandingText(sample.title),
-      image: "desk",
-      badge: "추천 샘플",
-      creator: cleanLandingText(sample.category),
-      stats: `${sample.expectedScore}점`,
-      tags: sample.hashtags.map((tag) => cleanLandingText(tag.replace(/^#/, ""))).slice(0, 3),
-    });
-  }
-
-  trendItems.slice(0, 3).forEach((trend, index) => {
-    items.push({
-      title: cleanLandingText(trend.title),
-      image: dynamicImages[(index + 1) % dynamicImages.length],
-      badge: trend.direction === "rising" ? "급상승" : "트렌드",
-      creator: cleanLandingText(trend.category),
-      stats: `${trend.growthRate}% 성장`,
-      tags: trend.tags.map((tag) => cleanLandingText(tag.replace(/^#/, ""))).slice(0, 3),
-    });
-  });
-
-  return [...items, ...videoRecommendations].slice(0, 3);
-}
-
-const growthCards = [
-  {
-    title: "채널 기반 추천",
-    descriptionLines: ["내 채널과 카테고리에 맞춰", "다음 아이디어를 정리하세요."],
-    icon: "chart",
-  },
-  {
-    title: "찜 목록 저장",
-    descriptionLines: ["괜찮은 추천 결과는", "제작 후보로 남겨두세요."],
-    icon: "heart",
-  },
-  {
-    title: "업로드 캘린더",
-    descriptionLines: ["아이디어를 날짜에 배치해", "제작 흐름을 관리하세요."],
-    icon: "calendar",
-  },
-  {
-    title: "성장 리포트",
-    descriptionLines: ["구독자와 조회수 변화를", "한눈에 확인하세요."],
-    icon: "rocket",
-  },
-];
-
-function AvatarStack() {
+function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
   return (
-    <div className="flex -space-x-2">
-      {["bg-violet-500", "bg-pink-400", "bg-amber-300", "bg-slate-800", "bg-blue-400"].map((color, index) => (
-        <span className={`size-7 rounded-full border-2 border-white ${color}`} key={color}>
-          <span className="sr-only">creator {index + 1}</span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function CompassIcon() {
-  return (
-    <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
-      <path
-        d="m14.9 8.7-1.7 5.1-5.1 1.7 1.7-5.1 5.1-1.7Z"
-        fill="currentColor"
-      />
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
+      {name === "sparkles" ? (
+        <path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3Zm6 12 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1L18 15Z" fill="currentColor" />
+      ) : null}
+      {name === "trending" ? (
+        <path d="M4 16.5 9 11l4 3.5L20 7M15 7h5v5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+      ) : null}
+      {name === "target" ? (
+        <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-4.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0-2.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" stroke="currentColor" strokeWidth="2" />
+      ) : null}
+      {name === "chart" ? (
+        <path d="M5 19V5m0 14h14M9 16v-5m4 5V8m4 8v-7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+      ) : null}
+      {name === "calendar" ? (
+        <path d="M7 4v4M17 4v4M5 9h14M6.5 6h11A1.5 1.5 0 0 1 19 7.5v10A1.5 1.5 0 0 1 17.5 19h-11A1.5 1.5 0 0 1 5 17.5v-10A1.5 1.5 0 0 1 6.5 6Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+      ) : null}
+      {name === "arrow" ? (
+        <path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+      ) : null}
+      {name === "hash" ? (
+        <path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" />
+      ) : null}
     </svg>
   );
 }
 
-function FeatureIcon({ type, tone }: { type: string; tone: string }) {
-  const toneClass =
-    tone === "pink"
-      ? "bg-pink-50 text-pink-500"
-      : tone === "orange"
-        ? "bg-orange-50 text-orange-500"
-        : tone === "blue"
-          ? "bg-blue-50 text-blue-500"
-          : tone === "green"
-            ? "bg-emerald-50 text-emerald-500"
-            : "bg-violet-50 text-violet-600";
-
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex size-10 items-center justify-center rounded-xl ${toneClass}`}>
-      <svg aria-hidden="true" className="size-5" fill="none" viewBox="0 0 24 24">
-        {type === "spark" ? (
-          <path d="M12 4l1.4 4.3L18 10l-4.6 1.7L12 16l-1.4-4.3L6 10l4.6-1.7L12 4Zm6 10 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1L18 14Z" fill="currentColor" />
-        ) : null}
-        {type === "trend" ? (
-          <path d="M4 16.5 9 11l4 3.5L20 7M15 7h5v5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
-        ) : null}
-        {type === "search" ? (
-          <path d="m16.8 16.8 3.2 3.2M18 10.5a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
-        ) : null}
-        {type === "hash" ? (
-          <path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
-        ) : null}
-        {type === "people" ? (
-          <path d="M9.5 11a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4ZM3.5 19c.9-3.4 3-5 6-5s5.1 1.6 6 5M17 11.5a2.6 2.6 0 1 0 0-5.2M17.5 14.3c1.7.6 2.8 2 3.2 4.2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
-        ) : null}
-        {type === "book" ? (
-          <path d="M5 5.5c2.6 0 4.9.5 7 2v12c-2.1-1.5-4.4-2-7-2v-12Zm7 2c2.1-1.5 4.4-2 7-2v12c-2.6 0-4.9.5-7 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
-        ) : null}
-      </svg>
-    </span>
-  );
-}
-
-function TrendInsightSection({ mainData }: { mainData: MainPageData | null }) {
-  const cards = getInsightCards(mainData);
-  const tagItems = getPopularTags(mainData);
-  const topicItems = getRisingTopics(mainData);
-
-  return (
-    <section className="border-b border-slate-100 bg-white">
-      <div className="mx-auto max-w-7xl px-4 pb-12 pt-2 sm:px-6 lg:px-8">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          {cards.map((card) => (
-            <article className="min-h-[142px] rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm shadow-slate-100" key={card.title}>
-              <FeatureIcon tone={card.tone} type={card.icon} />
-              <h3 className="mt-4 text-sm font-extrabold text-ink">{card.title}</h3>
-              <p className="mx-auto mt-2 max-w-[9.25rem] text-xs font-medium leading-5 text-slate-500">{card.description}</p>
-            </article>
-          ))}
-        </div>
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1.55fr_0.7fr_0.7fr_0.7fr]">
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-sm font-extrabold text-ink">키워드 분석</h3>
-              <div className="flex gap-2 text-[11px] font-bold text-slate-500">
-                <span className="rounded-md border border-slate-200 px-2.5 py-1">최근 30일</span>
-                <span className="rounded-md border border-slate-200 px-2.5 py-1">YouTube</span>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-5 text-[11px] font-bold text-slate-500">
-              <span className="inline-flex items-center gap-2"><i className="h-0.5 w-6 bg-violet-500" />콘텐츠 크리에이터</span>
-              <span className="inline-flex items-center gap-2"><i className="h-0.5 w-6 bg-pink-500" />일상 브이로그</span>
-              <span className="inline-flex items-center gap-2"><i className="h-0.5 w-6 bg-blue-500" />생산성 팁</span>
-            </div>
-            <svg className="mt-3 h-40 w-full" role="img" viewBox="0 0 520 170">
-              {[30, 70, 110, 150].map((y) => (
-                <line key={y} opacity="0.1" stroke="#64748b" x1="0" x2="520" y1={y} y2={y} />
-              ))}
-              <path d="M8 126 C48 98 72 120 108 92 S166 104 202 68 268 43 318 55 376 75 424 56 476 41 512 55" fill="none" stroke="#8b5cf6" strokeLinecap="round" strokeWidth="3" />
-              <path d="M8 146 C48 127 76 141 112 116 S166 123 206 98 266 78 316 85 376 103 424 86 476 76 512 90" fill="none" stroke="#ec4899" strokeLinecap="round" strokeWidth="3" />
-              <path d="M8 156 C48 148 78 151 112 138 S172 144 210 124 266 111 318 116 378 128 424 117 478 109 512 119" fill="none" stroke="#60a5fa" strokeLinecap="round" strokeWidth="3" />
-              <circle cx="424" cy="56" fill="#8b5cf6" r="4" />
-              <g className="text-[10px] font-bold">
-                <text fill="#64748b" x="12" y="166">4월 20일</text>
-                <text fill="#64748b" x="146" y="166">4월 27일</text>
-                <text fill="#64748b" x="284" y="166">5월 4일</text>
-                <text fill="#64748b" x="430" y="166">5월 11일</text>
-              </g>
-            </svg>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
-            <h3 className="text-sm font-extrabold text-ink">YouTube 태그</h3>
-            <div className="mt-4 space-y-3">
-              {tagItems.map((tag) => (
-                <div key={tag.label}>
-                  <div className="mb-1 flex justify-between text-[11px] font-bold">
-                    <span className="text-violet-700">{tag.label}</span>
-                    <span className="text-slate-500">{tag.value}</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-slate-100">
-                    <div className={`h-1.5 rounded-full ${tag.color} ${tag.width}`} />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Link className="mt-5 inline-flex text-xs font-extrabold text-violet-600" href={ROUTES.trends}>태그 흐름 보기 →</Link>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
-            <h3 className="text-sm font-extrabold text-ink">콘텐츠 관리 흐름</h3>
-            <div className="mt-4 space-y-3">
-              {platformStats.map((item) => (
-                <div className="flex items-center justify-between text-xs font-bold" key={item.label}>
-                  <span className="flex items-center gap-2 text-slate-600"><i className={`size-5 rounded-full ${item.color}`} />{item.label}</span>
-                  <span className="text-ink">{item.value}</span>
-                </div>
-              ))}
-            </div>
-            <Link className="mt-5 inline-flex text-xs font-extrabold text-violet-600" href={ROUTES.recommendations}>추천 보기 →</Link>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
-            <h3 className="text-sm font-extrabold text-ink">실제 사용 흐름</h3>
-            <div className="mt-4 space-y-3">
-              {topicItems.map((topic) => (
-                <div className="flex items-center justify-between text-xs font-bold" key={topic.label}>
-                  <span className="text-slate-600">{topic.label}</span>
-                  <span className={topic.icon === "🔥" ? "text-orange-500" : "text-emerald-500"}>{topic.icon}</span>
-                </div>
-              ))}
-            </div>
-            <Link className="mt-5 inline-flex text-xs font-extrabold text-violet-600" href={ROUTES.trendingItems}>주제 더 보기 →</Link>
-          </article>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function GrowthIcon({ type }: { type: string }) {
-  return (
-    <span className="relative inline-flex h-20 w-full items-center justify-center overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_35%_20%,#ffffff_0%,#ffffff_18%,transparent_19%),linear-gradient(135deg,#ede9fe_0%,#fce7f3_100%)] text-violet-600">
-      <span className="absolute left-5 top-5 size-3 rounded-full bg-violet-300/60" />
-      <span className="absolute right-6 top-4 size-2 rounded-full bg-pink-300/70" />
-      <span className="absolute bottom-4 left-9 h-2 w-9 rounded-full bg-violet-300/40" />
-      <svg aria-hidden="true" className="relative size-12" fill="none" viewBox="0 0 32 32">
-        {type === "chart" ? (
-          <>
-            <rect fill="white" height="20" rx="4" width="24" x="4" y="6" />
-            <path d="M9 21V15M16 21V10M23 21v-8" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
-            <path d="M7 10h18" stroke="#f0abfc" strokeLinecap="round" strokeWidth="2" />
-          </>
-        ) : null}
-        {type === "heart" ? (
-          <>
-            <circle cx="16" cy="16" fill="white" r="11" />
-            <path d="M16 23s-7-4.2-7-9a4 4 0 0 1 7-2.5A4 4 0 0 1 23 14c0 4.8-7 9-7 9Z" fill="#ec4899" />
-          </>
-        ) : null}
-        {type === "calendar" ? (
-          <>
-            <rect fill="white" height="22" rx="4" width="22" x="5" y="6" />
-            <path d="M10 4v5M22 4v5M9 14h14M11 19h3M18 19h3" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" />
-          </>
-        ) : null}
-        {type === "rocket" ? (
-          <>
-            <path d="M18 5c4.5 1 7 3.5 8 8l-8 8-7-7 7-9Z" fill="white" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
-            <path d="M10 18 6 22l4 1 1 4 4-4" fill="#f0abfc" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
-            <circle cx="19" cy="12" fill="#ec4899" r="2" />
-          </>
-        ) : null}
-      </svg>
-    </span>
-  );
-}
-
-function VideoThumbnail({ type }: { type: string }) {
-  return (
-    <div className="relative h-[112px] w-[78px] shrink-0 overflow-hidden rounded-xl bg-slate-100 shadow-inner">
-      {type === "desk" ? (
-        <div className="absolute inset-0 bg-[linear-gradient(145deg,#fde68a_0%,#fed7aa_42%,#bfdbfe_100%)]">
-          <div className="absolute bottom-3 left-3 h-16 w-11 rotate-[-12deg] rounded-lg bg-white shadow-lg">
-            <div className="mx-auto mt-2 h-9 w-7 rounded bg-[linear-gradient(180deg,#334155,#94a3b8)]" />
-            <div className="mx-auto mt-1 h-1 w-6 rounded bg-slate-200" />
-          </div>
-          <div className="absolute right-2 top-3 size-7 rounded-full bg-white/80" />
-          <div className="absolute right-3 top-4 size-4 rounded-full bg-violet-400" />
-        </div>
-      ) : null}
-      {type === "studio" ? (
-        <div className="absolute inset-0 bg-[linear-gradient(145deg,#ddd6fe_0%,#fed7aa_100%)]">
-          <div className="absolute left-5 top-4 h-20 w-9 rounded-full bg-slate-800" />
-          <div className="absolute left-8 top-2 h-10 w-10 rounded-xl bg-white shadow-md" />
-          <div className="absolute bottom-3 right-3 h-16 w-5 rounded bg-slate-700" />
-          <div className="absolute bottom-5 left-3 h-8 w-8 rounded-full bg-violet-400" />
-        </div>
-      ) : null}
-      {type === "phone" ? (
-        <div className="absolute inset-0 bg-[linear-gradient(145deg,#fef3c7_0%,#bfdbfe_100%)]">
-          <div className="absolute left-5 top-4 h-20 w-11 rotate-[-10deg] rounded-xl border-2 border-slate-300 bg-white shadow-lg">
-            <div className="mx-auto mt-2 h-1 w-4 rounded bg-slate-300" />
-            <div className="mx-auto mt-3 h-8 w-7 rounded bg-[linear-gradient(180deg,#93c5fd,#ddd6fe)]" />
-            <div className="mx-auto mt-2 h-1.5 w-7 rounded bg-violet-200" />
-          </div>
-          <div className="absolute right-2 top-5 size-5 rounded-full bg-white/75" />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function VideoRecommendationCard({ item }: { item: VideoRecommendationItem }) {
-  return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-100 transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex gap-3">
-        <VideoThumbnail type={item.image} />
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-start justify-between gap-2">
-            <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-extrabold text-violet-600">{item.badge}</span>
-            <span className="text-sm text-slate-400">♡</span>
-          </div>
-          <h3 className="line-clamp-2 text-sm font-extrabold leading-5 text-ink">{item.title}</h3>
-          <p className="mt-2 text-[11px] font-bold text-slate-500">{item.creator}</p>
-          <p className="mt-1 text-[11px] font-medium text-slate-400">{item.stats}</p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {item.tags.map((tag) => (
-              <span className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500" key={tag}>
-                #{tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+    <article className={`rounded-xl border border-slate-200 bg-white text-ink shadow-sm shadow-slate-200/70 ${className}`}>
+      {children}
     </article>
-  );
-}
-
-function VideoGrowthSection({ mainData }: { mainData: MainPageData | null }) {
-  const recommendationItems = getVideoRecommendations(mainData);
-  const sample = mainData?.sampleRecommendation;
-
-  return (
-    <section className="border-b border-slate-100 bg-white">
-      <div className="mx-auto max-w-7xl px-4 pb-14 sm:px-6 lg:px-8">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-[22px] font-black tracking-tight text-ink">나에게 맞는 콘텐츠 추천</h2>
-            <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
-              내 채널과 카테고리를 바탕으로 추천받은 콘텐츠 아이디어
-            </p>
-          </div>
-          <Link className="hidden rounded-full border border-violet-300 px-4 py-2 text-xs font-extrabold text-violet-700 transition hover:bg-violet-50 sm:inline-flex" href={ROUTES.recommendations}>
-            추천 더 보기 →
-          </Link>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-3">
-          {recommendationItems.map((item) => (
-            <VideoRecommendationCard item={item} key={item.title} />
-          ))}
-        </div>
-
-        <div className="mt-8 grid gap-5 lg:grid-cols-[0.68fr_1.32fr] lg:items-center">
-          <div>
-            <h2 className="text-[30px] font-black leading-tight tracking-tight text-ink xl:text-[32px]">
-              추천에서 업로드까지
-              <br />
-              <span className="whitespace-nowrap">
-                <span className="bg-[linear-gradient(90deg,#7c3aed_0%,#ec4899_100%)] bg-clip-text text-transparent">YouTube 콘텐츠</span>를 관리하세요
-              </span>
-            </h2>
-            <p className="mt-4 max-w-md text-sm font-medium leading-6 text-slate-500">
-              {sample?.reason ? cleanLandingText(sample.reason) : "추천 결과를 찜 목록에 저장하고, 캘린더에 업로드 일정을 배치하고, 성장 리포트로 변화를 확인하세요."}
-            </p>
-            <Link className={`${primaryLinkClass} mt-5`} href={ROUTES.dashboard}>
-              지금 대시보드로 이동 <span aria-hidden="true">→</span>
-            </Link>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {growthCards.map((card) => (
-              <article className="flex min-h-[210px] flex-col rounded-2xl bg-[linear-gradient(180deg,#fff7ff_0%,#f7f2ff_100%)] p-4 text-center shadow-sm shadow-violet-100" key={card.title}>
-                <GrowthIcon type={card.icon} />
-                <h3 className="mt-4 min-h-5 whitespace-nowrap text-[12.5px] font-extrabold text-ink">{card.title}</h3>
-                <p className="mx-auto mt-2 min-h-[36px] text-[10.5px] font-medium leading-[1.7] text-slate-500">
-                  {card.descriptionLines.map((line) => (
-                    <span className="block whitespace-nowrap" key={line}>
-                      {line}
-                    </span>
-                  ))}
-                </p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function WorkflowSection() {
-  return (
-    <section className="border-b border-slate-100 bg-[linear-gradient(180deg,#ffffff_0%,#faf5ff_100%)]">
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-violet-600">Workflow</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-ink">아이디어를 업로드 일정까지 이어갑니다</h2>
-          </div>
-          <p className="max-w-xl text-sm font-medium leading-6 text-slate-500">
-            채널 입력부터 추천 생성, 찜 목록 저장, 캘린더 등록까지 실제 화면 흐름에 맞춰 구성했습니다.
-          </p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-5">
-          {workflowSteps.map((item) => (
-            <article className="min-h-[168px] rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-violet-100" key={item.step}>
-              <span className="inline-flex rounded-full bg-violet-50 px-3 py-1 text-xs font-black text-violet-700">{item.step}</span>
-              <h3 className="mt-4 text-sm font-extrabold text-ink">{item.title}</h3>
-              <p className="mt-2 text-xs font-medium leading-5 text-slate-500">{item.description}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ServicePagesSection() {
-  return (
-    <section className="border-b border-slate-100 bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-violet-600">Be-Celeb Pages</p>
-          <h2 className="mt-2 text-2xl font-black tracking-tight text-ink">서비스는 실제 작업 페이지로 이어집니다</h2>
-          <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">
-            추상적인 소개 대신 지금 구현된 페이지 기준으로 콘텐츠 제작 흐름을 정리했습니다.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {servicePages.map((page) => (
-            <Link
-              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100 transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md"
-              href={page.href}
-              key={page.title}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-base font-black text-ink">{page.title}</h3>
-                <span className="text-sm font-black text-violet-500 transition group-hover:translate-x-0.5">→</span>
-              </div>
-              <p className="mt-3 text-sm font-medium leading-6 text-slate-500">{page.description}</p>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function RecommendationPreviewCard({ mainData }: { mainData: MainPageData | null }) {
-  const stats = getHeroStats(mainData);
-  const topTrend = mainData?.popularTrends[0];
-  const sample = mainData?.sampleRecommendation;
-  const previewTags = (topTrend?.tags.length ? topTrend.tags : ["#브이로그", "#제품리뷰", "#감성루틴", "#콘텐츠아이디어"])
-    .map(cleanTag)
-    .filter(Boolean)
-    .slice(0, 4);
-
-  return (
-    <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80">
-      <div className="absolute inset-x-0 top-0 h-24 bg-[linear-gradient(90deg,#ede9fe_0%,#fce7f3_60%,#fff7ed_100%)]" />
-      <div className="relative grid gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur">
-          <div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-violet-600">Dashboard Preview</p>
-            <h2 className="mt-1 text-lg font-black text-ink">채널 분석 시작</h2>
-            <p className="mt-1 text-xs font-medium text-slate-500">실제 대시보드와 같은 입력 흐름입니다.</p>
-          </div>
-          <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-black text-violet-700">제목 기본 포함</span>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_160px]">
-            <label className="block text-sm font-semibold text-slate-700">
-              <span>YouTube 채널 URL</span>
-              <input
-                className="mt-2 block h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                defaultValue="https://www.youtube.com/@beceleb"
-                readOnly
-                type="url"
-              />
-            </label>
-            <label className="block text-sm font-semibold text-slate-700">
-              <span>카테고리</span>
-              <select
-                className="mt-2 block h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                defaultValue="IT"
-                aria-label="카테고리 미리보기"
-              >
-                <option>자동 선정</option>
-                <option>IT</option>
-                <option>일상</option>
-                <option>뷰티</option>
-              </select>
-            </label>
-          </div>
-
-          <section className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-sm font-bold text-ink">추천 옵션</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">선택한 항목만 추천 결과에 표시됩니다.</p>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {["추천이유", "해시태그", "콘티"].map((item) => (
-                <div className="flex min-h-12 items-center gap-2 rounded-md border border-violet-200 bg-white px-3 text-sm font-bold text-ink shadow-sm" key={item}>
-                  <span className="flex size-4 items-center justify-center rounded border border-violet-500 bg-violet-600 text-[10px] text-white">✓</span>
-                  {item}
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <Link className={`${primaryLinkClass} mt-4 w-full`} href={ROUTES.dashboard}>
-            나에게 맞는 콘텐츠 추천 <span aria-hidden="true">→</span>
-          </Link>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-4">
-          {stats.map((stat) => (
-            <div className="rounded-2xl border border-slate-200 bg-white p-3" key={stat.label}>
-              <p className="text-[11px] font-bold text-slate-500">{stat.label}</p>
-              <div className="mt-2 flex items-end gap-2">
-                <p className="text-xl font-extrabold text-ink">{stat.value}</p>
-                <span className="pb-1 text-[10px] font-bold text-emerald-500">{stat.change}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex items-start gap-3">
-            <div className="h-20 w-16 shrink-0 rounded-xl bg-[linear-gradient(135deg,#ddd6fe,#fbcfe8)]" />
-            <div className="min-w-0">
-              <p className="text-sm font-extrabold text-ink">추천 결과 미리보기</p>
-              <p className="mt-1 line-clamp-1 text-sm font-bold text-slate-700">
-                {sample ? cleanLandingText(sample.title) : "내 채널에서 바로 시도할 다음 콘텐츠"}
-              </p>
-              <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-500">
-                {sample?.summary ? cleanLandingText(sample.summary) : "제목, 추천 이유, 해시태그, 콘티를 선택 옵션에 맞춰 정리합니다."}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {previewTags.map((tag) => (
-              <span className="rounded-full bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700" key={tag}>
-                {tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -742,62 +170,160 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   }
 
   const mainData = await getMainPageData().catch(() => null);
+  const stats = getStats(mainData);
+  const keywords = getKeywords(mainData);
 
   return (
-    <div className="-mt-8 bg-white text-ink">
-      <section className="relative overflow-hidden border-b border-slate-200 bg-white">
-        <div className="mx-auto grid min-h-[520px] max-w-7xl gap-12 px-4 py-14 sm:px-6 lg:grid-cols-[0.88fr_1.12fr] lg:items-center lg:px-8">
-          <div className="relative z-10 space-y-7">
-            <div className="space-y-5">
-              <h1 className="relative max-w-2xl text-4xl font-black leading-[1.15] tracking-normal text-ink sm:text-5xl lg:text-[3.05rem]">
-                다음 YouTube 콘텐츠,
-                <br />
-                <span className="whitespace-nowrap">감이 아니라 데이터로</span>
-                <br />
-                <span className="inline-block bg-[linear-gradient(90deg,#7c3aed_0%,#a855f7_35%,#ff3fb4_100%)] bg-clip-text [font-family:Pretendard,Inter,ui-sans-serif,system-ui,sans-serif] font-black text-transparent">
-                  정하세요
-                </span>
-              </h1>
-              <p className="text-[14px] font-medium leading-[1.65] text-[#64748b]">
-                <span className="block">내 채널과 비슷한 카테고리의 YouTube 콘텐츠 흐름을 분석해</span>
-                <span className="block">제목, 추천 이유, 해시태그, 콘티까지 필요한 항목만</span>
-                <span className="block">선택해서 추천받을 수 있습니다.</span>
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Link href={ROUTES.dashboard} className={primaryLinkClass}>
-                콘텐츠 추천받기 <span aria-hidden="true">→</span>
+    <div className="w-full bg-white text-ink">
+      <section className="relative overflow-hidden border-b border-violet-400/15">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#ede9fe_0%,rgba(237,233,254,0.72)_34%,transparent_68%)]" />
+        <div className="relative mx-auto max-w-7xl px-4 py-20 text-center sm:px-6 sm:py-28 lg:px-8 lg:py-36">
+          <div className="mx-auto max-w-4xl">
+            <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-4 py-1.5 text-sm font-bold text-violet-700 shadow-sm">
+              <Icon className="h-3.5 w-3.5" name="sparkles" />
+              AI 크리에이터 리서치 서비스
+            </span>
+            <h1 className="mb-6 text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl">
+              다음 YouTube 콘텐츠,
+              <br />
+              <span className="bg-gradient-to-r from-violet-700 via-fuchsia-500 to-violet-600 bg-clip-text text-transparent">
+                데이터로 결정하세요
+              </span>
+            </h1>
+            <p className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-slate-600 sm:text-xl">
+              유사한 채널 카테고리 내에서 콘텐츠 트렌드를 분석하여
+              <br className="hidden sm:block" />
+              다음 영상 아이디어를 제안합니다
+            </p>
+            <div className="flex flex-col justify-center gap-4 sm:flex-row">
+              <Link className={primaryCtaClass} href={ROUTES.signup}>
+                무료로 시작하기
+                <Icon name="arrow" />
               </Link>
-              <Link href={ROUTES.trends} className={secondaryLinkClass}>
-                트렌드 보기 <CompassIcon />
-              </Link>
-              <Link href={ROUTES.favorites} className={secondaryLinkClass}>
-                찜 목록 <span aria-hidden="true">♡</span>
+              <Link className={outlineCtaClass} href={ROUTES.dashboard}>
+                대시보드 둘러보기
               </Link>
             </div>
 
-            <div className="flex items-center gap-3">
-              <AvatarStack />
-              <p className="text-xs font-semibold leading-5 text-slate-600">
-                <span className="font-black text-ink">10,000명 이상</span>의 크리에이터가
-                <br />
-                함께하고 있어요
-              </p>
+            <div className="mx-auto mt-16 grid max-w-2xl grid-cols-3 gap-6 sm:gap-8">
+              {stats.map((stat) => (
+                <div className="text-center" key={stat.label}>
+                  <div className="mb-1 text-2xl font-black text-violet-700 sm:text-3xl">{stat.value}</div>
+                  <div className="text-xs text-slate-500 sm:text-sm">{stat.label}</div>
+                </div>
+              ))}
             </div>
           </div>
-
-          <RecommendationPreviewCard mainData={mainData} />
         </div>
       </section>
 
-      <WorkflowSection />
-      <TrendInsightSection mainData={mainData} />
-      <ServicePagesSection />
-      <VideoGrowthSection mainData={mainData} />
+      <section className="py-20 sm:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mb-16 max-w-3xl text-center">
+            <h2 className="mb-4 text-3xl font-black sm:text-4xl">간단한 5단계 워크플로우</h2>
+            <p className="text-lg text-slate-600">복잡한 콘텐츠 기획 과정을 쉽고 빠르게 처리하세요</p>
+          </div>
+
+          <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-2 lg:grid-cols-5">
+            {workflow.map((item, index) => (
+              <Card className="relative p-6 transition duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-md hover:shadow-violet-100" key={item.step}>
+                <div className="mb-3 text-5xl font-black text-violet-500">
+                  {item.step}
+                </div>
+                <h3 className="mb-2 font-bold">{item.title}</h3>
+                <p className="text-sm leading-relaxed text-slate-500">{item.description}</p>
+                {index < workflow.length - 1 ? (
+                  <Icon className="absolute -right-8 top-1/2 hidden h-5 w-5 -translate-y-1/2 text-violet-300 lg:block" name="arrow" />
+                ) : null}
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[linear-gradient(180deg,#ffffff_0%,#faf5ff_48%,#ffffff_100%)] py-20 sm:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mb-16 max-w-3xl text-center">
+            <h2 className="mb-4 text-3xl font-black sm:text-4xl">강력한 기능으로 채널을 성장시키세요</h2>
+            <p className="text-lg text-slate-600">데이터 기반의 인사이트로 더 나은 콘텐츠를 만드세요</p>
+          </div>
+
+          <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-2 lg:grid-cols-4">
+            {features.map((feature) => (
+              <Card className="group p-8 transition duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-md hover:shadow-violet-100" key={feature.title}>
+                <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-violet-50 text-violet-700 transition group-hover:bg-violet-100">
+                  <Icon className="h-7 w-7" name={feature.icon} />
+                </div>
+                <h3 className="mb-3 text-xl font-bold">{feature.title}</h3>
+                <p className="leading-relaxed text-slate-500">{feature.description}</p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 sm:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-12 text-center">
+              <h2 className="mb-4 text-3xl font-black sm:text-4xl">실시간 트렌딩 키워드</h2>
+              <p className="text-lg text-slate-600">지금 인기 있는 콘텐츠 키워드를 확인하세요</p>
+            </div>
+
+            <Card className="p-8">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {keywords.map((item) => (
+                  <div
+                    className="flex items-center justify-between rounded-lg bg-slate-50 p-4 transition hover:bg-violet-50"
+                    key={item.keyword}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Icon className="h-4 w-4 shrink-0 text-violet-600" name="hash" />
+                      <span className="truncate font-semibold">{item.keyword}</span>
+                    </div>
+                    <div className="ml-3 flex shrink-0 items-center gap-3">
+                      <span className="rounded-full bg-violet-50 px-2.5 py-1 font-mono text-xs font-bold text-violet-700">
+                        {item.score}점
+                      </span>
+                      <span className="text-xs font-bold text-emerald-400">{item.trend}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-6 text-center">
+                <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold transition hover:border-violet-300 hover:bg-violet-50" href={ROUTES.trends}>
+                  전체 트렌드 보기
+                  <Icon className="h-4 w-4" name="arrow" />
+                </Link>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-slate-200 py-20 sm:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Card className="relative overflow-hidden border-violet-200 bg-[linear-gradient(135deg,#f5f3ff_0%,#faf5ff_48%,#ffffff_100%)] p-12 text-center sm:p-16">
+            <div className="relative mx-auto max-w-3xl">
+              <h2 className="mb-4 text-3xl font-black sm:text-4xl">지금 바로 시작하세요</h2>
+              <p className="mb-8 text-lg leading-relaxed text-slate-600">
+                10,000명 이상의 크리에이터가 BE CELEB으로
+                <br className="hidden sm:block" />
+                데이터 기반 콘텐츠를 제작하고 있습니다
+              </p>
+              <div className="flex flex-col justify-center gap-4 sm:flex-row">
+                <Link className={primaryCtaClass} href={ROUTES.signup}>
+                  무료로 시작하기
+                  <Icon name="arrow" />
+                </Link>
+                <Link className={outlineCtaClass} href={ROUTES.login}>
+                  로그인
+                </Link>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </section>
     </div>
   );
 }
-
-
-

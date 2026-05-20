@@ -18,12 +18,12 @@ type ChannelAnalysisCardProps = {
 };
 
 const optionItems: Array<{ key: keyof RecommendationFieldOptions; label: string; description: string }> = [
-  { key: "reason", label: "추천이유", description: "왜 이 주제가 맞는지 요약합니다." },
-  { key: "hashtags", label: "해시태그", description: "업로드에 바로 쓸 태그를 제안합니다." },
-  { key: "storyboard", label: "콘티", description: "8~12개 장면의 촬영 콘티를 만듭니다." },
+  { key: "reason", label: "추천 이유", description: "왜 이 주제가 채널에 맞는지 핵심 근거를 정리합니다." },
+  { key: "hashtags", label: "해시태그", description: "업로드에 바로 활용할 태그를 제안합니다." },
+  { key: "storyboard", label: "콘티", description: "촬영 흐름을 장면 단위로 구성합니다." },
   { key: "hook", label: "3초 Hook", description: "초반 이탈을 줄이는 도입 문구를 만듭니다." },
-  { key: "thumbnailIdea", label: "썸네일 아이디어", description: "클릭을 유도할 화면 구성을 제안합니다." },
-  { key: "uploadTips", label: "업로드 팁", description: "게시 시간과 패키징 팁을 정리합니다." },
+  { key: "thumbnailIdea", label: "썸네일 아이디어", description: "클릭을 유도할 화면 구성과 카피를 제안합니다." },
+  { key: "uploadTips", label: "업로드 팁", description: "게시 시간, 제목 패키징, 운영 팁을 정리합니다." },
 ];
 
 export function ChannelAnalysisCard({
@@ -41,13 +41,13 @@ export function ChannelAnalysisCard({
   }
 
   return (
-    <Card title="채널 분석 시작">
-      <form className="space-y-3" onSubmit={onSubmit}>
+    <Card className="overflow-hidden" title="채널 분석 시작">
+      <form className="space-y-5" onSubmit={onSubmit}>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_180px] lg:items-end">
           <label className="block text-sm font-semibold text-slate-700" htmlFor="youtube-channel-url">
             <span>YouTube 채널 URL</span>
             <input
-              className="mt-2 block h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              className="mt-2 block h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
               id="youtube-channel-url"
               onChange={(event) => onChannelUrlChange(event.target.value)}
               placeholder="https://www.youtube.com/@beceleb"
@@ -60,7 +60,7 @@ export function ChannelAnalysisCard({
           <label className="block text-sm font-semibold text-slate-700" htmlFor="recommend-category">
             <span>카테고리</span>
             <select
-              className="mt-2 block h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              className="mt-2 block h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
               id="recommend-category"
               onChange={(event) => onCategoryChange(event.target.value)}
               value={category}
@@ -75,20 +75,23 @@ export function ChannelAnalysisCard({
           </label>
 
           <Button className="h-11 w-full whitespace-nowrap" disabled={isLoading} type="submit">
-            {isLoading ? "추천 생성 중" : "콘텐츠 추천받기"}
+            {isLoading ? "추천 생성 중..." : "콘텐츠 추천받기"}
           </Button>
         </div>
-        <section className="rounded-md border border-slate-200 bg-slate-50 p-4">
+
+        <section className="rounded-xl border border-violet-100 bg-[linear-gradient(135deg,#ffffff_0%,#faf5ff_100%)] p-4">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-sm font-bold text-ink">추천 옵션</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">제목은 기본 포함됩니다. 선택한 항목만 AI 응답과 결과 화면에 표시됩니다.</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                제목은 기본 포함됩니다. 필요한 항목만 선택해 추천 결과 화면에 표시하세요.
+              </p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {optionItems.map((item) => (
               <label
-                className="flex min-h-20 cursor-pointer gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm shadow-sm transition hover:border-violet-300"
+                className="flex min-h-20 cursor-pointer gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md hover:shadow-violet-100"
                 key={item.key}
               >
                 <input
@@ -106,7 +109,10 @@ export function ChannelAnalysisCard({
             ))}
           </div>
         </section>
-        <p className="text-xs leading-5 text-slate-500">저장된 회원 채널 설정이 있으면 자동으로 입력됩니다.</p>
+
+        <p className="text-xs leading-5 text-slate-500">
+          저장된 회원 채널 설정이 있으면 URL과 카테고리가 자동으로 채워집니다.
+        </p>
       </form>
     </Card>
   );

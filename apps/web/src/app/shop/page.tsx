@@ -14,12 +14,12 @@ function ProductCard({ product }: { product: ShopProduct }) {
   const title = stripHtmlTags(product.title);
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md">
+    <article className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-200/70 transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md hover:shadow-violet-100">
       <a className="block aspect-[4/3] bg-slate-100" href={product.productUrl} rel="noreferrer" target="_blank">
         {product.imageUrl ? (
           <img alt={title} className="h-full w-full object-cover" src={product.imageUrl} />
         ) : (
-          <div className="flex h-full items-center justify-center px-4 text-center text-sm font-semibold text-slate-400">
+          <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f8fafc_0%,#ede9fe_100%)] px-4 text-center text-sm font-semibold text-slate-400">
             기본 추천 장비
           </div>
         )}
@@ -32,7 +32,7 @@ function ProductCard({ product }: { product: ShopProduct }) {
         <h2 className="mt-4 line-clamp-2 text-base font-bold leading-6 text-ink">{title}</h2>
         <div className="mt-3 grid gap-1 text-sm leading-6 text-slate-600">
           <p className="font-bold text-ink">{formatKrw(product.price)}</p>
-          <p>{product.mallName || "쇼핑몰 정보 없음"}</p>
+          <p>{product.mallName || "판매처 정보 없음"}</p>
           {product.brand || product.maker ? (
             <p className="line-clamp-1 text-xs text-slate-500">
               {[product.brand, product.maker].filter(Boolean).join(" / ")}
@@ -42,7 +42,7 @@ function ProductCard({ product }: { product: ShopProduct }) {
         </div>
         <div className="mt-auto pt-4">
           <a
-            className="inline-flex min-h-10 w-full items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-violet-200 transition hover:bg-violet-700"
             href={product.productUrl}
             rel="noreferrer"
             target="_blank"
@@ -108,31 +108,31 @@ export default function ShopPage() {
       <PageHeader
         action={
           <Button disabled={refreshing || status === "loading"} onClick={handleRefresh} type="button" variant="secondary">
-            {refreshing ? "새로고침 중" : "실시간 새로고침"}
+            {refreshing ? "새로고침 중..." : "실시간 새로고침"}
           </Button>
         }
-        description="유튜브 크리에이터에게 필요한 촬영·편집 장비를 한눈에 확인하세요."
+        description="YouTube 크리에이터에게 필요한 촬영, 편집, 운영 장비를 섹션별로 확인하세요."
         eyebrow={<Badge tone="brand">Naver Shopping</Badge>}
-        title="크리에이터 상점"
+        title="크리에이터 샵"
       />
 
       <Card>
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div>
-            <h2 className="text-base font-bold text-ink">필수 장비 자동 진열</h2>
+            <h2 className="text-base font-bold text-ink">필수 장비 자동 정렬</h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              카메라, 마이크, 조명, 편집툴, 거치대 등 제작 흐름에 필요한 장비 섹션을 자동으로 불러옵니다.
+              카메라, 마이크, 조명, 편집 장비처럼 제작 흐름에 필요한 장비 섹션을 자동으로 불러옵니다.
             </p>
           </div>
           <Badge tone="info">광고/제휴 링크 아님</Badge>
         </div>
-        <div className="mt-4 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-500">
-          이 목록은 네이버 쇼핑 검색 결과와 backend cache를 함께 사용합니다. 가격과 재고는 판매처에서 다시 확인하세요.
+        <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-500">
+          목록은 네이버 쇼핑 검색 결과와 backend cache를 함께 사용합니다. 가격과 재고는 판매처에서 다시 확인하세요.
         </div>
       </Card>
 
       {fallbackMessage ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
           {fallbackMessage}
         </div>
       ) : null}
@@ -149,7 +149,7 @@ export default function ShopPage() {
           description={
             message.includes("NAVER_CLIENT")
               ? "실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다."
-              : message || "실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다."
+              : message || "실시간 상품 정보를 불러오지 못했습니다."
           }
           title="상품 목록을 불러오지 못했습니다"
         />
@@ -169,7 +169,7 @@ export default function ShopPage() {
                   <div>
                     <h2 className="text-xl font-bold text-ink">{section.equipmentCategory}</h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      {section.isFallback ? "기본 추천 검색어로 구성한 fallback 섹션입니다." : "네이버 쇼핑 검색 결과 기반 장비 목록입니다."}
+                      {section.isFallback ? "기본 추천 검색어로 구성한 장비 섹션입니다." : "네이버 쇼핑 검색 결과 기반 장비 목록입니다."}
                     </p>
                   </div>
                   <p className="text-sm font-bold text-slate-500">{section.items.length}개</p>

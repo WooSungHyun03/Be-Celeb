@@ -1,4 +1,3 @@
-// Renders the recommendation list page.
 import Link from "next/link";
 import { Button } from "@/components/common/Button";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -16,7 +15,7 @@ export default function RecommendationsPage() {
       <GenerateRecommendationPanel />
       <EmptyState
         title="저장된 추천 목록이 아직 없습니다"
-        description="추천 결과는 대시보드에서 생성한 뒤 Supabase 저장이 완료되면 표시할 수 있습니다."
+        description="대시보드에서 추천 결과를 생성하고 저장하면 이곳에서 다시 확인할 수 있습니다."
         action={
           <Link href={ROUTES.dashboard}>
             <Button>추천 생성하기</Button>
@@ -26,6 +25,3 @@ export default function RecommendationsPage() {
     </div>
   );
 }
-
-
-

@@ -1,14 +1,49 @@
 "use client";
 
-// Renders the signup page and connects it to the auth API.
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BrandLogo } from "@/components/common/BrandLogo";
 import { Button } from "@/components/common/Button";
-import { Input } from "@/components/common/Input";
 import { ROUTES } from "@/constants/routes";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+
+function SparklesIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
+      <path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3Zm6 12 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1L18 15Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+type FieldProps = {
+  autoComplete: string;
+  id: string;
+  label: string;
+  minLength?: number;
+  onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  type?: string;
+  value: string;
+};
+
+function Field({ autoComplete, id, label, minLength, onChange, placeholder, type = "text", value }: FieldProps) {
+  return (
+    <label className="block text-sm font-semibold text-slate-700" htmlFor={id}>
+      {label}
+      <input
+        autoComplete={autoComplete}
+        className="mt-2 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+        id={id}
+        minLength={minLength}
+        onChange={onChange}
+        placeholder={placeholder}
+        required
+        type={type}
+        value={value}
+      />
+    </label>
+  );
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -25,7 +60,7 @@ export default function SignupPage() {
 
     if (password !== confirmPassword) {
       setStatus("error");
-      setMessage("비밀번호가 서로 일치하지 않아요.");
+      setMessage("비밀번호가 서로 일치하지 않습니다.");
       return;
     }
 
@@ -48,7 +83,7 @@ export default function SignupPage() {
 
       if (!data.session) {
         setStatus("success");
-        setMessage(`${email} 주소로 인증 메일을 보냈어요. 메일함에서 인증을 완료해주세요.`);
+        setMessage(`${email} 주소로 인증 메일을 보냈습니다. 메일함에서 인증을 완료해 주세요.`);
         return;
       }
 
@@ -68,122 +103,97 @@ export default function SignupPage() {
       router.refresh();
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "회원가입에 실패했어요. 잠시 후 다시 시도해주세요.");
+      setMessage(error instanceof Error ? error.message : "회원가입에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     }
   }
 
   return (
-    <div className="mx-auto flex min-h-[760px] max-w-7xl items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/70 lg:grid-cols-[0.92fr_1.08fr]">
-        <aside className="hidden min-h-[660px] flex-col justify-between border-r border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_58%,#f5f3ff_100%)] p-10 text-ink lg:flex">
-          <Link className="inline-flex w-fit rounded-2xl bg-white/95 px-3 py-2" href={ROUTES.home}>
-            <BrandLogo size="sm" />
-          </Link>
-          <div>
-            <p className="text-sm font-bold uppercase text-violet-700">Join Be Celeb</p>
-            <h2 className="mt-4 text-[2.35rem] font-black leading-tight tracking-tight">
-              내 채널에 맞는
-              <br />
-              <span className="whitespace-nowrap">콘텐츠 전략을 시작하세요</span>
-            </h2>
-            <p className="mt-5 max-w-sm text-sm font-medium leading-7 text-slate-600">
-              가입 후 관심 카테고리를 선택하면 트렌드, 상점, 콘텐츠 아이디어를 한 화면에서 확인할 수 있어요.
-            </p>
-          </div>
-          <div className="mb-8 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            {["계정 생성", "관심사 설정", "추천 보드 확인"].map((item, index) => (
-              <div className="flex items-center gap-3" key={item}>
-                <span className="flex size-8 items-center justify-center rounded-full bg-violet-600 text-xs font-black text-white shadow-sm">
-                  {index + 1}
-                </span>
-                <span className="text-sm font-bold">{item}</span>
-              </div>
-            ))}
-          </div>
-        </aside>
-        <section className="p-6 sm:p-10">
-          <div className="mb-8 lg:hidden">
-            <Link className="inline-flex" href={ROUTES.home}>
-              <BrandLogo />
-            </Link>
-          </div>
-          <div>
-            <span className="inline-flex rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
-              회원가입
+    <div className="flex min-h-[calc(100vh-4rem)] w-full items-center justify-center bg-white bg-[radial-gradient(circle_at_top,#ede9fe_0%,rgba(237,233,254,0.72)_34%,transparent_68%)] px-4 py-12 text-ink">
+      <section className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-8 shadow-2xl shadow-slate-200/70">
+        <div className="mb-8 text-center">
+          <Link className="mb-6 inline-flex items-center gap-2 transition hover:opacity-80" href={ROUTES.home}>
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-sm shadow-violet-200">
+              <SparklesIcon />
             </span>
-            <h1 className="mt-5 text-3xl font-black tracking-tight text-ink">필요한 정보만 입력하세요.</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-500">
-              계정을 만들고 나에게 맞는 콘텐츠 추천을 바로 시작하세요.
+            <span className="bg-gradient-to-r from-ink to-violet-700 bg-clip-text text-2xl font-bold text-transparent">
+              BE CELEB
+            </span>
+          </Link>
+          <h1 className="mb-2 text-2xl font-black">무료로 시작하세요</h1>
+          <p className="text-slate-500">채널에 맞는 콘텐츠 추천을 바로 받아보세요</p>
+        </div>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <Field
+            autoComplete="nickname"
+            id="nickname"
+            label="닉네임"
+            minLength={2}
+            onChange={(event) => setNickname(event.target.value)}
+            placeholder="BE CELEB"
+            value={nickname}
+          />
+          <Field
+            autoComplete="email"
+            id="email"
+            label="이메일"
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@example.com"
+            type="email"
+            value={email}
+          />
+          <Field
+            autoComplete="new-password"
+            id="password"
+            label="비밀번호"
+            minLength={8}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="8자 이상"
+            type="password"
+            value={password}
+          />
+          <Field
+            autoComplete="new-password"
+            id="confirm-password"
+            label="비밀번호 확인"
+            minLength={8}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="비밀번호 확인"
+            type="password"
+            value={confirmPassword}
+          />
+
+          {message ? (
+            <p className={`text-sm font-medium ${status === "success" ? "text-violet-700" : "text-rose-600"}`}>
+              {message}
             </p>
-          </div>
-          <form
-            className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6"
-            onSubmit={handleSubmit}
+          ) : null}
+
+          <Button
+            className="min-h-11 w-full bg-violet-600 text-white shadow-lg shadow-violet-200 hover:bg-violet-700"
+            disabled={status === "loading"}
+            type="submit"
           >
-            <div className="space-y-4">
-              <Input
-                autoComplete="nickname"
-                label="Nickname"
-                minLength={2}
-                onChange={(event) => setNickname(event.target.value)}
-                placeholder="BE CELEB"
-                required
-                value={nickname}
-              />
-              <Input
-                autoComplete="email"
-                label="Email"
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-                required
-                type="email"
-                value={email}
-              />
-              <Input
-                autoComplete="new-password"
-                label="Password"
-                minLength={8}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="8자 이상"
-                required
-                type="password"
-                value={password}
-              />
-              <Input
-                autoComplete="new-password"
-                label="Confirm Password"
-                minLength={8}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="비밀번호 확인"
-                required
-                type="password"
-                value={confirmPassword}
-              />
-              {message ? (
-                <p className={`text-sm font-medium ${status === "success" ? "text-violet-700" : "text-rose-600"}`}>
-                  {message}
-                </p>
-              ) : null}
-              <Button
-                className="min-h-11 w-full bg-violet-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_12px_22px_rgba(124,58,237,0.20)] hover:bg-violet-700"
-                disabled={status === "loading"}
-                type="submit"
-              >
-                {status === "loading" ? "가입 중..." : "회원가입"}
-              </Button>
-            </div>
-            <p className="mt-5 text-center text-sm text-slate-500">
-              이미 계정이 있나요?{" "}
-              <Link href={ROUTES.login} className="font-semibold text-ink hover:underline">
-                로그인
-              </Link>
-            </p>
-          </form>
-        </section>
-      </div>
+            {status === "loading" ? "가입 중..." : "회원가입"}
+          </Button>
+        </form>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-200" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-white px-2 text-slate-500">또는</span>
+          </div>
+        </div>
+
+        <p className="text-center text-sm text-slate-500">
+          이미 계정이 있으신가요?{" "}
+          <Link href={ROUTES.login} className="font-semibold text-violet-700 hover:underline">
+            로그인
+          </Link>
+        </p>
+      </section>
     </div>
   );
 }
-
-
-
