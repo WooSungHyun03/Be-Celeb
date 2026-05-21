@@ -18,6 +18,10 @@ function normalizeSupabaseUrl(value: string) {
   return value.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/i, "");
 }
 
+export function hasSupabasePublicEnv() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) && Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
 export function getPublicEnv() {
   return {
     siteUrl: requireValue("NEXT_PUBLIC_SITE_URL", process.env.NEXT_PUBLIC_SITE_URL),
