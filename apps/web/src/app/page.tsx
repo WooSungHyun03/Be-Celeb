@@ -226,7 +226,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             <p className="text-lg text-slate-600">복잡한 콘텐츠 기획 과정을 쉽고 빠르게 처리하세요</p>
           </div>
 
-          <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-2 lg:grid-cols-5">
+          <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-2 lg:grid-cols-5 lg:gap-12">
             {workflow.map((item, index) => (
               <Card className="p-6 transition duration-300 hover:-translate-y-1 hover:border-violet-200" key={item.step}>
                 <div className="relative">
@@ -235,7 +235,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <p className="text-sm leading-relaxed text-slate-500">{item.description}</p>
                 </div>
                 {index < workflow.length - 1 ? (
-                  <Icon className="absolute -right-8 top-1/2 hidden h-5 w-5 -translate-y-1/2 text-violet-300 lg:block" name="arrow" />
+                  <Icon className="pointer-events-none absolute -right-8 top-1/2 hidden h-5 w-5 -translate-y-1/2 text-violet-300 lg:block" name="arrow" />
                 ) : null}
               </Card>
             ))}
