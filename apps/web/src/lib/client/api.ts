@@ -139,6 +139,15 @@ export type GrowthReportResponse = {
   trend: GrowthSnapshot[];
 };
 
+export type GrowthVideoTrendPoint = GrowthVideoStat & {
+  collectedAt: string;
+};
+
+export type GrowthVideoReportResponse = {
+  video: GrowthVideoTrendPoint | null;
+  trend: GrowthVideoTrendPoint[];
+};
+
 export type ShopProduct = {
   id: string | null;
   source: string;
@@ -574,6 +583,17 @@ export async function refreshGrowthReport(signal?: AbortSignal) {
     headers: await getAuthorizationHeaders(),
     signal,
   });
+  return response.data;
+}
+
+export async function getGrowthVideoReport(youtubeVideoId: string, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<GrowthVideoReportResponse>>(
+    `/api/growth-report/videos/${encodeURIComponent(youtubeVideoId)}`,
+    {
+      headers: await getAuthorizationHeaders(),
+      signal,
+    },
+  );
   return response.data;
 }
 

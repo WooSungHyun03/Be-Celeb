@@ -265,17 +265,21 @@ export default function GrowthReportPage() {
             {latest.recentVideoStats.length > 0 ? (
               <div className="divide-y divide-violet-100">
                 {latest.recentVideoStats.map((video) => (
-                  <article className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_auto]" key={video.youtubeVideoId}>
+                  <Link
+                    className="grid gap-3 py-4 transition hover:bg-violet-50/60 md:grid-cols-[minmax(0,1fr)_auto]"
+                    href={`${ROUTES.growthReport}/videos/${encodeURIComponent(video.youtubeVideoId)}`}
+                    key={video.youtubeVideoId}
+                  >
                     <div>
                       <h3 className="font-bold leading-6 text-ink">{video.title}</h3>
-                      <p className="mt-1 text-xs text-slate-500">{formatDate(video.publishedAt)}</p>
+                      <p className="mt-1 text-xs text-slate-500">{formatDate(video.publishedAt)} · 상세 추이 보기</p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-600 md:justify-end">
                       <span className="rounded-md bg-violet-50 px-2 py-1 text-violet-700">조회 {formatInteger(video.viewCount)}</span>
                       <span className="rounded-md bg-slate-100 px-2 py-1">좋아요 {formatInteger(video.likeCount)}</span>
                       <span className="rounded-md bg-slate-100 px-2 py-1">댓글 {formatInteger(video.commentCount)}</span>
                     </div>
-                  </article>
+                  </Link>
                 ))}
               </div>
             ) : (
