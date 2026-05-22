@@ -21,8 +21,10 @@ export type AdminCategory = {
 
 export type AdminInfluencerChannel = {
   id: string;
-  categoryId: string;
+  categoryId: string | null;
+  categoryIds: string[];
   category: string;
+  categoryNames: string[];
   channelUrl: string | null;
   youtubeChannelId: string | null;
   channelTitle: string | null;
@@ -39,8 +41,10 @@ export type AdminVideo = {
   id: string;
   youtubeVideoId: string;
   youtubeUrl: string | null;
-  categoryId: string;
+  categoryId: string | null;
+  categoryIds: string[];
   category: string;
+  categoryNames: string[];
   influencerChannelId: string;
   channel: string;
   youtubeChannelId: string;

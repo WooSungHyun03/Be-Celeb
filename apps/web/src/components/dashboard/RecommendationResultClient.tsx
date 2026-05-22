@@ -112,7 +112,7 @@ export function RecommendationResultClient({ recommendationId }: RecommendationR
             <>
               <RecommendationFavoriteButton result={result} />
               <Link href={ROUTES.favorites}>
-                <Button variant="secondary">찜 목록</Button>
+                <Button variant="secondary">즐겨찾기</Button>
               </Link>
             </>
           }

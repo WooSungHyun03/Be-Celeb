@@ -252,7 +252,7 @@ function PopularVideosSection({
       {state.status === "success" && videos.length === 0 ? (
         <EmptyState
           title="표시할 인기 영상이 없습니다."
-          description="Supabase의 influencer_videos 테이블에 카테고리별 영상 데이터가 쌓이면 이 영역에 자동으로 표시됩니다."
+          description="수집된 influencer_videos 데이터가 아직 없거나 카테고리 연결 정보가 없습니다. 수동 수집 또는 daily collector를 확인하세요."
         />
       ) : null}
       {state.status === "success" && videos.length > 0 ? (
@@ -326,7 +326,10 @@ function KeywordCharts({ data }: { data: TrendKeywordsResponse }) {
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-violet-50 text-xs font-bold text-violet-700">
                     {index + 1}
                   </span>
-                  <span className="truncate text-sm font-semibold text-ink">#{item.keyword}</span>
+                  <div className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-ink">#{item.keyword}</span>
+                    {item.category ? <span className="text-[11px] font-semibold text-slate-400">{item.category}</span> : null}
+                  </div>
                 </div>
                 <span className="text-sm font-bold text-slate-600">{formatCompactNumber(item.count)}</span>
               </div>
@@ -361,6 +364,25 @@ function KeywordCharts({ data }: { data: TrendKeywordsResponse }) {
           </div>
         </Card>
       ) : null}
+
+      {data.categoryBreakdown && data.categoryBreakdown.length > 0 ? (
+        <Card title="카테고리별 키워드 반영">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {data.categoryBreakdown.slice(0, 9).map((category) => (
+              <div className="rounded-md border border-slate-100 bg-slate-50 p-3" key={category.category}>
+                <p className="text-sm font-bold text-ink">{category.category}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {category.topKeywords.slice(0, 5).map((item) => (
+                    <span className="rounded bg-white px-2 py-1 text-[11px] font-semibold text-slate-600" key={`${category.category}-${item.keyword}`}>
+                      #{item.keyword} {formatCompactNumber(item.count)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -381,7 +403,10 @@ function KeywordsSection({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-ink">급상승 키워드</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">저장된 YouTube 영상 태그를 정규화해 기간별 등장 횟수를 집계합니다.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            저장된 YouTube 영상 태그를 정규화하고 카테고리별 Top 키워드를 균형 있게 섞어 집계합니다.
+          </p>
+          <p className="mt-1 text-xs font-semibold text-violet-700">카테고리별 균형 반영</p>
         </div>
         <RangeTabs onChange={onRangeChange} range={range} />
       </div>

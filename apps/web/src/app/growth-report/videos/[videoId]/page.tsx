@@ -152,22 +152,38 @@ export default function GrowthVideoReportPage() {
           </section>
 
           <Card title="영상 정보">
-            <div className="grid gap-3 text-sm leading-6 text-slate-700 md:grid-cols-2">
-              <p>
-                <span className="font-bold text-ink">영상 ID</span>
-                <br />
-                {video.youtubeVideoId}
-              </p>
-              <p>
-                <span className="font-bold text-ink">최근 수집</span>
-                <br />
-                {formatDate(video.collectedAt)}
-              </p>
-              <p>
-                <span className="font-bold text-ink">게시일</span>
-                <br />
-                {formatDate(video.publishedAt)}
-              </p>
+            <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="aspect-video overflow-hidden rounded-lg bg-slate-100">
+                {video.thumbnailUrl ? (
+                  <img alt="" className="h-full w-full object-cover" src={video.thumbnailUrl} />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm font-bold text-slate-400">No image</div>
+                )}
+              </div>
+              <div className="grid gap-3 text-sm leading-6 text-slate-700 md:grid-cols-2">
+                <p>
+                  <span className="font-bold text-ink">영상 ID</span>
+                  <br />
+                  {video.youtubeVideoId}
+                </p>
+                <p>
+                  <span className="font-bold text-ink">최근 수집</span>
+                  <br />
+                  {formatDate(video.collectedAt)}
+                </p>
+                <p>
+                  <span className="font-bold text-ink">게시일</span>
+                  <br />
+                  {formatDate(video.publishedAt)}
+                </p>
+                {video.youtubeChannelId ? (
+                  <p>
+                    <span className="font-bold text-ink">채널 ID</span>
+                    <br />
+                    {video.youtubeChannelId}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </Card>
 

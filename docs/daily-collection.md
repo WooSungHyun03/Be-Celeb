@@ -58,6 +58,8 @@ where channel_url = 'https://www.youtube.com/@somecreator';
 - `category_id`
 - `updated_at`
 
+채널이 여러 카테고리에 속하면 `influencer_channel_categories`에 모든 연결을 저장한다. `category_id`는 기존 API 호환을 위해 첫 번째 카테고리를 계속 보관한다.
+
 영상 정보는 `influencer_videos`에 upsert됩니다.
 
 - `youtube_video_id`
@@ -75,7 +77,7 @@ where channel_url = 'https://www.youtube.com/@somecreator';
 - `raw`
 - `collected_at`
 
-수집 기준은 현재 시각 기준 최근 24시간 이내 `published_at`입니다. `youtube_video_id` 기준으로 중복 저장을 막고, 이미 저장된 영상은 조회수/좋아요/댓글 수를 최신 값으로 업데이트합니다.
+수집 기준은 현재 시각 기준 최근 24시간 이내 `published_at`입니다. `youtube_video_id` 기준으로 중복 저장을 막고, 이미 저장된 영상은 조회수/좋아요/댓글 수를 최신 값으로 업데이트합니다. 채널의 다중 카테고리 연결은 새로 수집된 영상의 `influencer_video_categories`에도 복사되며, `influencer_videos.category_id`는 첫 번째 카테고리 fallback 값으로 유지합니다.
 
 ## 필요한 환경 변수
 
@@ -120,12 +122,17 @@ GitHub repository secrets:
 DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-naver-trends
 DAILY_SHOP_PRODUCTS_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-shop-products
+DAILY_GROWTH_REPORT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-growth-report
 CRON_SECRET=your-secret
 ```
 
 Vercel Frontend의 `/api` route는 원칙적으로 호출하지 않습니다. 모든 `DAILY_*_ENDPOINT`는 Render Backend API URL로 설정합니다.
 
 `curl: (3) URL rejected: Malformed input to a URL function`가 나오면 `DAILY_*_ENDPOINT` secret 값이 비어 있거나 URL이 아닌 문자열이다. GitHub Secrets에는 따옴표나 줄바꿈 없이 `https://.../api/cron/...` 한 줄만 저장합니다.
+
+`curl: (28) Operation timed out after 60002 milliseconds with 0 bytes received`가 나오면 URL은 맞지만 backend의 YouTube collector가 60초 안에 응답을 시작하지 못한 것이다. active influencer channel 수가 많거나 YouTube/Supabase 응답이 느리면 정상적으로 60초를 넘을 수 있다. 워크플로는 YouTube 수집 step을 `--max-time 600`으로 기다리며, backend는 채널을 제한 병렬 처리해 전체 소요 시간을 줄인다. POST collector는 중복 수집을 피하기 위해 curl retry를 사용하지 않는다.
+
+Growth report daily collector는 `DAILY_GROWTH_REPORT_ENDPOINT`로 `POST /api/cron/collect-growth-report`를 호출한다. 이 endpoint는 `user_channel_settings`에 저장된 모든 회원 채널의 채널/영상 스냅샷을 저장한다.
 
 ## 수동 테스트
 

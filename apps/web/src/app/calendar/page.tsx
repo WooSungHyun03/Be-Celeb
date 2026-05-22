@@ -68,7 +68,7 @@ function defaultForm(date: string): EventForm {
 }
 
 function favoriteTitle(item: FavoriteItem) {
-  return item.title || "찜한 추천 콘텐츠";
+  return item.title || "즐겨찾기한 추천 콘텐츠";
 }
 
 export default function CalendarPage() {
@@ -236,10 +236,10 @@ export default function CalendarPage() {
       <PageHeader
         action={
           <Link href={ROUTES.favorites}>
-            <Button variant="secondary">찜 목록 보기</Button>
+            <Button variant="secondary">즐겨찾기 보기</Button>
           </Link>
         }
-        description="찜한 콘텐츠를 업로드 일정으로 옮기고 제작 상태를 관리합니다."
+        description="즐겨찾기한 콘텐츠를 업로드 일정으로 옮기고 제작 상태를 관리합니다."
         title="캘린더"
       />
 
@@ -320,7 +320,7 @@ export default function CalendarPage() {
         </div>
       </Card>
 
-      {events.length === 0 ? <EmptyState title="등록된 일정이 없습니다" description="날짜 칸을 클릭하거나 찜 목록에서 업로드 일정을 추가하세요." /> : null}
+      {events.length === 0 ? <EmptyState title="등록된 일정이 없습니다" description="날짜 칸을 클릭하거나 즐겨찾기에서 업로드 일정을 추가하세요." /> : null}
 
       {form ? (
         <div className="fixed inset-0 z-50 flex items-end bg-slate-900/40 p-4 sm:items-center sm:justify-center">
@@ -335,7 +335,7 @@ export default function CalendarPage() {
 
             <div className="mt-5 grid gap-4">
               <label className="block text-sm font-semibold text-slate-700">
-                <span>찜 목록에서 선택</span>
+                <span>즐겨찾기에서 선택</span>
                 <select
                   className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
                   onChange={(event) => {

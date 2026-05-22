@@ -149,9 +149,10 @@ LLM `max_tokens`는 선택 옵션에 따라 동적으로 증가한다. 기본 �
 
 사용자 생산 워크플로우는 다음 테이블에 저장된다. migration은 `supabase/migrations/20260519001000_planning_growth_features.sql`이다.
 
-- `favorites`: 추천 결과 또는 콘텐츠 아이디어 찜 목록. `recommendation_id`, `title`, `reason`, `hashtags`, `storyboard`, `source`를 저장한다.
+- `favorites`: 추천 결과 또는 콘텐츠 아이디어 즐겨찾기 목록. `recommendation_id`, `title`, `reason`, `hashtags`, `storyboard`, `source`를 저장한다.
 - `calendar_events`: 업로드 예정일과 제작 상태. `planned`, `scripted`, `filmed`, `edited`, `uploaded` 상태를 사용한다.
 - `channel_growth_snapshots`: YouTube 채널의 구독자 수, 전체 조회수, 영상 수, 최근 영상 통계를 스냅샷으로 저장한다.
+- `video_growth_snapshots`: 최근 영상별 조회수, 좋아요, 댓글 스냅샷을 저장한다. migration은 `supabase/migrations/20260522001000_video_growth_snapshots.sql`이다.
 
 Frontend 라우트:
 
@@ -159,23 +160,27 @@ Frontend 라우트:
 /favorites
 /calendar
 /growth-report
+/growth-report/videos/[videoId]
 ```
 
-`/favorites`는 추천 결과에서 누른 찜을 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다.
+`/favorites`는 추천 결과에서 저장한 즐겨찾기를 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다. 최근 영상 성과를 클릭하면 `/growth-report/videos/[videoId]`로 이동해 영상별 조회수, 좋아요, 댓글 추이 그래프를 확인한다.
 
 Growth report 그래프:
 
 - snapshot이 2개 이상이면 Recharts line chart로 `subscriber_count`, `view_count`, `video_count` 추이를 표시
 - snapshot이 1개 이하이면 “추이 데이터가 더 필요합니다” 안내 표시
 - “지금 갱신” 버튼은 `POST /api/growth-report/refresh`로 최신 snapshot을 저장
+- 영상 상세 그래프는 `video_growth_snapshots`의 일일 point를 사용한다. point가 1개 이하이면 “추이 데이터가 더 필요합니다” 안내를 표시한다.
 
-성장 리포트 refresh는 YouTube API quota를 사용한다. 운영에서는 refresh 버튼을 과도하게 누르지 않도록 UI/정책을 조정할 수 있다.
+성장 리포트 refresh는 YouTube API quota를 사용한다. 운영에서는 refresh 버튼을 과도하게 누르지 않도록 UI/정책을 조정할 수 있다. 매일 자동 갱신은 `POST /api/cron/collect-growth-report`가 `CRON_SECRET` 검증 후 `user_channel_settings`의 모든 회원 채널을 순회해 채널/영상 스냅샷을 저장한다.
+
+회원이 채널 URL을 다른 YouTube 채널로 변경하면 backend는 기존 `channel_growth_snapshots`와 `video_growth_snapshots`를 삭제한다. 성장 리포트는 채널별 시계열 데이터이므로 새 채널 기준으로 그래프를 다시 시작하는 “삭제 후 초기화” 정책을 사용한다. 같은 YouTube 채널을 다른 URL 형태로 저장하는 경우에는 `youtube_channel_id`가 같으므로 기존 스냅샷을 유지한다.
 
 Admin에서 favorites/calendar/growth snapshots 전체 관리 UI는 아직 확장하지 않았다. 운영 필요 시 admin 도메인에서 목록/삭제 API를 추가하면 된다.
 
 ## Profile / Password
 
-`/profile`은 추천 사용량과 구독 상태 UI를 표시하지 않는다. 현재 계정 설정 화면은 다음만 제공한다.
+`/profile`은 추천 사용량과 서비스 이용 상태 UI를 표시하지 않는다. 현재 계정 설정 화면은 다음만 제공한다.
 
 - 닉네임 변경
 - YouTube 채널 URL/category 변경
@@ -294,7 +299,11 @@ Content-Type: application/json
 게임, 운동, IT, 노래, OTT, 일상, 뷰티, 스터디, 코미디, 먹방, 춤
 ```
 
-Trends 페이지는 기존 YouTube 인기 영상/태그 집계를 유지하고, 아래에 검색 관심도와 결합 트렌드를 추가한다. 결합 점수는 keyword 단위로 다음 값을 정규화해 계산한다.
+Trends 페이지는 기존 YouTube 인기 영상/태그 집계를 유지하고, 아래에 검색 관심도와 결합 트렌드를 추가한다. 인플루언서 채널과 영상은 여러 카테고리에 연결될 수 있으며, 신규 조회 로직은 `influencer_channel_categories`, `influencer_video_categories` join table을 우선 사용한다. 기존 `category_id`는 호환 fallback으로 유지한다.
+
+급상승 키워드는 전체 count 상위 태그만 뽑지 않고 카테고리별 Top 3~5개를 먼저 계산한 뒤 균형 있게 섞는다. 검색 관심도 데이터가 있으면 카테고리별 키워드 boost로 낮은 가중치만 더한다.
+
+결합 점수는 keyword 단위로 다음 값을 정규화해 계산한다.
 
 ```text
 combinedScore = normalizedYoutubeTagCount * 0.4
@@ -302,11 +311,12 @@ combinedScore = normalizedYoutubeTagCount * 0.4
   + normalizedNaverRatio * 0.3
 ```
 
-`/api/trends/popular-videos`는 `influencer_videos` 데이터를 조회한다. 운영 중 빈 DB, category join 누락, nullable `view_count`, 누락된 thumbnail/published_at 때문에 500이 나면 안 된다. 현재 구현은 Supabase 쿼리 실패를 서버 로그에 남기고 빈 배열을 반환하며, row별 매핑은 다음 fallback을 사용한다.
+`/api/trends/popular-videos`는 `influencer_video_categories`와 `influencer_videos` 데이터를 조회해 카테고리별 조회수 1등 영상을 반환한다. 운영 중 빈 DB, category join 누락, nullable `view_count`, 누락된 thumbnail/published_at 때문에 500이 나면 안 된다. 현재 구현은 Supabase 쿼리 실패를 서버 로그에 남기고 빈 배열을 반환하며, row별 매핑은 다음 fallback을 사용한다.
 
 - 배포 DB와 코드의 컬럼명이 다를 수 있어 `youtube_video_id`, `video_id`, `thumbnail_url`, `thumbnails`, `category_name`, `category` 조합으로 select를 재시도
 - endpoint 컨트롤러까지 예외가 올라와도 화면이 깨지지 않도록 `{ "videos": [] }` fallback 반환
 - category join 실패: `category_name`, `category`, `"기타"` 순서로 fallback
+- 다중 카테고리 join table 누락: legacy `influencer_videos.category_id` fallback
 - `view_count`, `like_count`, `comment_count` null: `0`
 - thumbnail json 누락: `thumbnailUrl: null`
 - `published_at` 누락: `publishedAt: null`
@@ -413,7 +423,7 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/user/channel-settings" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 ```
 
-찜/캘린더/성장 리포트 확인:
+즐겨찾기/캘린더/성장 리포트 확인:
 
 ```bash
 curl "$NEXT_PUBLIC_API_BASE_URL/api/favorites" \
@@ -449,6 +459,7 @@ Daily YouTube collection과 Daily Naver trends collection은 Render Backend API�
 DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
 DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-products
+DAILY_GROWTH_REPORT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-growth-report
 CRON_SECRET=your-cron-secret
 ```
 
@@ -466,6 +477,7 @@ GitHub Actions repository secrets:
 DAILY_COLLECT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
 DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-products
+DAILY_GROWTH_REPORT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-growth-report
 CRON_SECRET=your-cron-secret
 ```
 
@@ -475,6 +487,8 @@ CRON_SECRET=your-cron-secret
 - 따옴표, 백슬래시(`\`), trailing slash 뒤의 공백, 줄바꿈을 넣지 않는다.
 - 예: `https://api.be-celeb.org/api/cron/collect-shop-products`
 - Vercel frontend URL이 아니라 Render Backend API URL을 넣는다.
+
+`curl: (28) Operation timed out after 60002 milliseconds with 0 bytes received`는 URL validation 이후 backend collector가 60초 안에 응답을 시작하지 못했다는 뜻이다. Daily YouTube collector는 active influencer channel별로 YouTube API와 Supabase upsert를 수행하므로 60초를 넘을 수 있다. GitHub Actions는 YouTube collector를 최대 600초까지 기다리며, backend는 최대 4개 채널씩 제한 병렬 처리한다. POST 수집 endpoint는 timeout 재시도 시 중복 실행될 수 있으므로 retry 옵션을 사용하지 않는다.
 
 수동 Naver 수집 확인:
 
@@ -508,9 +522,30 @@ order by collected_at desc
 limit 20;
 ```
 
+수동 Growth report 수집 확인:
+
+```bash
+curl --fail-with-body -X POST "$NEXT_PUBLIC_API_BASE_URL/api/cron/collect-growth-report" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+저장 확인:
+
+```sql
+select user_id, youtube_channel_id, subscriber_count, view_count, video_count, collected_at
+from public.channel_growth_snapshots
+order by collected_at desc
+limit 20;
+
+select user_id, youtube_video_id, view_count, like_count, comment_count, collected_at
+from public.video_growth_snapshots
+order by collected_at desc
+limit 20;
+```
+
 ## 정리된 코드
 
-- `/profile`에서 추천 사용량과 구독 상태 UI 및 `user_plans` 조회를 제거했다.
+- `/profile`에서 추천 사용량과 서비스 이용 상태 UI 조회를 제거했다.
 - 사용되지 않던 `apps/web/src/lib/config/dev-auth-store.ts`, `apps/web/src/lib/config/auth-provider.ts`, `apps/web/src/components/common/ProductCard.tsx`를 삭제했다.
 - `/shop`의 mock 상품 목록과 Naver Shopping 직접 링크 생성 로직을 제거하고 Render Backend API 호출로 교체했다.
 - 클라이언트의 `fetch("/api/...")` 잔여 호출을 제거했다. 비밀번호 재설정 메일은 Supabase Auth browser client를 사용한다.

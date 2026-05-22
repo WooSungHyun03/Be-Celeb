@@ -107,8 +107,10 @@ export type AddProductionBoardItemPayload = {
 
 export type GrowthVideoStat = {
   youtubeVideoId: string;
+  youtubeChannelId?: string | null;
   title: string;
-  publishedAt: string;
+  thumbnailUrl?: string | null;
+  publishedAt: string | null;
   viewCount: number;
   likeCount: number;
   commentCount: number;
@@ -141,6 +143,7 @@ export type GrowthReportResponse = {
 
 export type GrowthVideoTrendPoint = GrowthVideoStat & {
   collectedAt: string;
+  createdAt?: string | null;
 };
 
 export type GrowthVideoReportResponse = {

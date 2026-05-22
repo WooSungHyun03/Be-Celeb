@@ -1024,10 +1024,10 @@ export default function ProductionBoardPage() {
       <PageHeader
         action={
           <Link href={ROUTES.favorites}>
-            <Button>찜한 아이디어 보기</Button>
+            <Button>즐겨찾기한 아이디어 보기</Button>
           </Link>
         }
-        description="찜한 추천 아이디어 중 실제로 제작할 콘텐츠만 모아두는 보드입니다."
+        description="즐겨찾기한 추천 아이디어 중 실제로 제작할 콘텐츠만 모아두는 보드입니다."
         title="제작 보드"
       />
 
@@ -1098,10 +1098,10 @@ export default function ProductionBoardPage() {
         <EmptyState
           action={
             <Link href={ROUTES.favorites}>
-              <Button>찜한 아이디어에서 추가하기</Button>
+              <Button>즐겨찾기한 아이디어에서 추가하기</Button>
             </Link>
           }
-          description="찜한 아이디어에서 제작 보드에 추가해보세요."
+          description="즐겨찾기한 아이디어에서 제작 보드에 추가해보세요."
           title="아직 제작 보드에 추가된 아이디어가 없습니다"
         />
       ) : (

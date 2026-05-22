@@ -21,6 +21,7 @@ export type PopularVideosResponse = {
 export type TrendKeywordCount = {
   keyword: string;
   count: number;
+  category?: string | null;
 };
 
 export type TrendKeywordSeriesPoint = {
@@ -33,6 +34,10 @@ export type TrendKeywordsResponse = {
   topKeywords: TrendKeywordCount[];
   seriesKeywords: string[];
   series: TrendKeywordSeriesPoint[];
+  categoryBreakdown?: Array<{
+    category: string;
+    topKeywords: TrendKeywordCount[];
+  }>;
 };
 
 export type NaverTrendTopKeyword = {

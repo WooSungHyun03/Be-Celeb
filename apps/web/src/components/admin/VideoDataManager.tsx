@@ -33,7 +33,8 @@ export function VideoDataManager({ categories, channels, videos, onChanged, onEr
   const [isSaving, setIsSaving] = useState(false);
 
   const filteredVideos = videos.filter((video) => {
-    const matchesCategory = !categoryId || video.categoryId === categoryId;
+    const videoCategoryIds = (video.categoryIds ?? []).length > 0 ? video.categoryIds : video.categoryId ? [video.categoryId] : [];
+    const matchesCategory = !categoryId || videoCategoryIds.includes(categoryId);
     const matchesChannel = !channelId || video.influencerChannelId === channelId;
     const text = [video.title, video.description, video.channel, ...video.tags].join(" ").toLowerCase();
     return matchesCategory && matchesChannel && text.includes(search.toLowerCase());
@@ -61,6 +62,26 @@ export function VideoDataManager({ categories, channels, videos, onChanged, onEr
       await onChanged();
     } catch (error) {
       onError(error instanceof Error ? error.message : "영상을 삭제하지 못했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleCategoryToggle(video: AdminVideo, nextCategoryId: string) {
+    const currentIds = (video.categoryIds ?? []).length > 0 ? video.categoryIds : video.categoryId ? [video.categoryId] : [];
+    const nextIds = currentIds.includes(nextCategoryId)
+      ? currentIds.filter((id) => id !== nextCategoryId)
+      : [...currentIds, nextCategoryId];
+    if (nextIds.length === 0) {
+      onError("영상에는 최소 1개 카테고리가 필요합니다.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateVideo(video.id, { categoryIds: nextIds });
+      await onChanged();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "영상 카테고리를 변경하지 못했습니다.");
     } finally {
       setIsSaving(false);
     }
@@ -130,7 +151,28 @@ export function VideoDataManager({ categories, channels, videos, onChanged, onEr
                     </pre>
                   </details>
                 </td>
-                <td className="px-3 py-3">{video.category}</td>
+                <td className="px-3 py-3">
+                  <div className="flex max-w-[260px] flex-wrap gap-1.5">
+                    {categories.map((category) => {
+                      const videoCategoryIds = (video.categoryIds ?? []).length > 0 ? video.categoryIds : video.categoryId ? [video.categoryId] : [];
+                      return (
+                        <label
+                          className="flex items-center gap-1 rounded bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                          key={`${video.id}-${category.id}`}
+                        >
+                          <input
+                            checked={videoCategoryIds.includes(category.id)}
+                            className="size-3 rounded border-slate-300 text-violet-600"
+                            disabled={isSaving}
+                            onChange={() => handleCategoryToggle(video, category.id)}
+                            type="checkbox"
+                          />
+                          {category.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </td>
                 <td className="px-3 py-3">{video.channel}</td>
                 <td className="px-3 py-3 text-xs leading-6 text-slate-600">
                   조회 {compactNumber(video.viewCount)}

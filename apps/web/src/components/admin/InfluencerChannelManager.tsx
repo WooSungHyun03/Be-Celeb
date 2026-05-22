@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
@@ -21,26 +21,42 @@ type InfluencerChannelManagerProps = {
 };
 
 export function InfluencerChannelManager({ categories, channels, onChanged, onError }: InfluencerChannelManagerProps) {
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [channelUrl, setChannelUrl] = useState("");
   const [search, setSearch] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    if (categoryIds.length === 0 && categories[0]?.id) {
+      setCategoryIds([categories[0].id]);
+    }
+  }, [categories, categoryIds.length]);
+
   const filteredChannels = channels.filter((channel) => {
-    const matchesCategory = !filterCategoryId || channel.categoryId === filterCategoryId;
+    const channelCategoryIds = (channel.categoryIds ?? []).length > 0 ? channel.categoryIds : channel.categoryId ? [channel.categoryId] : [];
+    const matchesCategory = !filterCategoryId || channelCategoryIds.includes(filterCategoryId);
     const text = [channel.channelTitle, channel.channelUrl, channel.youtubeChannelId, channel.category].join(" ").toLowerCase();
     return matchesCategory && text.includes(search.toLowerCase());
   });
 
+  function toggleCreateCategory(nextCategoryId: string) {
+    setCategoryIds((current) => {
+      if (current.includes(nextCategoryId)) {
+        return current.length > 1 ? current.filter((id) => id !== nextCategoryId) : current;
+      }
+      return [...current, nextCategoryId];
+    });
+  }
+
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!categoryId || !channelUrl.trim()) {
+    if (categoryIds.length === 0 || !channelUrl.trim()) {
       return;
     }
     setIsSaving(true);
     try {
-      await createInfluencerChannel({ categoryId, channelUrl, isActive: true });
+      await createInfluencerChannel({ categoryIds, channelUrl, isActive: true });
       setChannelUrl("");
       await onChanged();
     } catch (error) {
@@ -89,24 +105,45 @@ export function InfluencerChannelManager({ categories, channels, onChanged, onEr
     }
   }
 
+  async function handleCategoryToggle(channel: AdminInfluencerChannel, nextCategoryId: string) {
+    const currentIds = (channel.categoryIds ?? []).length > 0 ? channel.categoryIds : channel.categoryId ? [channel.categoryId] : [];
+    const nextIds = currentIds.includes(nextCategoryId)
+      ? currentIds.filter((id) => id !== nextCategoryId)
+      : [...currentIds, nextCategoryId];
+    if (nextIds.length === 0) {
+      onError("채널에는 최소 1개 카테고리가 필요합니다.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateInfluencerChannel(channel.id, { categoryIds: nextIds });
+      await onChanged();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "채널 카테고리를 변경하지 못했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <Card title="카테고리별 인플루언서 채널 관리">
-      <form className="mb-5 grid gap-3 lg:grid-cols-[180px_1fr_auto]" onSubmit={handleCreate}>
-        <label className="block text-sm font-semibold text-slate-700" htmlFor="admin-channel-category">
+      <form className="mb-5 grid gap-3 lg:grid-cols-[minmax(220px,0.8fr)_1fr_auto]" onSubmit={handleCreate}>
+        <fieldset className="block rounded-md border border-slate-200 p-3 text-sm font-semibold text-slate-700">
           <span>카테고리</span>
-          <select
-            className="mt-2 min-h-10 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            id="admin-channel-category"
-            onChange={(event) => setCategoryId(event.target.value)}
-            value={categoryId}
-          >
+          <div className="mt-2 grid grid-cols-2 gap-2">
             {categories.map((category) => (
-              <option key={category.id} value={category.id}>
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600" key={category.id}>
+                <input
+                  checked={categoryIds.includes(category.id)}
+                  className="size-4 rounded border-slate-300 text-violet-600"
+                  onChange={() => toggleCreateCategory(category.id)}
+                  type="checkbox"
+                />
                 {category.name}
-              </option>
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+        </fieldset>
         <Input
           label="YouTube 채널 URL"
           onChange={(event) => setChannelUrl(event.target.value)}
@@ -160,7 +197,28 @@ export function InfluencerChannelManager({ categories, channels, onChanged, onEr
                   <p className="font-semibold text-ink">{channel.channelTitle ?? "채널명 없음"}</p>
                   <p className="mt-1 max-w-[420px] truncate text-xs text-slate-500">{channel.channelUrl ?? channel.youtubeChannelId}</p>
                 </td>
-                <td className="px-3 py-3">{channel.category}</td>
+                <td className="px-3 py-3">
+                  <div className="flex max-w-[260px] flex-wrap gap-1.5">
+                    {categories.map((category) => {
+                      const channelCategoryIds = (channel.categoryIds ?? []).length > 0 ? channel.categoryIds : channel.categoryId ? [channel.categoryId] : [];
+                      return (
+                        <label
+                          className="flex items-center gap-1 rounded bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                          key={`${channel.id}-${category.id}`}
+                        >
+                          <input
+                            checked={channelCategoryIds.includes(category.id)}
+                            className="size-3 rounded border-slate-300 text-violet-600"
+                            disabled={isSaving}
+                            onChange={() => handleCategoryToggle(channel, category.id)}
+                            type="checkbox"
+                          />
+                          {category.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </td>
                 <td className="px-3 py-3">
                   <Badge tone={channel.isActive ? "brand" : "default"}>{channel.isActive ? "활성" : "비활성"}</Badge>
                 </td>

@@ -10,7 +10,7 @@ const footerGroups = [
     links: [
       { label: "트렌드 분석", href: ROUTES.trends },
       { label: "콘텐츠 추천", href: ROUTES.dashboard },
-      { label: "찜 목록", href: ROUTES.favorites },
+      { label: "즐겨찾기", href: ROUTES.favorites },
       { label: "제작 보드", href: ROUTES.productionBoard },
     ],
   },
@@ -20,7 +20,6 @@ const footerGroups = [
       { label: "로그인", href: ROUTES.login },
       { label: "회원가입", href: ROUTES.signup },
       { label: "마이페이지", href: ROUTES.profile },
-      { label: "요금 안내", href: ROUTES.pricing },
     ],
   },
 ];

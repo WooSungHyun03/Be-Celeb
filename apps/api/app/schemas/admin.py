@@ -39,7 +39,8 @@ class CategoryUpdatePayload(BaseModel):
 class InfluencerChannelPayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    category_id: str = Field(alias="categoryId")
+    category_id: str | None = Field(default=None, alias="categoryId")
+    category_ids: list[str] | None = Field(default=None, alias="categoryIds")
     channel_url: str = Field(alias="channelUrl", min_length=1)
     youtube_channel_id: str | None = Field(default=None, alias="youtubeChannelId")
     channel_title: str | None = Field(default=None, alias="channelTitle")
@@ -52,6 +53,7 @@ class InfluencerChannelUpdatePayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     category_id: str | None = Field(default=None, alias="categoryId")
+    category_ids: list[str] | None = Field(default=None, alias="categoryIds")
     channel_url: str | None = Field(default=None, alias="channelUrl")
     youtube_channel_id: str | None = Field(default=None, alias="youtubeChannelId")
     channel_title: str | None = Field(default=None, alias="channelTitle")
@@ -61,9 +63,12 @@ class InfluencerChannelUpdatePayload(BaseModel):
 
 
 class VideoUpdatePayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     title: str | None = None
     description: str | None = None
     tags: list[str] | None = None
+    category_ids: list[str] | None = Field(default=None, alias="categoryIds")
 
 
 class DangerDeleteVideosByCategoryPayload(BaseModel):

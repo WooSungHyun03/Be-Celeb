@@ -16,6 +16,7 @@ jobs:
       DAILY_COLLECT_ENDPOINT: ${{ secrets.DAILY_COLLECT_ENDPOINT }}
       DAILY_NAVER_TRENDS_ENDPOINT: ${{ secrets.DAILY_NAVER_TRENDS_ENDPOINT }}
       DAILY_SHOP_PRODUCTS_ENDPOINT: ${{ secrets.DAILY_SHOP_PRODUCTS_ENDPOINT }}
+      DAILY_GROWTH_REPORT_ENDPOINT: ${{ secrets.DAILY_GROWTH_REPORT_ENDPOINT }}
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
       - name: Validate secrets
@@ -23,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in DAILY_COLLECT_ENDPOINT DAILY_NAVER_TRENDS_ENDPOINT DAILY_SHOP_PRODUCTS_ENDPOINT CRON_SECRET; do
+          for name in DAILY_COLLECT_ENDPOINT DAILY_NAVER_TRENDS_ENDPOINT DAILY_SHOP_PRODUCTS_ENDPOINT DAILY_GROWTH_REPORT_ENDPOINT CRON_SECRET; do
             value="${!name:-}"
             value="$(printf '%s' "$value" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
@@ -73,19 +74,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body --show-error --location --max-time 60 --retry 2 --retry-all-errors -X POST "$DAILY_COLLECT_ENDPOINT" \
+          curl --fail-with-body --show-error --location --connect-timeout 20 --max-time 600 -X POST "$DAILY_COLLECT_ENDPOINT" \
             -H "Authorization: Bearer $CRON_SECRET"
 
       - name: Call daily Naver trends collector
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body --show-error --location --max-time 60 --retry 2 --retry-all-errors -X POST "$DAILY_NAVER_TRENDS_ENDPOINT" \
+          curl --fail-with-body --show-error --location --connect-timeout 20 --max-time 300 -X POST "$DAILY_NAVER_TRENDS_ENDPOINT" \
             -H "Authorization: Bearer $CRON_SECRET"
 
       - name: Call daily shop products collector
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body --show-error --location --max-time 60 --retry 2 --retry-all-errors -X POST "$DAILY_SHOP_PRODUCTS_ENDPOINT" \
+          curl --fail-with-body --show-error --location --connect-timeout 20 --max-time 300 -X POST "$DAILY_SHOP_PRODUCTS_ENDPOINT" \
+            -H "Authorization: Bearer $CRON_SECRET"
+
+      - name: Call daily growth report collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --show-error --location --connect-timeout 20 --max-time 300 -X POST "$DAILY_GROWTH_REPORT_ENDPOINT" \
             -H "Authorization: Bearer $CRON_SECRET"
