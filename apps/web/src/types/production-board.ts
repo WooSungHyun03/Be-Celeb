@@ -1,4 +1,4 @@
-export type ProductionBoardStatus = "idea" | "script" | "filming" | "editing" | "uploaded";
+export type ProductionBoardStatus = "idea" | "planned" | "filming" | "editing" | "scheduled" | "uploaded";
 
 export type ProductionBoardPriority = "low" | "normal" | "high";
 
@@ -7,7 +7,9 @@ export type ProductionBoardItem = {
   userId: string;
   favoriteId: string | null;
   recommendationId: string | null;
+  calendarEventId: string | null;
   title: string;
+  description: string | null;
   hook: string | null;
   reason: string | null;
   hashtags: string[];
@@ -16,6 +18,9 @@ export type ProductionBoardItem = {
   status: ProductionBoardStatus;
   priority: ProductionBoardPriority;
   memo: string | null;
+  shootStartDate: string | null;
+  shootEndDate: string | null;
+  metadata: Record<string, unknown>;
   checklistTotal: number;
   checklistDone: number;
   dueDate: string | null;
@@ -37,32 +42,36 @@ export type ProductionBoardChecklistItem = {
 
 export const PRODUCTION_BOARD_STATUS_LABELS: Record<ProductionBoardStatus, string> = {
   idea: "아이디어",
-  script: "대본 작성",
-  filming: "촬영 예정",
+  planned: "기획 완료",
+  filming: "촬영 중",
   editing: "편집 중",
+  scheduled: "업로드 예정",
   uploaded: "업로드 완료",
 };
 
 export const NEXT_STATUS_MAP: Partial<Record<ProductionBoardStatus, ProductionBoardStatus>> = {
-  idea: "script",
-  script: "filming",
+  idea: "planned",
+  planned: "filming",
   filming: "editing",
-  editing: "uploaded",
+  editing: "scheduled",
+  scheduled: "uploaded",
 };
 
 export const VALID_PRODUCTION_BOARD_STATUSES: ProductionBoardStatus[] = [
   "idea",
-  "script",
+  "planned",
   "filming",
   "editing",
+  "scheduled",
   "uploaded",
 ];
 
 export const PRODUCTION_BOARD_COLUMNS: Array<{ status: ProductionBoardStatus; label: string }> = [
   { status: "idea", label: PRODUCTION_BOARD_STATUS_LABELS.idea },
-  { status: "script", label: PRODUCTION_BOARD_STATUS_LABELS.script },
+  { status: "planned", label: PRODUCTION_BOARD_STATUS_LABELS.planned },
   { status: "filming", label: PRODUCTION_BOARD_STATUS_LABELS.filming },
   { status: "editing", label: PRODUCTION_BOARD_STATUS_LABELS.editing },
+  { status: "scheduled", label: PRODUCTION_BOARD_STATUS_LABELS.scheduled },
   { status: "uploaded", label: PRODUCTION_BOARD_STATUS_LABELS.uploaded },
 ];
 

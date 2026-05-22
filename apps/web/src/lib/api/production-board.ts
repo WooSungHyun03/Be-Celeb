@@ -1,5 +1,6 @@
 export {
   addFavoriteToProductionBoard,
+  createProductionItem,
   createProductionBoardChecklistItem,
   deleteProductionBoardChecklistItem,
   deleteProductionBoardItem,
@@ -8,8 +9,9 @@ export {
   updateProductionBoardChecklistItem,
   updateProductionBoardItemMemo,
   updateProductionBoardItemStatus,
+  updateProductionItem,
 } from "@/lib/client/api";
-export type { AddProductionBoardItemPayload } from "@/lib/client/api";
+export type { AddProductionBoardItemPayload, ProductionItemPayload } from "@/lib/client/api";
 export type {
   ProductionBoardChecklistItem,
   ProductionBoardItem,

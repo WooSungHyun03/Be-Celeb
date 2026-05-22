@@ -70,18 +70,22 @@ export type FavoritePayload = {
   metadata?: Record<string, unknown>;
 };
 
-export type CalendarEventStatus = "planned" | "scripted" | "filmed" | "edited" | "uploaded";
+export type CalendarEventStatus = "planned" | "scripted" | "filmed" | "edited" | "uploaded" | "filming" | "editing" | "scheduled";
 
 export type CalendarEvent = {
   id: string;
   userId: string;
   favoriteId: string | null;
+  productionItemId?: string | null;
   title: string;
   description: string | null;
   scheduledDate: string;
+  startDate: string;
+  endDate: string | null;
   startTime: string | null;
   endTime: string | null;
   status: CalendarEventStatus;
+  color: string | null;
   platform: string;
   metadata: Record<string, unknown>;
   createdAt: string;
@@ -90,12 +94,16 @@ export type CalendarEvent = {
 
 export type CalendarEventPayload = {
   favoriteId?: string | null;
+  productionItemId?: string | null;
   title: string;
   description?: string | null;
-  scheduledDate: string;
+  scheduledDate?: string;
+  startDate?: string;
+  endDate?: string | null;
   startTime?: string | null;
   endTime?: string | null;
   status?: CalendarEventStatus;
+  color?: string | null;
   platform?: string;
   metadata?: Record<string, unknown>;
 };
@@ -103,6 +111,20 @@ export type CalendarEventPayload = {
 export type AddProductionBoardItemPayload = {
   favoriteId?: string;
   recommendationId?: string;
+};
+
+export type ProductionItemPayload = {
+  favoriteId?: string | null;
+  recommendationId?: string | null;
+  title?: string;
+  description?: string | null;
+  memo?: string | null;
+  hashtags?: string[];
+  storyboard?: unknown;
+  status?: ProductionBoardStatus;
+  shootStartDate?: string | null;
+  shootEndDate?: string | null;
+  metadata?: Record<string, unknown>;
 };
 
 export type GrowthVideoStat = {
@@ -164,6 +186,8 @@ export type ShopProduct = {
   maker: string | null;
   equipmentCategory: string;
   searchKeyword: string;
+  popularityScore: number;
+  recommendedLevel: string | null;
   collectedAt: string | null;
 };
 
@@ -181,6 +205,18 @@ export type ShopSection = {
 
 export type ShopSectionsResponse = {
   sections: ShopSection[];
+};
+
+export type ShopSet = {
+  level: string;
+  title: string;
+  description: string | null;
+  items: string[];
+  products: ShopProduct[];
+};
+
+export type ShopSetsResponse = {
+  sets: ShopSet[];
 };
 
 export class ApiClientError extends Error {
@@ -428,6 +464,28 @@ export async function addFavoriteToProductionBoard(payload: AddProductionBoardIt
   return response.data.item;
 }
 
+export async function createProductionItem(payload: ProductionItemPayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ item: ProductionBoardItem }>>("/api/production-items", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data.item;
+}
+
+export async function updateProductionItem(itemId: string, payload: ProductionItemPayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<{ item: ProductionBoardItem }>>(`/api/production-items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data.item;
+}
+
 export async function updateProductionBoardItemStatus(
   itemId: string,
   status: ProductionBoardStatus,
@@ -606,7 +664,7 @@ export async function getShopSections(signal?: AbortSignal) {
 }
 
 export async function getShopProducts(
-  params: { equipmentCategory?: string; limit?: number; refresh?: boolean } = {},
+  params: { equipmentCategory?: string; limit?: number; sort?: string; level?: string } = {},
   signal?: AbortSignal,
 ) {
   const query = new URLSearchParams();
@@ -616,11 +674,19 @@ export async function getShopProducts(
   if (params.limit) {
     query.set("limit", String(params.limit));
   }
-  if (params.refresh) {
-    query.set("refresh", "true");
+  if (params.sort) {
+    query.set("sort", params.sort);
+  }
+  if (params.level) {
+    query.set("level", params.level);
   }
   const path = query.size > 0 ? `/api/shop/products?${query.toString()}` : "/api/shop/products";
   const response = await apiFetch<ApiSuccess<ShopSectionsResponse>>(path, { signal });
+  return response.data;
+}
+
+export async function getShopSets(signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<ShopSetsResponse>>("/api/shop/sets", { signal });
   return response.data;
 }
 

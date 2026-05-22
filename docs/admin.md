@@ -106,7 +106,9 @@ Growth report collector는 `user_channel_settings`의 모든 회원 채널을 �
 
 Trends의 급상승 키워드는 전체 태그 count만 정렬하지 않고 카테고리별 Top 키워드를 먼저 뽑은 뒤 균형 있게 섞어 표시한다. 검색 관심도 데이터가 있으면 해당 카테고리 키워드에 낮은 가중치로 함께 반영한다. 현재 인기 영상은 `influencer_video_categories` 기준으로 카테고리별 조회수 1등 영상을 고르며, join table 데이터가 없으면 기존 `influencer_videos.category_id`로 fallback한다. DB가 비어 있거나 카테고리 연결 데이터가 없으면 500 대신 빈 배열/empty state를 반환한다.
 
-`/shop` 상품 카드는 Naver DataLab 검색어트렌드가 아니라 Naver 검색 API의 쇼핑 검색 endpoint를 사용한다. DataLab 검색어트렌드가 정상이어도 쇼핑 검색 권한이 없으면 `/shop`은 “실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다.” fallback을 보여준다. 쇼핑 검색 권한이 있는 별도 앱 키가 있으면 Render Backend에 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 설정한다. 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 사용한다.
+Production board는 직접 콘텐츠 생성과 즐겨찾기/추천 전환을 모두 지원한다. 촬영 시작일이 있는 production item은 backend에서 `calendar_events`에 자동 upsert된다. Calendar에서 production-linked event의 날짜를 바꾸면 production item의 촬영일도 갱신된다. 충돌 방지를 위해 production item 제목/콘티/메모는 production-board가 원본이고, calendar는 날짜/색상/상태만 편집한다.
+
+`/shop` 상품 카드는 Naver DataLab 검색어트렌드가 아니라 Naver 검색 API의 쇼핑 검색 endpoint로 daily collector가 수집한 cache를 사용한다. 일반 상품 조회는 Naver API를 즉시 호출하지 않는다. DataLab 검색어트렌드가 정상이어도 쇼핑 검색 권한이 없으면 daily shop collector가 실패할 수 있지만, `/shop`은 기존 cache 또는 기본 추천 장비 fallback을 보여준다. 쇼핑 검색 권한이 있는 별도 앱 키가 있으면 Render Backend에 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 설정한다. 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 사용한다.
 
 Admin의 `시스템` 섹션에서 `Naver Shopping API 테스트`를 실행하면 secret 값을 노출하지 않고 status code, errorCode, credential source를 확인할 수 있다.
 

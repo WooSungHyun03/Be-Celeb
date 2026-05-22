@@ -27,6 +27,7 @@ import { Toast } from "@/components/common/Toast";
 import { ROUTES } from "@/constants/routes";
 import {
   createProductionBoardChecklistItem,
+  createProductionItem,
   deleteProductionBoardChecklistItem,
   deleteProductionBoardItem,
   getProductionBoardChecklist,
@@ -34,6 +35,7 @@ import {
   updateProductionBoardChecklistItem,
   updateProductionBoardItemMemo,
   updateProductionBoardItemStatus,
+  updateProductionItem,
 } from "@/lib/api/production-board";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 import {
@@ -49,9 +51,10 @@ import { cn } from "@/utils/cn";
 
 const statusTone: Record<ProductionBoardStatus, "brand" | "info" | "warning" | "signal" | "default"> = {
   idea: "brand",
-  script: "info",
+  planned: "info",
   filming: "warning",
   editing: "signal",
+  scheduled: "info",
   uploaded: "default",
 };
 
@@ -68,6 +71,19 @@ const DEFAULT_CHECKLIST_ITEMS = [
 
 type StatusFilter = "all" | ProductionBoardStatus;
 type DetailTab = "recommendation" | "memo" | "checklist";
+type EditorMode = "create" | "edit";
+
+type ProductionItemForm = {
+  id?: string;
+  title: string;
+  description: string;
+  memo: string;
+  hashtags: string;
+  storyboard: string;
+  status: ProductionBoardStatus;
+  shootStartDate: string;
+  shootEndDate: string;
+};
 
 const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "전체" },
@@ -153,6 +169,83 @@ function storyboardPreview(storyboard: unknown) {
     .filter((value): value is string => Boolean(value));
 }
 
+function storyboardToText(storyboard: unknown) {
+  if (!Array.isArray(storyboard)) {
+    return "";
+  }
+  return storyboard
+    .map((scene) => {
+      if (typeof scene === "string") {
+        return scene;
+      }
+      if (typeof scene !== "object" || scene === null) {
+        return "";
+      }
+      const record = scene as Record<string, unknown>;
+      return (
+        toDisplayText(record.description) ??
+        toDisplayText(record.visual) ??
+        toDisplayText(record.dialogue) ??
+        toDisplayText(record.caption) ??
+        ""
+      );
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function parseHashtags(value: string) {
+  return value
+    .split(/[\s,]+/)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .map(normalizeHashtag);
+}
+
+function parseStoryboard(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line, index) => ({ scene: index + 1, description: line.trim() }))
+    .filter((scene) => scene.description);
+}
+
+function createEmptyProductionItemForm(): ProductionItemForm {
+  return {
+    title: "",
+    description: "",
+    memo: "",
+    hashtags: "",
+    storyboard: "",
+    status: "idea",
+    shootStartDate: "",
+    shootEndDate: "",
+  };
+}
+
+function formFromProductionItem(item: ProductionBoardItem): ProductionItemForm {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description ?? item.reason ?? "",
+    memo: item.memo ?? "",
+    hashtags: item.hashtags.join(" "),
+    storyboard: storyboardToText(item.storyboard),
+    status: item.status,
+    shootStartDate: item.shootStartDate ?? "",
+    shootEndDate: item.shootEndDate ?? item.shootStartDate ?? "",
+  };
+}
+
+function shootDateLabel(item: ProductionBoardItem) {
+  if (!item.shootStartDate) {
+    return null;
+  }
+  if (!item.shootEndDate || item.shootEndDate === item.shootStartDate) {
+    return item.shootStartDate;
+  }
+  return `${item.shootStartDate} - ${item.shootEndDate}`;
+}
+
 type ToastState = {
   message: string;
   tone: "success" | "error" | "info";
@@ -178,6 +271,7 @@ function ProductionBoardCard({ item, isMoving, isActiveDragItem, onOpenDetail, o
   const visibleTags = item.hashtags.slice(0, 3);
   const hiddenTagCount = Math.max(item.hashtags.length - visibleTags.length, 0);
   const memoText = memoPreview(item.memo);
+  const shootingDates = shootDateLabel(item);
   const checklistTotal = item.checklistTotal ?? 0;
   const checklistDone = item.checklistDone ?? 0;
   const checklistProgress = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0;
@@ -203,11 +297,14 @@ function ProductionBoardCard({ item, isMoving, isActiveDragItem, onOpenDetail, o
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={statusTone[item.status]}>{label}</Badge>
             {item.category ? <Badge>{item.category}</Badge> : null}
+            {item.calendarEventId ? <Badge tone="info">캘린더 반영됨</Badge> : null}
           </div>
           {item.status === "uploaded" ? <Badge tone="signal">완료됨</Badge> : null}
         </div>
         <h2 className="mt-3 line-clamp-2 text-base font-bold leading-6 text-ink">{item.title}</h2>
         {item.hook ? <p className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-slate-600">{item.hook}</p> : null}
+        {item.description ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{item.description}</p> : null}
+        {shootingDates ? <p className="mt-2 text-xs font-bold text-violet-700">촬영일 {shootingDates}</p> : null}
         {visibleTags.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {visibleTags.map((tag) => (
@@ -329,6 +426,7 @@ type ProductionBoardDetailPanelProps = {
   onClose: () => void;
   onDeleteChecklistItem: (checklistItem: ProductionBoardChecklistItem) => void;
   onDeleteItem: (item: ProductionBoardItem) => void;
+  onEditItem: (item: ProductionBoardItem) => void;
   onMoveNext: (item: ProductionBoardItem) => void;
   onSaveMemo: () => void;
   onToggleChecklistItem: (checklistItem: ProductionBoardChecklistItem) => void;
@@ -354,6 +452,7 @@ function ProductionBoardDetailPanel({
   onClose,
   onDeleteChecklistItem,
   onDeleteItem,
+  onEditItem,
   onMoveNext,
   onSaveMemo,
   onToggleChecklistItem,
@@ -462,6 +561,11 @@ function ProductionBoardDetailPanel({
             {item.recommendationId ? (
               <Link className="inline-flex text-sm font-bold text-violet-700 hover:text-violet-900" href={`/recommendations/${item.recommendationId}`}>
                 추천 상세 페이지로 이동
+              </Link>
+            ) : null}
+            {item.calendarEventId ? (
+              <Link className="inline-flex text-sm font-bold text-violet-700 hover:text-violet-900" href={ROUTES.calendar}>
+                연결된 캘린더 일정 보기
               </Link>
             ) : null}
           </section>
@@ -596,6 +700,9 @@ function ProductionBoardDetailPanel({
           ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button disabled={disabled} onClick={() => onEditItem(item)} variant="secondary">
+            카드 수정
+          </Button>
           <Button disabled={disabled} onClick={onClose} variant="secondary">
             닫기
           </Button>
@@ -607,6 +714,125 @@ function ProductionBoardDetailPanel({
         </div>
       </footer>
     </aside>
+  );
+}
+
+type ProductionItemEditorProps = {
+  form: ProductionItemForm;
+  mode: EditorMode;
+  saving: boolean;
+  onChange: (patch: Partial<ProductionItemForm>) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+};
+
+function ProductionItemEditor({ form, mode, saving, onChange, onClose, onSubmit }: ProductionItemEditorProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-slate-900/40 p-4 sm:items-center sm:justify-center">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-black text-ink">{mode === "create" ? "콘텐츠 직접 만들기" : "콘텐츠 카드 수정"}</h2>
+            <p className="mt-1 text-sm text-slate-500">제목, 메모, 해시태그, 콘티와 촬영 일정을 관리합니다.</p>
+          </div>
+          <Badge tone={statusTone[form.status]}>{PRODUCTION_BOARD_STATUS_LABELS[form.status]}</Badge>
+        </div>
+
+        <div className="mt-5 grid gap-4">
+          <label className="block text-sm font-semibold text-slate-700">
+            <span>제목</span>
+            <input
+              className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              onChange={(event) => onChange({ title: event.target.value })}
+              placeholder="예: 구독자가 바로 따라 하는 책상 셋업 루틴"
+              value={form.title}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">
+            <span>설명</span>
+            <textarea
+              className="mt-2 block min-h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              onChange={(event) => onChange({ description: event.target.value })}
+              value={form.description}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">
+            <span>해시태그</span>
+            <input
+              className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              onChange={(event) => onChange({ hashtags: event.target.value })}
+              placeholder="#브이로그 #촬영팁"
+              value={form.hashtags}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">
+            <span>콘티</span>
+            <textarea
+              className="mt-2 block min-h-32 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              onChange={(event) => onChange({ storyboard: event.target.value })}
+              placeholder={"한 줄에 한 장면씩 작성하세요.\n오프닝: 완성된 결과를 먼저 보여준다\n본론: 준비물과 촬영 구도를 설명한다"}
+              value={form.storyboard}
+            />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block text-sm font-semibold text-slate-700">
+              <span>상태</span>
+              <select
+                className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                onChange={(event) => onChange({ status: event.target.value as ProductionBoardStatus })}
+                value={form.status}
+              >
+                {VALID_PRODUCTION_BOARD_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {PRODUCTION_BOARD_STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              <span>촬영 시작일</span>
+              <input
+                className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                onChange={(event) =>
+                  onChange({
+                    shootStartDate: event.target.value,
+                    shootEndDate: event.target.value ? form.shootEndDate || event.target.value : "",
+                  })
+                }
+                type="date"
+                value={form.shootStartDate}
+              />
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              <span>촬영 종료일</span>
+              <input
+                className="mt-2 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                onChange={(event) => onChange({ shootEndDate: event.target.value })}
+                type="date"
+                value={form.shootEndDate}
+              />
+            </label>
+          </div>
+          <label className="block text-sm font-semibold text-slate-700">
+            <span>메모</span>
+            <textarea
+              className="mt-2 block min-h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              onChange={(event) => onChange({ memo: event.target.value })}
+              value={form.memo}
+            />
+          </label>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <Button disabled={saving} onClick={onClose} variant="ghost">
+            취소
+          </Button>
+          <Button disabled={saving} onClick={onSubmit}>
+            {saving ? "저장 중..." : "저장"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -630,6 +856,9 @@ export default function ProductionBoardPage() {
   const [checklistStatus, setChecklistStatus] = useState<"idle" | "loading" | "ready">("idle");
   const [checklistAdding, setChecklistAdding] = useState(false);
   const [checklistBusyId, setChecklistBusyId] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<EditorMode | null>(null);
+  const [editorForm, setEditorForm] = useState<ProductionItemForm | null>(null);
+  const [editorSaving, setEditorSaving] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
     useSensor(KeyboardSensor),
@@ -711,9 +940,10 @@ export default function ProductionBoardPage() {
       },
       {
         idea: [],
-        script: [],
+        planned: [],
         filming: [],
         editing: [],
+        scheduled: [],
         uploaded: [],
       },
     );
@@ -726,6 +956,82 @@ export default function ProductionBoardPage() {
     setSearchQuery("");
     setSelectedStatus("all");
     setSelectedCategory("all");
+  }
+
+  function openCreateEditor() {
+    setEditorMode("create");
+    setEditorForm(createEmptyProductionItemForm());
+    setToast(null);
+  }
+
+  function openEditEditor(item: ProductionBoardItem) {
+    setEditorMode("edit");
+    setEditorForm(formFromProductionItem(item));
+    setToast(null);
+  }
+
+  function closeEditor() {
+    if (editorSaving) {
+      return;
+    }
+    setEditorMode(null);
+    setEditorForm(null);
+  }
+
+  function updateEditorForm(patch: Partial<ProductionItemForm>) {
+    setEditorForm((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  async function handleSaveEditor() {
+    if (!editorForm || !editorMode) {
+      return;
+    }
+    if (!editorForm.title.trim()) {
+      setToast({ message: "콘텐츠 제목을 입력해 주세요.", tone: "error" });
+      return;
+    }
+    if (editorForm.shootStartDate && editorForm.shootEndDate && editorForm.shootEndDate < editorForm.shootStartDate) {
+      setToast({ message: "촬영 종료일은 시작일보다 빠를 수 없습니다.", tone: "error" });
+      return;
+    }
+
+    setEditorSaving(true);
+    setToast(null);
+    const payload = {
+      title: editorForm.title.trim(),
+      description: editorForm.description || null,
+      memo: editorForm.memo || null,
+      hashtags: parseHashtags(editorForm.hashtags),
+      storyboard: parseStoryboard(editorForm.storyboard),
+      status: editorForm.status,
+      shootStartDate: editorForm.shootStartDate || null,
+      shootEndDate: editorForm.shootEndDate || editorForm.shootStartDate || null,
+      metadata: { source: "manual" },
+    };
+
+    try {
+      const savedItem =
+        editorMode === "edit" && editorForm.id
+          ? await updateProductionItem(editorForm.id, payload)
+          : await createProductionItem(payload);
+      setItems((current) => {
+        const exists = current.some((item) => item.id === savedItem.id);
+        return exists
+          ? current.map((item) => (item.id === savedItem.id ? mergeBoardItemUpdate(item, savedItem) : item))
+          : [savedItem, ...current];
+      });
+      setDetailItem((current) => (current?.id === savedItem.id ? mergeBoardItemUpdate(current, savedItem) : current));
+      setEditorMode(null);
+      setEditorForm(null);
+      setToast({
+        message: savedItem.calendarEventId ? "콘텐츠와 촬영 일정이 저장되었습니다." : "콘텐츠 카드가 저장되었습니다.",
+        tone: "success",
+      });
+    } catch (error) {
+      setToast({ message: error instanceof Error ? error.message : "콘텐츠 저장에 실패했습니다.", tone: "error" });
+    } finally {
+      setEditorSaving(false);
+    }
   }
 
   async function moveItemToStatus(item: ProductionBoardItem, targetStatus: ProductionBoardStatus, successMessage: string) {
@@ -1023,11 +1329,14 @@ export default function ProductionBoardPage() {
     <div className={cn("min-h-[calc(100vh-80px)] space-y-8 transition-[padding] duration-200", isDetailOpen ? "xl:pr-[520px]" : "")}>
       <PageHeader
         action={
-          <Link href={ROUTES.favorites}>
-            <Button>즐겨찾기한 아이디어 보기</Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={openCreateEditor}>콘텐츠 직접 만들기</Button>
+            <Link href={ROUTES.favorites}>
+              <Button variant="secondary">즐겨찾기한 아이디어 보기</Button>
+            </Link>
+          </div>
         }
-        description="즐겨찾기한 추천 아이디어 중 실제로 제작할 콘텐츠만 모아두는 보드입니다."
+        description="직접 만든 콘텐츠와 즐겨찾기한 추천 아이디어를 제작 단계와 촬영 일정으로 관리합니다."
         title="제작 보드"
       />
 
@@ -1097,11 +1406,14 @@ export default function ProductionBoardPage() {
       {items.length === 0 ? (
         <EmptyState
           action={
-            <Link href={ROUTES.favorites}>
-              <Button>즐겨찾기한 아이디어에서 추가하기</Button>
-            </Link>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={openCreateEditor}>콘텐츠 직접 만들기</Button>
+              <Link href={ROUTES.favorites}>
+                <Button variant="secondary">즐겨찾기에서 추가하기</Button>
+              </Link>
+            </div>
           }
-          description="즐겨찾기한 아이디어에서 제작 보드에 추가해보세요."
+          description="직접 콘텐츠를 만들거나 즐겨찾기한 아이디어에서 제작 보드에 추가해보세요."
           title="아직 제작 보드에 추가된 아이디어가 없습니다"
         />
       ) : (
@@ -1125,7 +1437,7 @@ export default function ProductionBoardPage() {
             sensors={sensors}
           >
             <div className={cn("min-h-[calc(100vh-360px)] pb-3", isDetailOpen ? "overflow-x-auto" : "overflow-x-visible")}>
-              <div className={cn(isDetailOpen ? "flex min-w-max gap-4" : "grid grid-cols-5 gap-4")}>
+              <div className={cn(isDetailOpen ? "flex min-w-max gap-4" : "grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6")}>
                 {PRODUCTION_BOARD_COLUMNS.map((column) => (
                   <ProductionBoardColumn
                     activeId={activeId}
@@ -1163,10 +1475,21 @@ export default function ProductionBoardPage() {
         onClose={handleCloseDetail}
         onDeleteChecklistItem={(item) => void handleDeleteChecklistItem(item)}
         onDeleteItem={(item) => void handleDeleteItem(item)}
+        onEditItem={openEditEditor}
         onMoveNext={handleMoveNext}
         onSaveMemo={() => void handleSaveMemo()}
         onToggleChecklistItem={(item) => void handleToggleChecklistItem(item)}
       />
+      {editorMode && editorForm ? (
+        <ProductionItemEditor
+          form={editorForm}
+          mode={editorMode}
+          onChange={updateEditorForm}
+          onClose={closeEditor}
+          onSubmit={() => void handleSaveEditor()}
+          saving={editorSaving}
+        />
+      ) : null}
     </div>
   );
 }

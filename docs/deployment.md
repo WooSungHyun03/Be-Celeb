@@ -99,6 +99,10 @@ GET  /api/favorites
 POST /api/favorites
 PATCH /api/favorites/{favorite_id}
 DELETE /api/favorites/{favorite_id}
+GET  /api/production-items
+POST /api/production-items
+PATCH /api/production-items/{id}
+DELETE /api/production-items/{id}
 GET  /api/calendar/events?start=YYYY-MM-DD&end=YYYY-MM-DD
 POST /api/calendar/events
 PATCH /api/calendar/events/{event_id}
@@ -106,7 +110,8 @@ DELETE /api/calendar/events/{event_id}
 GET  /api/growth-report
 POST /api/growth-report/refresh
 GET  /api/shop/sections
-GET  /api/shop/products?equipmentCategory=카메라&limit=8&refresh=false
+GET  /api/shop/products?equipmentCategory=카메라&limit=8&sort=popular
+GET  /api/shop/sets
 POST /api/cron/collect-shop-products
 GET  /api/admin/llm-prompts
 GET  /api/trends/popular-videos
@@ -145,12 +150,14 @@ Dashboard의 기본 추천 플로우는 1회 LLM 호출 API와 결과 조회 API
 
 LLM `max_tokens`는 선택 옵션에 따라 동적으로 증가한다. 기본 추천은 1200~1600 수준, 추천이유/해시태그 중심은 약 1800, 콘티 포함 시 3500~5000, 콘티와 hook/thumbnail/uploadTips를 모두 포함하면 5000~7000 범위를 사용한다. `storyboard=true`일 때는 8~12 scene, scene별 `duration`, `visual`, `dialogue`, `caption`, `shootingTip`을 요구한다.
 
-## Favorites / Calendar / Growth Report
+## Favorites / Production Board / Calendar / Growth Report
 
-사용자 생산 워크플로우는 다음 테이블에 저장된다. migration은 `supabase/migrations/20260519001000_planning_growth_features.sql`이다.
+사용자 생산 워크플로우는 다음 테이블에 저장된다. 기본 migration은 `supabase/migrations/20260519001000_planning_growth_features.sql`이고, 제작 보드/캘린더 연동 확장은 `supabase/migrations/20260522004000_production_calendar_schedule_link.sql`이다.
 
 - `favorites`: 추천 결과 또는 콘텐츠 아이디어 즐겨찾기 목록. `recommendation_id`, `title`, `reason`, `hashtags`, `storyboard`, `source`를 저장한다.
-- `calendar_events`: 업로드 예정일과 제작 상태. `planned`, `scripted`, `filmed`, `edited`, `uploaded` 상태를 사용한다.
+- `production_board_items`: 직접 만든 콘텐츠 또는 즐겨찾기/추천 결과에서 전환한 제작 카드. `title`, `description`, `hashtags`, `storyboard`, `status`, `shoot_start_date`, `shoot_end_date`, `calendar_event_id`를 저장한다.
+- `production_items`: `production_board_items`를 노출하는 compatibility view. API는 기존 테이블을 기준으로 동작한다.
+- `calendar_events`: 업로드/촬영 일정. `start_date`, `end_date`, `color`, `production_item_id`, `metadata`로 multi-day 일정과 제작 보드 연동을 지원한다.
 - `channel_growth_snapshots`: YouTube 채널의 구독자 수, 전체 조회수, 영상 수, 최근 영상 통계를 스냅샷으로 저장한다.
 - `video_growth_snapshots`: 최근 영상별 조회수, 좋아요, 댓글 스냅샷을 저장한다. migration은 `supabase/migrations/20260522001000_video_growth_snapshots.sql`이다.
 
@@ -158,12 +165,21 @@ Frontend 라우트:
 
 ```text
 /favorites
+/production-board
 /calendar
 /growth-report
 /growth-report/videos/[videoId]
 ```
 
-`/favorites`는 추천 결과에서 저장한 즐겨찾기를 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다. 최근 영상 성과를 클릭하면 `/growth-report/videos/[videoId]`로 이동해 영상별 조회수, 좋아요, 댓글 추이 그래프를 확인한다.
+`/favorites`는 추천 결과에서 저장한 즐겨찾기를 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/production-board`는 직접 콘텐츠를 만들거나 즐겨찾기/추천 결과에서 제작 카드로 전환하며, 제목/설명/해시태그/콘티/메모/촬영일을 관리한다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. 일정은 색상과 시작일/종료일을 가질 수 있고, multi-day 일정은 범위 내 각 날짜 칸에 표시된다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다. 최근 영상 성과를 클릭하면 `/growth-report/videos/[videoId]`로 이동해 영상별 조회수, 좋아요, 댓글 추이 그래프를 확인한다.
+
+Production board와 calendar 연동 정책:
+
+- production item에 `shoot_start_date`가 있으면 backend가 `calendar_events`를 자동 upsert한다.
+- 생성된 calendar event는 `metadata.source = "production-board"`와 `metadata.productionItemId`를 가진다.
+- production item의 촬영 시작일/종료일을 수정하면 연결된 calendar event의 `start_date`/`end_date`도 갱신된다.
+- calendar에서 production-linked event의 날짜를 수정하면 production item의 `shoot_start_date`/`shoot_end_date`도 갱신된다.
+- production item에서 촬영일을 제거하면 연결된 calendar event를 삭제하고 `calendar_event_id`를 비운다.
 
 Growth report 그래프:
 
@@ -214,10 +230,11 @@ X-Naver-Client-Secret: NAVER_SHOPPING_CLIENT_SECRET 또는 NAVER_CLIENT_SECRET
 
 검색어트렌드 DataLab은 `POST /v1/datalab/search`를 사용하지만 `/shop` 상품 카드는 `GET /v1/search/shop.json`을 사용한다. 두 API는 Naver Developers 권한이 다르다. DataLab 검색어트렌드가 정상이어도 “검색 API / 쇼핑 검색” 권한이 없는 키면 `/shop`은 fallback을 표시한다. 운영에서는 쇼핑 검색 권한이 있는 별도 앱 키를 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 넣는 것을 권장한다. 이 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`으로 fallback한다.
 
-저장 테이블은 migration `supabase/migrations/20260519002000_creator_shop_products.sql`와 장비 섹션 전환 migration `supabase/migrations/20260520001000_shop_equipment_store.sql`에 포함되어 있다.
+저장 테이블은 migration `supabase/migrations/20260519002000_creator_shop_products.sql`, 장비 섹션 전환 migration `supabase/migrations/20260520001000_shop_equipment_store.sql`, 캐시 상점 확장 migration `supabase/migrations/20260522003000_shop_cache_storefront.sql`에 포함되어 있다.
 
 - `creator_shop_keywords`: 장비 섹션별 active 쇼핑 검색어
-- `creator_shop_products`: Naver Shopping 상품 캐시. `source`, `source_product_id`, `equipment_category`, `search_keyword` 기준 upsert
+- `creator_shop_products`: Naver Shopping 상품 캐시. `source`, `source_product_id`, `equipment_category`, `search_keyword` 기준 upsert. `popularity_score`, `recommended_level`, `collected_at`으로 상점 정렬과 세트 필터를 지원
+- `creator_shop_sets`: 입문용/중급자용/고급자용 장비 세트 설명
 - `creator_shop_collection_logs`: daily shop 수집 결과와 오류 요약
 
 기본 장비 섹션과 검색어 seed:
@@ -236,12 +253,13 @@ X-Naver-Client-Secret: NAVER_SHOPPING_CLIENT_SECRET 또는 NAVER_CLIENT_SECRET
 API 동작:
 
 - `GET /api/shop/sections`: 기본 장비 섹션과 검색어 반환
-- `GET /api/shop/products?equipmentCategory=카메라&limit=8`: cache 우선 반환. `equipmentCategory`가 없으면 모든 기본 섹션 반환
-- cache가 부족하거나 `refresh=true`면 Naver Shopping API 호출 후 upsert
-- Naver API 실패, quota, 네트워크 오류, 인증 오류가 있어도 페이지 전체를 깨지 않고 cache 또는 fallback 추천 검색 섹션을 반환
+- `GET /api/shop/products?equipmentCategory=카메라&limit=8&sort=popular`: DB cache만 조회. `equipmentCategory`가 없으면 모든 기본 섹션 반환
+- `sort`는 `popular`, `price_asc`, `price_desc`, `latest`를 지원한다. `level=beginner|intermediate|advanced`로 세트 수준 상품만 볼 수 있다.
+- `GET /api/shop/sets`: 입문용, 중급자용, 고급자용 장비 세트 반환
+- cache가 비어 있거나 DB 조회가 실패하면 Naver API를 즉시 호출하지 않고 기본 curated fallback 장비를 반환
 - `POST /api/cron/collect-shop-products`: `CRON_SECRET` 검증 후 active keyword 전체 daily 수집
 
-Shop 페이지는 광고/제휴 링크가 아니라 Naver Shopping 검색 결과임을 표시한다. `source` 컬럼은 추후 Coupang Partners 같은 다른 source를 추가할 수 있도록 유지한다.
+Shop 페이지는 광고/제휴 링크가 아니라 매일 수집된 쇼핑 cache 기반 장비 목록이다. Naver API 호출은 daily collector 또는 admin 테스트/수집에서만 실행한다. `source` 컬럼은 추후 Coupang Partners 같은 다른 source를 추가할 수 있도록 유지한다.
 
 Naver Shopping 401 `errorCode: 024`는 보통 “Scope Status Invalid / Authentication failed”다. 코드에서는 endpoint와 header를 다음처럼 고정한다.
 
@@ -432,6 +450,14 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/favorites" \
 curl "$NEXT_PUBLIC_API_BASE_URL/api/calendar/events?start=2026-05-01&end=2026-05-31" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 
+curl "$NEXT_PUBLIC_API_BASE_URL/api/production-items" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/production-items" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"촬영할 콘텐츠 아이디어","hashtags":["#촬영"],"storyboard":[{"scene":1,"description":"오프닝"}],"shootStartDate":"2026-05-10","shootEndDate":"2026-05-12"}'
+
 curl "$NEXT_PUBLIC_API_BASE_URL/api/growth-report" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 
@@ -446,10 +472,12 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/sections"
 
 curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?limit=8"
 
-curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?equipmentCategory=%EC%B9%B4%EB%A9%94%EB%9D%BC&limit=8&refresh=true"
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?equipmentCategory=%EC%B9%B4%EB%A9%94%EB%9D%BC&limit=8&sort=price_asc"
+
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/sets"
 ```
 
-404가 아니고 섹션별 상품, cache, fallback 중 하나가 나오면 path 연결은 정상이다. Naver 인증 오류가 있어도 `/shop` 화면은 “실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다.” 안내와 fallback 상품을 표시해야 한다. 실제 401 `errorCode: 024`, query, env 존재 여부는 backend logger에만 남긴다.
+404가 아니고 섹션별 상품, cache, fallback 중 하나가 나오면 path 연결은 정상이다. Naver 인증 오류가 있어도 `/shop` 상품 조회 API는 외부 API를 즉시 호출하지 않으며, 화면은 cache 또는 기본 추천 장비를 표시해야 한다. 실제 401 `errorCode: 024`, query, env 존재 여부는 collector/admin test backend logger에만 남긴다.
 
 ## Cron
 
