@@ -9,6 +9,15 @@ from app.core.config import get_settings
 from app.core.exceptions import BadRequestException, BackendApiError, missing_env
 from app.domains.calendar.schemas import CalendarEventPayload, CalendarEventUpdatePayload
 
+CALENDAR_EVENT_SELECT = (
+    "id,user_id,favorite_id,production_item_id,title,description,scheduled_date,start_date,end_date,"
+    "start_time,end_time,status,color,platform,metadata,created_at,updated_at"
+)
+CALENDAR_EVENT_LEGACY_SELECT = (
+    "id,user_id,favorite_id,title,description,scheduled_date,start_time,end_time,status,platform,metadata,created_at,updated_at"
+)
+CALENDAR_EVENT_NEW_COLUMNS = {"production_item_id", "start_date", "end_date", "color"}
+
 
 def _supabase_url() -> str:
     settings = get_settings()
@@ -55,6 +64,15 @@ async def _request(
             "SUPABASE_ERROR",
         )
     return response.json() if response.text else None
+
+
+def _is_missing_column_error(error: Exception) -> bool:
+    text = str(error)
+    return "42703" in text or "does not exist" in text
+
+
+def _legacy_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if key not in CALENDAR_EVENT_NEW_COLUMNS}
 
 
 def _validate_date(value: str, field: str) -> str:
@@ -121,7 +139,7 @@ def _event_from_row(row: dict[str, Any]) -> dict[str, Any]:
 
 async def list_calendar_events(user_id: str, start: str | None = None, end: str | None = None) -> dict[str, Any]:
     params: dict[str, Any] = {
-        "select": "id,user_id,favorite_id,production_item_id,title,description,scheduled_date,start_date,end_date,start_time,end_time,status,color,platform,metadata,created_at,updated_at",
+        "select": CALENDAR_EVENT_SELECT,
         "user_id": f"eq.{user_id}",
         "order": "start_date.asc,start_time.asc.nullslast,created_at.asc",
     }
@@ -130,7 +148,23 @@ async def list_calendar_events(user_id: str, start: str | None = None, end: str 
     if start:
         _validate_date(start, "start")
 
-    rows = await _request("GET", "calendar_events", params=params)
+    try:
+        rows = await _request("GET", "calendar_events", params=params)
+    except BackendApiError as error:
+        if not _is_missing_column_error(error):
+            raise
+        legacy_params: dict[str, Any] = {
+            "select": CALENDAR_EVENT_LEGACY_SELECT,
+            "user_id": f"eq.{user_id}",
+            "order": "scheduled_date.asc,start_time.asc.nullslast,created_at.asc",
+        }
+        if start and end:
+            legacy_params["and"] = f"(scheduled_date.gte.{_validate_date(start, 'start')},scheduled_date.lte.{_validate_date(end, 'end')})"
+        elif start:
+            legacy_params["scheduled_date"] = f"gte.{_validate_date(start, 'start')}"
+        elif end:
+            legacy_params["scheduled_date"] = f"lte.{_validate_date(end, 'end')}"
+        rows = await _request("GET", "calendar_events", params=legacy_params)
     filtered_rows: list[dict[str, Any]] = []
     range_start = _date_or_none(start)
     range_end = _date_or_none(end)
@@ -171,7 +205,17 @@ async def create_calendar_event(user_id: str, payload: CalendarEventPayload) -> 
         "platform": payload.platform,
         "metadata": metadata,
     }
-    rows = await _request("POST", "calendar_events", payload=row_payload, prefer="return=representation")
+    try:
+        rows = await _request("POST", "calendar_events", payload=row_payload, prefer="return=representation")
+    except BackendApiError as error:
+        if not _is_missing_column_error(error):
+            raise
+        rows = await _request(
+            "POST",
+            "calendar_events",
+            payload=_legacy_event_payload(row_payload),
+            prefer="return=representation",
+        )
     row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not row:
         raise BackendApiError("Calendar event insert did not return a row.", 502, "SUPABASE_ERROR")
@@ -209,13 +253,27 @@ async def update_calendar_event(user_id: str, event_id: str, payload: CalendarEv
         patch["end_date"] = _validate_date(end_date, "endDate") if isinstance(end_date, str) and end_date else None
     if not patch:
         raise BadRequestException("No fields to update.", "VALIDATION_ERROR")
-    rows = await _request(
-        "PATCH",
-        "calendar_events",
-        params={"id": f"eq.{event_id}", "user_id": f"eq.{user_id}"},
-        payload=patch,
-        prefer="return=representation",
-    )
+    try:
+        rows = await _request(
+            "PATCH",
+            "calendar_events",
+            params={"id": f"eq.{event_id}", "user_id": f"eq.{user_id}"},
+            payload=patch,
+            prefer="return=representation",
+        )
+    except BackendApiError as error:
+        if not _is_missing_column_error(error):
+            raise
+        legacy_patch = _legacy_event_payload(patch)
+        if "start_date" in patch and "scheduled_date" not in legacy_patch:
+            legacy_patch["scheduled_date"] = patch["start_date"]
+        rows = await _request(
+            "PATCH",
+            "calendar_events",
+            params={"id": f"eq.{event_id}", "user_id": f"eq.{user_id}"},
+            payload=legacy_patch,
+            prefer="return=representation",
+        )
     row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not row:
         raise BackendApiError("Calendar event not found.", 404, "NOT_FOUND")

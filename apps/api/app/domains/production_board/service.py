@@ -21,9 +21,15 @@ PRODUCTION_BOARD_SELECT = (
     "id,user_id,favorite_id,recommendation_id,calendar_event_id,title,description,hook,reason,hashtags,storyboard,category,"
     "status,priority,memo,shoot_start_date,shoot_end_date,metadata,due_date,upload_scheduled_at,created_at,updated_at"
 )
+PRODUCTION_BOARD_LEGACY_SELECT = (
+    "id,user_id,favorite_id,recommendation_id,title,hook,reason,hashtags,storyboard,category,"
+    "status,priority,memo,due_date,upload_scheduled_at,created_at,updated_at"
+)
 CHECKLIST_SELECT = "id,board_item_id,user_id,text,is_done,sort_order,created_at,updated_at"
 PRODUCTION_BOARD_STATUSES = ("idea", "planned", "filming", "editing", "scheduled", "uploaded")
 PRODUCTION_CALENDAR_COLOR = "#7c3aed"
+PRODUCTION_BOARD_NEW_COLUMNS = {"calendar_event_id", "description", "shoot_start_date", "shoot_end_date", "metadata"}
+LEGACY_STATUS_MAP = {"planned": "script", "scheduled": "editing"}
 
 
 class ProductionBoardAlreadyAddedError(BackendApiError):
@@ -78,6 +84,73 @@ async def _request(
             "SUPABASE_ERROR",
         )
     return response.json() if response.text else None
+
+
+def _is_schema_compat_error(error: Exception) -> bool:
+    text = str(error)
+    return (
+        "42703" in text
+        or "does not exist" in text
+        or "production_board_items_status_check" in text
+        or "violates check constraint" in text
+    )
+
+
+def _legacy_board_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    legacy = {key: value for key, value in payload.items() if key not in PRODUCTION_BOARD_NEW_COLUMNS}
+    status = legacy.get("status")
+    if isinstance(status, str):
+        legacy["status"] = LEGACY_STATUS_MAP.get(status, status)
+    return legacy
+
+
+async def _get_board_rows(params: dict[str, Any]) -> Any:
+    try:
+        return await _request("GET", "production_board_items", params={**params, "select": PRODUCTION_BOARD_SELECT})
+    except BackendApiError as error:
+        if not _is_schema_compat_error(error):
+            raise
+        return await _request("GET", "production_board_items", params={**params, "select": PRODUCTION_BOARD_LEGACY_SELECT})
+
+
+async def _post_board_item(payload: dict[str, Any]) -> Any:
+    try:
+        return await _request(
+            "POST",
+            f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+            payload=payload,
+            prefer="return=representation",
+        )
+    except BackendApiError as error:
+        if not _is_schema_compat_error(error):
+            raise
+        return await _request(
+            "POST",
+            f"production_board_items?select={PRODUCTION_BOARD_LEGACY_SELECT}",
+            payload=_legacy_board_payload(payload),
+            prefer="return=representation",
+        )
+
+
+async def _patch_board_item(params: dict[str, Any], payload: dict[str, Any]) -> Any:
+    try:
+        return await _request(
+            "PATCH",
+            f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+            params=params,
+            payload=payload,
+            prefer="return=representation",
+        )
+    except BackendApiError as error:
+        if not _is_schema_compat_error(error):
+            raise
+        return await _request(
+            "PATCH",
+            f"production_board_items?select={PRODUCTION_BOARD_LEGACY_SELECT}",
+            params=params,
+            payload=_legacy_board_payload(payload),
+            prefer="return=representation",
+        )
 
 
 def _as_string_list(value: Any) -> list[str]:
@@ -278,14 +351,11 @@ async def _find_existing_board_item(
 
 
 async def list_production_board_items(user_id: str) -> dict[str, Any]:
-    rows = await _request(
-        "GET",
-        "production_board_items",
-        params={
-            "select": PRODUCTION_BOARD_SELECT,
+    rows = await _get_board_rows(
+        {
             "user_id": f"eq.{user_id}",
             "order": "created_at.desc",
-        },
+        }
     )
     raw_items = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     item_ids = [row["id"] for row in raw_items if isinstance(row.get("id"), str)]
@@ -321,15 +391,12 @@ async def list_production_board_items(user_id: str) -> dict[str, Any]:
 
 
 async def _find_board_item_by_id(user_id: str, item_id: str) -> dict[str, Any]:
-    rows = await _request(
-        "GET",
-        "production_board_items",
-        params={
-            "select": PRODUCTION_BOARD_SELECT,
+    rows = await _get_board_rows(
+        {
             "id": f"eq.{item_id}",
             "user_id": f"eq.{user_id}",
             "limit": "1",
-        },
+        }
     )
     row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not row:
@@ -436,15 +503,12 @@ async def update_production_board_item_status(
     if requested_status == current_status:
         return {"item": _item_from_row(current_row)}
 
-    rows = await _request(
-        "PATCH",
-        f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+    rows = await _patch_board_item(
         params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
         payload={
             "status": requested_status,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
-        prefer="return=representation",
     )
     updated_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not updated_row:
@@ -462,15 +526,12 @@ async def update_production_board_item_memo(
 ) -> dict[str, Any]:
     await _find_board_item_by_id(user_id, item_id)
     memo = payload.memo
-    rows = await _request(
-        "PATCH",
-        f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+    rows = await _patch_board_item(
         params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
         payload={
             "memo": memo,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
-        prefer="return=representation",
     )
     updated_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not updated_row:
@@ -638,12 +699,7 @@ async def add_production_board_item(user_id: str, payload: ProductionBoardCreate
             "shoot_end_date": shoot_end_date,
             "metadata": payload.metadata or {"source": "manual"},
         }
-        rows = await _request(
-            "POST",
-            f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
-            payload=row_payload,
-            prefer="return=representation",
-        )
+        rows = await _post_board_item(row_payload)
         row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
         if not row:
             raise BackendApiError("Production board item insert did not return a row.", 502, "SUPABASE_ERROR")
@@ -690,12 +746,7 @@ async def add_production_board_item(user_id: str, payload: ProductionBoardCreate
         "metadata": {"source": "favorite"},
     }
     try:
-        rows = await _request(
-            "POST",
-            f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
-            payload=row_payload,
-            prefer="return=representation",
-        )
+        rows = await _post_board_item(row_payload)
     except BackendApiError as error:
         if error.status_code == 409:
             existing_after_conflict = await _find_existing_board_item(
@@ -736,12 +787,9 @@ async def update_production_board_item(
     if not patch:
         raise BadRequestException("No fields to update.", "VALIDATION_ERROR")
     patch["updated_at"] = datetime.now(timezone.utc).isoformat()
-    rows = await _request(
-        "PATCH",
-        f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+    rows = await _patch_board_item(
         params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
         payload=patch,
-        prefer="return=representation",
     )
     row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not row:
