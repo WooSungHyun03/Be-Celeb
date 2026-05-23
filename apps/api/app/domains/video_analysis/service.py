@@ -351,11 +351,12 @@ async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, st
     with tempfile.TemporaryDirectory() as temp_dir:
         outtmpl = str(Path(temp_dir) / "%(id)s.%(ext)s")
         options = {
-            "format": "bestaudio/best",
+            "format": "worstaudio[filesize<24M]/worstaudio[filesize_approx<24M]/worstaudio/worst",
             "outtmpl": outtmpl,
             "quiet": True,
             "noplaylist": True,
             "max_filesize": settings.video_analysis_max_bytes,
+            "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
         }
         try:
             with YoutubeDL(options) as downloader:
