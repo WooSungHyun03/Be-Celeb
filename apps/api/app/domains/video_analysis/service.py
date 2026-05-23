@@ -34,6 +34,11 @@ YOUTUBE_COOKIE_REQUIRED_MARKERS = (
     "not a bot",
     "Use --cookies-from-browser or --cookies",
 )
+YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS = (
+    "This live event will begin",
+    "Premieres in",
+    "not made this video available in your country",
+)
 
 SELECT_COLUMNS = (
     "id,user_id,influencer_video_id,youtube_video_id,title,video_url,transcript,"
@@ -377,6 +382,12 @@ async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, st
                     "YouTube requires a signed-in cookies file for this video.",
                     409,
                     "YOUTUBE_REQUIRES_COOKIES",
+                ) from error
+            if any(marker in error_message for marker in YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS):
+                raise BackendApiError(
+                    "This YouTube video is not currently available for transcript analysis.",
+                    409,
+                    "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
                 ) from error
             raise BackendApiError(f"YouTube audio extraction failed: {error}", 502, "YOUTUBE_AUDIO_EXTRACTION_FAILED") from error
         if not downloaded.exists():
