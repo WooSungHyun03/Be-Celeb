@@ -31,7 +31,7 @@ async def recommend_content(
 ) -> ApiResponse[SingleRecommendContentResponse] | JSONResponse:
     try:
         user = await get_user_from_access_token(access_token_from_authorization(authorization))
-        result = await create_single_content_recommendation(request.channel_url, request.category, user.get("id") if user else None, request.options)
+        result = await create_single_content_recommendation(request.channel_url, request.category, user.get("id") if user else None, request.options, request.videoAnalysisId)
         return ApiResponse(success=True, data=result)
     except Exception as error:
         return error_response(error)
@@ -63,9 +63,13 @@ async def recommendation_options(request: RecommendContentRequest) -> ApiRespons
         return error_response(error)
 
 
-async def content_plan(request: GenerateContentPlanRequest) -> ApiResponse[ContentPlanResponse] | JSONResponse:
+async def content_plan(
+    request: GenerateContentPlanRequest,
+    authorization: str | None = Header(default=None),
+) -> ApiResponse[ContentPlanResponse] | JSONResponse:
     try:
-        return ApiResponse(success=True, data=await create_content_plan(request.analysisId, request.option))
+        user = await get_user_from_access_token(access_token_from_authorization(authorization))
+        return ApiResponse(success=True, data=await create_content_plan(request.analysisId, request.option, request.videoAnalysisId, user.get("id") if user else None))
     except Exception as error:
         return error_response(error)
 

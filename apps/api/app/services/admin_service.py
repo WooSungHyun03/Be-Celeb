@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.errors import BackendApiError, missing_env
 from app.core.logging import get_logger
 from app.domains.shop.service import check_naver_shopping_connection
+from app.domains.video_analysis.service import create_video_analysis_from_youtube_video
 from app.schemas.admin import AdminCollectionSummary, AdminOverview, AdminSystemStatus, AdminTestResult
 from app.services.llm_service import call_local_llm
 from app.services.youtube_service import get_channel_info, get_recent_videos
@@ -848,11 +849,34 @@ async def _collect_daily_channel(
                 }
                 for video in last_day_videos
             ]
-            await _post(
+            inserted_rows = await _post(
                 "influencer_videos?on_conflict=youtube_video_id",
                 upsert_rows,
-                prefer="resolution=merge-duplicates,return=minimal",
+                prefer="resolution=merge-duplicates,return=representation",
             )
+            videos_analyzed = 0
+            video_analysis_errors: list[dict[str, Any]] = []
+            inserted_videos = [item for item in inserted_rows if isinstance(item, dict)] if isinstance(inserted_rows, list) else []
+            for inserted_video in inserted_videos:
+                youtube_video_id = inserted_video.get("youtube_video_id")
+                if not isinstance(youtube_video_id, str) or not youtube_video_id:
+                    continue
+                try:
+                    result = await create_video_analysis_from_youtube_video(
+                        youtube_video_id,
+                        influencer_video_id=inserted_video.get("id") if isinstance(inserted_video.get("id"), str) else None,
+                        title=inserted_video.get("title") if isinstance(inserted_video.get("title"), str) else None,
+                    )
+                    if result:
+                        videos_analyzed += 1
+                except Exception as error:
+                    video_analysis_errors.append(
+                        {
+                            "youtubeVideoId": youtube_video_id,
+                            "title": inserted_video.get("title"),
+                            "message": str(error),
+                        }
+                    )
             await _sync_video_categories_for_youtube_ids(
                 [video.youtubeVideoId for video in last_day_videos if isinstance(video.youtubeVideoId, str)],
                 category_ids,
@@ -863,12 +887,20 @@ async def _collect_daily_channel(
                 len(last_day_videos),
                 len(upsert_rows),
             )
-            return {"videosFound": len(last_day_videos), "videosUpserted": len(upsert_rows), "error": None}
+            return {
+                "videosFound": len(last_day_videos),
+                "videosUpserted": len(upsert_rows),
+                "videosAnalyzed": videos_analyzed,
+                "videoAnalysisErrors": video_analysis_errors,
+                "error": None,
+            }
         except Exception as error:
             logger.exception("Daily YouTube collection failed for channel=%s", channel_identifier)
             return {
                 "videosFound": 0,
                 "videosUpserted": 0,
+                "videosAnalyzed": 0,
+                "videoAnalysisErrors": [],
                 "error": {
                     "category": category_names.get(row.get("category_id")),
                     "categories": [category_names.get(category_id, category_id) for category_id in _category_ids_for_channel_row(row, category_ids_by_channel)],
@@ -901,8 +933,10 @@ async def collect_admin_now() -> AdminCollectionSummary:
         [row["id"] for row in channels if isinstance(row.get("id"), str)],
     )
     errors: list[dict[str, Any]] = []
+    video_analysis_errors: list[dict[str, Any]] = []
     videos_found = 0
     videos_upserted = 0
+    videos_analyzed = 0
 
     try:
         logger.info("Daily YouTube collection started: channels=%s concurrency=%s", len(channels), DAILY_COLLECTION_CONCURRENCY)
@@ -924,6 +958,10 @@ async def collect_admin_now() -> AdminCollectionSummary:
         for result in results:
             videos_found += int(result.get("videosFound") or 0)
             videos_upserted += int(result.get("videosUpserted") or 0)
+            videos_analyzed += int(result.get("videosAnalyzed") or 0)
+            result_video_analysis_errors = result.get("videoAnalysisErrors")
+            if isinstance(result_video_analysis_errors, list):
+                video_analysis_errors.extend(error for error in result_video_analysis_errors if isinstance(error, dict))
             if result.get("error"):
                 errors.append(result["error"])
 
@@ -935,13 +973,17 @@ async def collect_admin_now() -> AdminCollectionSummary:
             channelsChecked=len(channels),
             videosFoundLast24h=videos_found,
             videosUpserted=videos_upserted,
+            videosAnalyzed=videos_analyzed,
+            videoAnalysisErrors=video_analysis_errors,
             errors=errors,
         )
         await _finish_collection_log(
             log_id,
-            "partial_success" if errors else "success",
+            "partial_success" if errors or video_analysis_errors else "success",
             summary.model_dump(mode="json"),
-            f"{len(errors)} channel(s) failed." if errors else None,
+            f"{len(errors)} channel(s), {len(video_analysis_errors)} video analysis item(s) failed."
+            if errors or video_analysis_errors
+            else None,
         )
         await _audit("collect_now", "collection_logs", log_id, summary.model_dump(mode="json"))
         return summary

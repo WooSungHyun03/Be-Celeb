@@ -36,6 +36,7 @@ class RecommendContentRequest(BaseModel):
     channel_url: str = Field(alias="channelUrl", min_length=1)
     category: str | None = None
     options: RecommendationFieldOptions | None = None
+    videoAnalysisId: str | None = None
 
 
 class AnalyzeChannelRequest(BaseModel):
@@ -166,6 +167,7 @@ class GenerateContentPlanOptionInput(BaseModel):
 class GenerateContentPlanRequest(BaseModel):
     analysisId: str
     option: GenerateContentPlanOptionInput
+    videoAnalysisId: str | None = None
 
 
 class ContentPlan(BaseModel):
@@ -175,6 +177,9 @@ class ContentPlan(BaseModel):
     thumbnailIdea: str | None = None
     targetAudience: str | None = None
     hook: str | None = None
+    toneAnalysis: str | None = None
+    captionStyle: str | None = None
+    flowSummary: str | None = None
     storyboard: list[StoryboardScene] = Field(default_factory=list)
     uploadTips: list[str] = Field(default_factory=list)
 

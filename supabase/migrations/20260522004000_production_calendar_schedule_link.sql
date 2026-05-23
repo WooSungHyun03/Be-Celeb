@@ -34,6 +34,13 @@ alter table public.production_board_items
   add column if not exists shoot_end_date date,
   add column if not exists metadata jsonb not null default '{}'::jsonb;
 
+alter table public.production_board_items
+  drop constraint if exists production_board_items_status_check;
+
+alter table public.production_board_items
+  add constraint production_board_items_status_check
+  check (status in ('idea', 'script', 'planned', 'filming', 'editing', 'scheduled', 'uploaded'));
+
 update public.production_board_items
 set status = 'planned'
 where status = 'script';

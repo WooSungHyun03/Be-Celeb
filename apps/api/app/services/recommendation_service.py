@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
@@ -34,8 +35,11 @@ from app.services.database_service import (
 from app.services.llm_service import call_local_llm, parse_llm_json_with_fallback
 from app.services.prompt_template_service import get_active_prompt_template, render_prompt_template
 from app.services.text_sanitizer import KOREAN_ONLY_OUTPUT_INSTRUCTION, sanitize_user_facing_text
+from app.domains.video_analysis.service import get_video_analysis_context_for_youtube_ids, get_video_analysis_prompt_context
 from app.services.youtube_content_service import CATEGORY_KEYWORDS, CREATOR_CATEGORIES
 from app.services.youtube_service import get_channel_info, get_recent_videos
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_category(value: str | None) -> CreatorCategoryName | None:
@@ -183,6 +187,9 @@ def build_content_plan_prompt(
             "thumbnailIdea": "string",
             "targetAudience": "string",
             "hook": "string",
+            "toneAnalysis": "string",
+            "captionStyle": "string",
+            "flowSummary": "string",
             "storyboard": [
                 {
                     "scene": 1,
@@ -346,7 +353,7 @@ def _max_tokens_for_options(options: RecommendationFieldOptions) -> int:
     return 1200 if selected_count <= 1 else 1600
 
 
-def _recommendation_schema_for_options(options: RecommendationFieldOptions) -> dict[str, Any]:
+def _recommendation_schema_for_options(options: RecommendationFieldOptions, include_video_analysis_fields: bool = False) -> dict[str, Any]:
     recommendation: dict[str, Any] = {"title": "string"}
     if options.reason:
         recommendation["reason"] = "string"
@@ -370,7 +377,25 @@ def _recommendation_schema_for_options(options: RecommendationFieldOptions) -> d
         ]
     if options.upload_tips:
         recommendation["uploadTips"] = ["string"]
+    if include_video_analysis_fields:
+        recommendation["toneAnalysis"] = "string"
+        recommendation["captionStyle"] = "string"
+        recommendation["flowSummary"] = "string"
     return {"recommendation": recommendation}
+
+
+async def _safe_video_analysis_context(
+    video_analysis_id: str | None,
+    user_id: str | None,
+    youtube_video_ids: list[str],
+) -> str | None:
+    try:
+        if video_analysis_id:
+            return await get_video_analysis_prompt_context(video_analysis_id, user_id)
+        return await get_video_analysis_context_for_youtube_ids(youtube_video_ids)
+    except Exception as error:
+        logger.warning("Skipping optional video transcript context: %s", error)
+        return None
 
 
 def _option_instructions(options: RecommendationFieldOptions) -> list[str]:
@@ -401,6 +426,9 @@ def _filter_recommendation_options(recommendation: SingleContentRecommendation, 
         hook=recommendation.hook if options.hook else None,
         thumbnailIdea=recommendation.thumbnailIdea if options.thumbnail_idea else None,
         targetAudience=recommendation.targetAudience,
+        toneAnalysis=recommendation.toneAnalysis,
+        captionStyle=recommendation.captionStyle,
+        flowSummary=recommendation.flowSummary,
         storyboard=recommendation.storyboard if options.storyboard else [],
         uploadTips=recommendation.uploadTips if options.upload_tips else [],
     )
@@ -433,6 +461,9 @@ def _normalize_plan(raw: dict[str, Any], fallback: ContentPlan) -> ContentPlan:
         thumbnailIdea=sanitize_user_facing_text(value.get("thumbnailIdea")) if isinstance(value.get("thumbnailIdea"), str) else fallback.thumbnailIdea,
         targetAudience=sanitize_user_facing_text(value.get("targetAudience")) if isinstance(value.get("targetAudience"), str) else fallback.targetAudience,
         hook=sanitize_user_facing_text(value.get("hook")) if isinstance(value.get("hook"), str) else fallback.hook,
+        toneAnalysis=sanitize_user_facing_text(value.get("toneAnalysis")) if isinstance(value.get("toneAnalysis"), str) else fallback.toneAnalysis,
+        captionStyle=sanitize_user_facing_text(value.get("captionStyle")) if isinstance(value.get("captionStyle"), str) else fallback.captionStyle,
+        flowSummary=sanitize_user_facing_text(value.get("flowSummary")) if isinstance(value.get("flowSummary"), str) else fallback.flowSummary,
         storyboard=storyboard or fallback.storyboard,
         uploadTips=[sanitize_user_facing_text(item) for item in value.get("uploadTips", []) if isinstance(item, str)] if isinstance(value.get("uploadTips"), list) else fallback.uploadTips,
     )
@@ -466,6 +497,9 @@ def build_single_recommendation_prompt(
             "hook": "string",
             "reason": "string",
             "whyNotDuplicate": "string",
+            "toneAnalysis": "string",
+            "captionStyle": "string",
+            "flowSummary": "string",
             "storyboard": [
                 {
                     "scene": 1,
@@ -504,6 +538,7 @@ async def create_single_content_recommendation(
     category: str | None,
     user_id: str | None = None,
     options: RecommendationFieldOptions | None = None,
+    video_analysis_id: str | None = None,
 ) -> SingleRecommendContentResponse:
     selected_options = _selected_options(options)
     selected_from_request = normalize_category(category)
@@ -518,6 +553,11 @@ async def create_single_content_recommendation(
     filtered_videos, duplicate_count = remove_duplicate_like_videos(recent_videos, influencer_videos)
     fallback = _fallback_single_recommendation(selected_category, filtered_videos)
     prompt_template = await get_active_prompt_template()
+    video_analysis_context = await _safe_video_analysis_context(
+        video_analysis_id,
+        user_id,
+        [video.youtubeVideoId for video in filtered_videos[:12]],
+    )
     values = {
         "selected_category": selected_category,
         "user_channel": json.dumps(
@@ -534,18 +574,20 @@ async def create_single_content_recommendation(
         "category_database_videos": json.dumps([_compact_video(video) for video in filtered_videos[:24]], ensure_ascii=False),
         "duplicate_guidelines": "사용자가 이미 올린 영상의 제목, 설명, 태그와 유사한 주제는 추천하지 않는다. 선택된 추천 옵션과 JSON schema에 포함된 필드만 생성한다.",
     }
-    dynamic_schema = _recommendation_schema_for_options(selected_options)
+    dynamic_schema = _recommendation_schema_for_options(selected_options, include_video_analysis_fields=bool(video_analysis_context))
     prompt_contract = "\n\n".join(
         [
             "Required response contract:",
             "Return valid JSON only. The root object must contain recommendation.",
             KOREAN_ONLY_OUTPUT_INSTRUCTION,
+            "If video transcript context is provided, use it to improve the hook, scene composition, tone analysis, caption style, hashtags, and flow summary.",
             "JSON schema:",
             json.dumps(dynamic_schema, ensure_ascii=False, indent=2),
             *(_option_instructions(selected_options)),
         ]
     )
-    rendered_prompt = f"{render_prompt_template(prompt_template['userPromptTemplate'], values)}\n\n{prompt_contract}"
+    transcript_context = f"\n\nVideo transcript context:\n{video_analysis_context}" if video_analysis_context else ""
+    rendered_prompt = f"{render_prompt_template(prompt_template['userPromptTemplate'], values)}{transcript_context}\n\n{prompt_contract}"
     raw_text = await call_local_llm(
         rendered_prompt,
         system_prompt=f"{prompt_template['systemPrompt']}\n{KOREAN_ONLY_OUTPUT_INSTRUCTION}",
@@ -576,6 +618,7 @@ async def create_single_content_recommendation(
             "promptTemplateId": prompt_template.get("id"),
             "llmParseError": parse_error,
             "options": selected_options.model_dump(mode="json", by_alias=True),
+            "videoAnalysisId": video_analysis_id,
         },
         llm_response={
             "recommendation": recommendation.model_dump(mode="json", exclude_none=True),
@@ -644,6 +687,8 @@ async def create_recommendation_options(channel_url: str, category: str | None) 
 async def create_content_plan(
     analysis_id: str,
     option: GenerateContentPlanOptionInput,
+    video_analysis_id: str | None = None,
+    user_id: str | None = None,
 ) -> ContentPlanResponse:
     analysis = await fetch_channel_analysis(analysis_id)
     influencer_videos = await fetch_category_videos(analysis.selected_category)
@@ -656,6 +701,20 @@ async def create_content_plan(
         analysis.recent_videos,
         filtered_videos,
     )
+    video_analysis_context = await _safe_video_analysis_context(
+        video_analysis_id,
+        user_id,
+        [video.youtubeVideoId for video in filtered_videos[:12]],
+    )
+    if video_analysis_context:
+        prompt = "\n\n".join(
+            [
+                prompt,
+                "Video transcript context:",
+                video_analysis_context,
+                "Use this transcript to include a stronger first 3-second hook, scene-by-scene composition, tone analysis, caption style suggestions, hashtag recommendations, and a concise flow summary.",
+            ]
+        )
     raw_text = await call_local_llm(prompt)
     raw_json, _parse_error = parse_llm_json_with_fallback(raw_text, {"plan": fallback.model_dump()})
     plan = _normalize_plan(raw_json, fallback)

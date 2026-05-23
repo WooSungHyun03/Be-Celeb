@@ -311,7 +311,7 @@ function KeywordCharts({ data }: { data: TrendKeywordsResponse }) {
                 <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="keyword" interval={0} tick={{ fontSize: 11 }} tickMargin={8} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickFormatter={formatMetricLabel} width={42} />
-                <Tooltip formatter={(value) => [formatMetricLabel(value), "count"]} />
+                <Tooltip formatter={(value: unknown) => [formatMetricLabel(value), "count"]} />
                 <Bar dataKey="count" fill="#7c3aed" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -346,7 +346,7 @@ function KeywordCharts({ data }: { data: TrendKeywordsResponse }) {
                 <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="period" tick={{ fontSize: 11 }} tickMargin={8} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickFormatter={formatMetricLabel} width={42} />
-                <Tooltip formatter={(value, name) => [formatMetricLabel(value), String(name)]} />
+                <Tooltip formatter={(value: unknown, name: unknown) => [formatMetricLabel(value), String(name)]} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 {data.seriesKeywords.map((keyword, index) => (
                   <Line

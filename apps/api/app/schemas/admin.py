@@ -92,6 +92,8 @@ class AdminCollectionSummary(BaseModel):
     channelsChecked: int
     videosFoundLast24h: int
     videosUpserted: int
+    videosAnalyzed: int = 0
+    videoAnalysisErrors: list[dict[str, Any]] = Field(default_factory=list)
     errors: list[dict[str, Any]] = Field(default_factory=list)
 
 

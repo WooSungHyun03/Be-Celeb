@@ -140,6 +140,9 @@ export type ContentPlan = {
   thumbnailIdea: string;
   targetAudience: string;
   hook: string;
+  toneAnalysis?: string | null;
+  captionStyle?: string | null;
+  flowSummary?: string | null;
   storyboard: StoryboardScene[];
   uploadTips: string[];
 };
@@ -162,6 +165,9 @@ export type SingleContentRecommendation = {
   thumbnailIdea?: string | null;
   targetAudience?: string | null;
   hook?: string | null;
+  toneAnalysis?: string | null;
+  captionStyle?: string | null;
+  flowSummary?: string | null;
   reason?: string | null;
   whyNotDuplicate?: string | null;
   storyboard?: StoryboardScene[];

@@ -19,11 +19,11 @@ type ChannelAnalysisCardProps = {
 
 const optionItems: Array<{ key: keyof RecommendationFieldOptions; label: string; description: string }> = [
   { key: "reason", label: "추천 이유", description: "왜 이 주제가 채널에 맞는지 핵심 근거를 정리합니다." },
-  { key: "hashtags", label: "해시태그", description: "업로드에 바로 활용할 태그를 제안합니다." },
+  { key: "hashtags", label: "해시태그", description: "업로드에 바로 사용할 태그를 제안합니다." },
   { key: "storyboard", label: "콘티", description: "촬영 흐름을 장면 단위로 구성합니다." },
-  { key: "hook", label: "3초 Hook", description: "초반 이탈을 줄이는 도입 문구를 만듭니다." },
+  { key: "hook", label: "3초 Hook", description: "초반 이탈을 줄이는 도입 멘트를 만듭니다." },
   { key: "thumbnailIdea", label: "썸네일 아이디어", description: "클릭을 유도할 화면 구성과 카피를 제안합니다." },
-  { key: "uploadTips", label: "업로드 팁", description: "게시 시간, 제목 패키징, 운영 팁을 정리합니다." },
+  { key: "uploadTips", label: "업로드 팁", description: "게시 시간, 제목 패키지, 운영 팁을 정리합니다." },
 ];
 
 export function ChannelAnalysisCard({

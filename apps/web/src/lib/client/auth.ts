@@ -1,10 +1,18 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export async function getSupabaseAccessToken() {
+  let sessionResult;
+
+  try {
+    sessionResult = await getSupabaseBrowserClient().auth.getSession();
+  } catch {
+    return null;
+  }
+
   const {
     data: { session },
     error,
-  } = await getSupabaseBrowserClient().auth.getSession();
+  } = sessionResult;
 
   if (error) {
     throw new Error(error.message);
@@ -19,10 +27,18 @@ export async function getAuthorizationHeaders(): Promise<Record<string, string>>
 }
 
 export async function requireSupabaseSession() {
+  let sessionResult;
+
+  try {
+    sessionResult = await getSupabaseBrowserClient().auth.getSession();
+  } catch {
+    throw new Error("Supabase auth is not configured for this local environment.");
+  }
+
   const {
     data: { session },
     error,
-  } = await getSupabaseBrowserClient().auth.getSession();
+  } = sessionResult;
 
   if (error) {
     throw new Error(error.message);

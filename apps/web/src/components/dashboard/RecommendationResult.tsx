@@ -61,6 +61,29 @@ export function RecommendationResult({ result, action }: RecommendationResultPro
           </section>
         ) : null}
 
+        {recommendation.toneAnalysis || recommendation.captionStyle || recommendation.flowSummary ? (
+          <section className="grid gap-3 md:grid-cols-3">
+            {recommendation.toneAnalysis ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-bold text-slate-500">말투/톤 분석</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{recommendation.toneAnalysis}</p>
+              </div>
+            ) : null}
+            {recommendation.captionStyle ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-bold text-slate-500">자막 스타일</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{recommendation.captionStyle}</p>
+              </div>
+            ) : null}
+            {recommendation.flowSummary ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-bold text-slate-500">영상 흐름 요약</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{recommendation.flowSummary}</p>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         {showHashtags ? (
           <section>
             <p className="text-sm font-bold text-slate-500">해시태그</p>

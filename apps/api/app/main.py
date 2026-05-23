@@ -14,6 +14,7 @@ from app.domains.recommendations.router import router as recommendation_router
 from app.domains.shop.router import router as shop_router
 from app.domains.trends.router import router as trend_router
 from app.domains.users.router import router as user_router
+from app.domains.video_analysis.router import router as video_analysis_router
 
 configure_logging()
 settings = get_settings()
@@ -37,4 +38,5 @@ app.include_router(shop_router)
 app.include_router(production_board_router)
 app.include_router(production_items_router)
 app.include_router(collection_router)
+app.include_router(video_analysis_router)
 app.include_router(main, prefix="/api/v1")

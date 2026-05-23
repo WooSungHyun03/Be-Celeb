@@ -34,6 +34,40 @@ export type RecommendContentPayload = {
   channelUrl: string;
   category?: string | null;
   options?: RecommendationFieldOptions;
+  videoAnalysisId?: string | null;
+};
+
+export type VideoAnalysisSegment = {
+  start?: number | null;
+  end?: number | null;
+  text: string;
+};
+
+export type VideoAnalysisRecord = {
+  id: string;
+  userId?: string | null;
+  videoUrl?: string | null;
+  transcript: string;
+  transcriptSegments: VideoAnalysisSegment[];
+  sceneSummary?: string | null;
+  storyboardResult?: Record<string, unknown> | null;
+  analysisResult?: Record<string, unknown> | null;
+  createdAt?: string | null;
+};
+
+export type TranscribeVideoResponse = {
+  analysis: VideoAnalysisRecord;
+};
+
+export type GenerateVideoStoryboardPayload = {
+  videoAnalysisId: string;
+  channelUrl?: string | null;
+  category?: string | null;
+};
+
+export type GenerateVideoStoryboardResponse = {
+  analysis: VideoAnalysisRecord;
+  storyboard: Record<string, unknown>;
 };
 
 export type AnalyzeChannelPayload = {
@@ -355,6 +389,28 @@ export async function recommendContent(payload: RecommendContentPayload, signal?
 
 export async function getRecommendation(recommendationId: string, signal?: AbortSignal) {
   const response = await apiFetch<ApiSuccess<RecommendationDetailResponse>>(`/api/recommendations/${recommendationId}`, {
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function transcribeVideo(input: { videoUrl?: string; youtubeVideoId?: string }, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<TranscribeVideoResponse>>("/api/video-analysis/transcribe", {
+    method: "POST",
+    body: JSON.stringify(input),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function generateVideoStoryboard(payload: GenerateVideoStoryboardPayload, signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<GenerateVideoStoryboardResponse>>("/api/video-analysis/generate-storyboard", {
+    method: "POST",
+    body: JSON.stringify(payload),
     headers: await getAuthorizationHeaders(),
     signal,
   });
