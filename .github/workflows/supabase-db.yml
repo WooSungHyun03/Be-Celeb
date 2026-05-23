@@ -61,7 +61,7 @@ jobs:
 
       - name: Push database migrations
         run: |
-          args=(db push --password "$SUPABASE_DB_PASSWORD" --yes)
+          args=(db push --password "$SUPABASE_DB_PASSWORD" --yes --include-all)
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.include_seed }}" = "true" ]; then
             args+=(--include-seed)

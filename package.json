@@ -19,8 +19,8 @@
     "type-check:web": "npm --workspace apps/web run type-check",
     "db:link": "npx -y supabase@2.98.2 link",
     "db:migration:new": "npx -y supabase@2.98.2 migration new",
-    "db:push": "npx -y supabase@2.98.2 db push",
-    "db:push:seed": "npx -y supabase@2.98.2 db push --include-seed",
+    "db:push": "npx -y supabase@2.98.2 db push --include-all",
+    "db:push:seed": "npx -y supabase@2.98.2 db push --include-all --include-seed",
     "db:reset": "npx -y supabase@2.98.2 db reset"
   }
 }
