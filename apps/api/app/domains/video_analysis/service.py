@@ -29,6 +29,12 @@ MEDIA_CONTENT_TYPES = {
     "video/quicktime",
 }
 
+YOUTUBE_COOKIE_REQUIRED_MARKERS = (
+    "Sign in to confirm",
+    "not a bot",
+    "Use --cookies-from-browser or --cookies",
+)
+
 SELECT_COLUMNS = (
     "id,user_id,influencer_video_id,youtube_video_id,title,video_url,transcript,"
     "transcript_segments,scene_summary,storyboard_result,analysis_result,created_at"
@@ -358,11 +364,20 @@ async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, st
             "max_filesize": settings.video_analysis_max_bytes,
             "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
         }
+        if settings.youtube_cookies_file:
+            options["cookiefile"] = settings.youtube_cookies_file
         try:
             with YoutubeDL(options) as downloader:
                 info = await _run_ytdlp_extract(downloader, video_url)
                 downloaded = Path(downloader.prepare_filename(info))
         except Exception as error:
+            error_message = str(error)
+            if any(marker in error_message for marker in YOUTUBE_COOKIE_REQUIRED_MARKERS):
+                raise BackendApiError(
+                    "YouTube requires a signed-in cookies file for this video.",
+                    409,
+                    "YOUTUBE_REQUIRES_COOKIES",
+                ) from error
             raise BackendApiError(f"YouTube audio extraction failed: {error}", 502, "YOUTUBE_AUDIO_EXTRACTION_FAILED") from error
         if not downloaded.exists():
             candidates = list(Path(temp_dir).glob(f"{youtube_video_id}.*"))

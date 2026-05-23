@@ -26,6 +26,7 @@ DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
 DAILY_COLLECTION_CONCURRENCY = 4
 logger = get_logger(__name__)
+VIDEO_ANALYSIS_SKIP_CODES = {"YOUTUBE_REQUIRES_COOKIES"}
 
 
 def _now() -> datetime:
@@ -34,6 +35,10 @@ def _now() -> datetime:
 
 def _iso(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
+
+
+def _is_video_analysis_skip_error(error: Exception) -> bool:
+    return isinstance(error, BackendApiError) and error.code in VIDEO_ANALYSIS_SKIP_CODES
 
 
 def _normalize_supabase_url() -> str:
@@ -858,6 +863,7 @@ async def _collect_daily_channel(
             video_analysis_errors: list[dict[str, Any]] = []
             inserted_videos = [item for item in inserted_rows if isinstance(item, dict)] if isinstance(inserted_rows, list) else []
             analysis_limit = max(0, get_settings().video_analysis_max_per_collection)
+            video_analysis_skipped = max(0, len(inserted_videos) - analysis_limit)
             for inserted_video in inserted_videos[:analysis_limit]:
                 youtube_video_id = inserted_video.get("youtube_video_id")
                 if not isinstance(youtube_video_id, str) or not youtube_video_id:
@@ -871,6 +877,10 @@ async def _collect_daily_channel(
                     if result:
                         videos_analyzed += 1
                 except Exception as error:
+                    if _is_video_analysis_skip_error(error):
+                        logger.info("Video transcript analysis skipped for youtubeVideoId=%s: %s", youtube_video_id, error)
+                        video_analysis_skipped += 1
+                        continue
                     logger.warning("Video transcript analysis failed for youtubeVideoId=%s: %s", youtube_video_id, error)
                     video_analysis_errors.append(
                         {
@@ -893,7 +903,7 @@ async def _collect_daily_channel(
                 "videosFound": len(last_day_videos),
                 "videosUpserted": len(upsert_rows),
                 "videosAnalyzed": videos_analyzed,
-                "videosAnalysisSkipped": max(0, len(inserted_videos) - analysis_limit),
+                "videosAnalysisSkipped": video_analysis_skipped,
                 "videoAnalysisErrors": video_analysis_errors,
                 "error": None,
             }
@@ -927,7 +937,7 @@ def _video_analysis_warning(video_analysis_errors: list[dict[str, Any]], skipped
         detail = "; ".join(f"{count}x {message[:140]}" for message, count in top_messages)
         parts.append(f"{len(video_analysis_errors)} video analysis item(s) failed: {detail}")
     if skipped:
-        parts.append(f"{skipped} video analysis item(s) skipped by per-run MVP limit.")
+        parts.append(f"{skipped} video analysis item(s) skipped due to collection limits or YouTube cookie requirements.")
     return " ".join(parts) if parts else None
 
 
