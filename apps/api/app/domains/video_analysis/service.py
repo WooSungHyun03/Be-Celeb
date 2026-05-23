@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import json
 import mimetypes
 import tempfile
+from html import unescape
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -39,6 +41,7 @@ YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS = (
     "Premieres in",
     "not made this video available in your country",
 )
+YOUTUBE_SUBTITLE_LANGUAGES = ("ko", "ko-KR", "en", "en-US")
 
 SELECT_COLUMNS = (
     "id,user_id,influencer_video_id,youtube_video_id,title,video_url,transcript,"
@@ -226,6 +229,35 @@ async def create_video_analysis(
     title: str | None = None,
 ) -> VideoAnalysisRecord:
     transcript, segments, raw = await transcribe_media(media, _media_filename(filename, content_type), content_type)
+    return await _insert_video_analysis(
+        transcript=transcript,
+        segments=segments,
+        raw=raw,
+        source="whisper",
+        user_id=user_id,
+        video_url=video_url,
+        youtube_video_id=youtube_video_id,
+        influencer_video_id=influencer_video_id,
+        title=title,
+        source_filename=filename,
+        content_type=content_type,
+    )
+
+
+async def _insert_video_analysis(
+    *,
+    transcript: str,
+    segments: list[TranscriptSegment],
+    raw: dict[str, Any],
+    source: str,
+    user_id: str | None = None,
+    video_url: str | None = None,
+    youtube_video_id: str | None = None,
+    influencer_video_id: str | None = None,
+    title: str | None = None,
+    source_filename: str | None = None,
+    content_type: str | None = None,
+) -> VideoAnalysisRecord:
     scene_summary = _build_scene_summary(segments, transcript)
     rows = await _request(
         "POST",
@@ -240,7 +272,8 @@ async def create_video_analysis(
             "transcript_segments": [segment.model_dump(mode="json") for segment in segments],
             "scene_summary": scene_summary,
             "analysis_result": {
-                "sourceFilename": filename,
+                "source": source,
+                "sourceFilename": source_filename,
                 "contentType": content_type,
                 "segmentCount": len(segments),
                 "rawDuration": raw.get("duration") if isinstance(raw, dict) else None,
@@ -338,8 +371,24 @@ async def create_video_analysis_from_youtube_video(
 ) -> VideoAnalysisRecord | None:
     if await get_video_analysis_by_youtube_id(youtube_video_id):
         return None
-    media, filename, content_type = await _download_youtube_audio(youtube_video_id)
     video_url = f"https://www.youtube.com/watch?v={youtube_video_id}"
+    subtitle_result = await _extract_youtube_subtitles(youtube_video_id)
+    if subtitle_result:
+        transcript, segments, raw = subtitle_result
+        return await _insert_video_analysis(
+            transcript=transcript,
+            segments=segments,
+            raw=raw,
+            source="youtube_subtitles",
+            video_url=video_url,
+            youtube_video_id=youtube_video_id,
+            influencer_video_id=influencer_video_id,
+            title=title,
+            source_filename=f"{youtube_video_id}.subtitles",
+            content_type="text/plain",
+        )
+
+    media, filename, content_type = await _download_youtube_audio(youtube_video_id)
     return await create_video_analysis(
         media=media,
         filename=filename,
@@ -349,6 +398,143 @@ async def create_video_analysis_from_youtube_video(
         influencer_video_id=influencer_video_id,
         title=title,
     )
+
+
+async def _extract_youtube_subtitles(youtube_video_id: str) -> tuple[str, list[TranscriptSegment], dict[str, Any]] | None:
+    try:
+        from yt_dlp import YoutubeDL
+    except ImportError:
+        return None
+
+    settings = get_settings()
+    video_url = f"https://www.youtube.com/watch?v={youtube_video_id}"
+    options: dict[str, Any] = {
+        "quiet": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitleslangs": list(YOUTUBE_SUBTITLE_LANGUAGES),
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+    }
+    if settings.youtube_cookies_file:
+        options["cookiefile"] = settings.youtube_cookies_file
+    try:
+        with YoutubeDL(options) as downloader:
+            info = await _run_ytdlp_info(downloader, video_url)
+    except Exception as error:
+        _raise_youtube_extraction_error(error)
+
+    subtitle_entry = _select_subtitle_entry(info)
+    if not subtitle_entry:
+        return None
+
+    segments = await _download_subtitle_segments(str(subtitle_entry["url"]), str(subtitle_entry.get("ext") or ""))
+    transcript = sanitize_user_facing_text(" ".join(segment.text for segment in segments))
+    if not transcript:
+        return None
+    return transcript, segments, {
+        "duration": info.get("duration") if isinstance(info, dict) else None,
+        "subtitleLanguage": subtitle_entry.get("language"),
+        "subtitleExtension": subtitle_entry.get("ext"),
+        "subtitleSource": subtitle_entry.get("source"),
+    }
+
+
+def _select_subtitle_entry(info: Any) -> dict[str, Any] | None:
+    if not isinstance(info, dict):
+        return None
+    sources = (("subtitles", info.get("subtitles")), ("automatic_captions", info.get("automatic_captions")))
+    for source_name, source in sources:
+        if not isinstance(source, dict):
+            continue
+        for language in YOUTUBE_SUBTITLE_LANGUAGES:
+            entries = source.get(language)
+            if not isinstance(entries, list):
+                continue
+            for preferred_ext in ("json3", "vtt", "srv3", "ttml"):
+                for entry in entries:
+                    if not isinstance(entry, dict) or not entry.get("url"):
+                        continue
+                    if str(entry.get("ext") or "").lower() == preferred_ext:
+                        return {**entry, "language": language, "source": source_name}
+    return None
+
+
+async def _download_subtitle_segments(url: str, extension: str) -> list[TranscriptSegment]:
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        response = await client.get(url)
+    if response.status_code >= 400:
+        return []
+    text = response.text
+    if extension.lower() == "json3":
+        return _parse_json3_subtitles(text)
+    return _parse_timed_text_subtitles(text)
+
+
+def _parse_json3_subtitles(text: str) -> list[TranscriptSegment]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    segments: list[TranscriptSegment] = []
+    events = payload.get("events") if isinstance(payload, dict) else None
+    if not isinstance(events, list):
+        return []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        pieces = event.get("segs")
+        if not isinstance(pieces, list):
+            continue
+        line = sanitize_user_facing_text("".join(str(piece.get("utf8") or "") for piece in pieces if isinstance(piece, dict)))
+        if not line:
+            continue
+        start_ms = event.get("tStartMs")
+        duration_ms = event.get("dDurationMs")
+        start = float(start_ms) / 1000 if isinstance(start_ms, (int, float)) else None
+        end = start + (float(duration_ms) / 1000) if start is not None and isinstance(duration_ms, (int, float)) else None
+        segments.append(TranscriptSegment(start=start, end=end, text=line))
+    return segments
+
+
+def _parse_timed_text_subtitles(text: str) -> list[TranscriptSegment]:
+    segments: list[TranscriptSegment] = []
+    blocks = re.split(r"\n\s*\n", text.replace("\r\n", "\n"))
+    for block in blocks:
+        lines = [line.strip() for line in block.split("\n") if line.strip()]
+        time_index = next((index for index, line in enumerate(lines) if "-->" in line), None)
+        if time_index is None:
+            continue
+        start, end = _parse_subtitle_time_range(lines[time_index])
+        caption_text = sanitize_user_facing_text(
+            " ".join(_strip_subtitle_markup(line) for line in lines[time_index + 1 :])
+        )
+        if caption_text:
+            segments.append(TranscriptSegment(start=start, end=end, text=caption_text))
+    return segments
+
+
+def _parse_subtitle_time_range(value: str) -> tuple[float | None, float | None]:
+    parts = value.split("-->", 1)
+    if len(parts) != 2:
+        return None, None
+    return _parse_subtitle_time(parts[0]), _parse_subtitle_time(parts[1].split()[0])
+
+
+def _parse_subtitle_time(value: str) -> float | None:
+    match = re.search(r"(?:(\d+):)?(\d+):(\d+(?:[\.,]\d+)?)", value.strip())
+    if not match:
+        return None
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2))
+    seconds = float(match.group(3).replace(",", "."))
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _strip_subtitle_markup(value: str) -> str:
+    without_tags = re.sub(r"<[^>]+>", "", value)
+    return unescape(without_tags).strip()
 
 
 async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, str]:
@@ -376,20 +562,7 @@ async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, st
                 info = await _run_ytdlp_extract(downloader, video_url)
                 downloaded = Path(downloader.prepare_filename(info))
         except Exception as error:
-            error_message = str(error)
-            if any(marker in error_message for marker in YOUTUBE_COOKIE_REQUIRED_MARKERS):
-                raise BackendApiError(
-                    "YouTube requires a signed-in cookies file for this video.",
-                    409,
-                    "YOUTUBE_REQUIRES_COOKIES",
-                ) from error
-            if any(marker in error_message for marker in YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS):
-                raise BackendApiError(
-                    "This YouTube video is not currently available for transcript analysis.",
-                    409,
-                    "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
-                ) from error
-            raise BackendApiError(f"YouTube audio extraction failed: {error}", 502, "YOUTUBE_AUDIO_EXTRACTION_FAILED") from error
+            _raise_youtube_extraction_error(error)
         if not downloaded.exists():
             candidates = list(Path(temp_dir).glob(f"{youtube_video_id}.*"))
             downloaded = candidates[0] if candidates else downloaded
@@ -404,6 +577,27 @@ async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, st
 
 async def _run_ytdlp_extract(downloader: Any, video_url: str) -> dict[str, Any]:
     return await asyncio.to_thread(downloader.extract_info, video_url, True)
+
+
+async def _run_ytdlp_info(downloader: Any, video_url: str) -> dict[str, Any]:
+    return await asyncio.to_thread(downloader.extract_info, video_url, False)
+
+
+def _raise_youtube_extraction_error(error: Exception) -> None:
+    error_message = str(error)
+    if any(marker in error_message for marker in YOUTUBE_COOKIE_REQUIRED_MARKERS):
+        raise BackendApiError(
+            "YouTube requires a signed-in cookies file for this video.",
+            409,
+            "YOUTUBE_REQUIRES_COOKIES",
+        ) from error
+    if any(marker in error_message for marker in YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS):
+        raise BackendApiError(
+            "This YouTube video is not currently available for transcript analysis.",
+            409,
+            "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
+        ) from error
+    raise BackendApiError(f"YouTube audio extraction failed: {error}", 502, "YOUTUBE_AUDIO_EXTRACTION_FAILED") from error
 
 
 async def generate_storyboard_from_analysis(
