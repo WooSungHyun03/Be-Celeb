@@ -72,6 +72,17 @@ export type FavoritePayload = {
 
 export type CalendarEventStatus = "planned" | "scripted" | "filmed" | "edited" | "uploaded" | "filming" | "editing" | "scheduled";
 
+export type HolidayCategory = "public_holiday" | "observance" | "special_date";
+
+export type Holiday = {
+  id: string;
+  date: string;
+  name: string;
+  category: HolidayCategory;
+  description: string | null;
+  is_active: boolean;
+};
+
 export type CalendarEvent = {
   id: string;
   userId: string;
@@ -628,6 +639,24 @@ export async function deleteCalendarEvent(eventId: string, signal?: AbortSignal)
     signal,
   });
   return response.data;
+}
+
+export async function getHolidays(params: { start?: string; end?: string; category?: string } = {}, signal?: AbortSignal) {
+  const query = new URLSearchParams();
+  if (params.start) {
+    query.set("start", params.start);
+  }
+  if (params.end) {
+    query.set("end", params.end);
+  }
+  if (params.category) {
+    query.set("category", params.category);
+  }
+  const path = query.size > 0 ? `/api/calendar/holidays?${query.toString()}` : "/api/calendar/holidays";
+  const response = await apiFetch<ApiSuccess<{ holidays: Holiday[]; total_count: number }>>(path, {
+    signal,
+  });
+  return response.data.holidays;
 }
 
 export async function getGrowthReport(signal?: AbortSignal) {

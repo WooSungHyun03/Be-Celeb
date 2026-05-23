@@ -316,3 +316,42 @@ async def _sync_production_item_from_event(user_id: str, event_row: dict[str, An
         )
     except Exception:
         return
+
+
+async def get_holidays(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    category: str | None = None,
+) -> list[dict[str, Any]]:
+    """Get holidays within a date range.
+    
+    Args:
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        category: Filter by category (public_holiday, observance, special_date)
+    
+    Returns:
+        List of holiday dictionaries
+    """
+    params: dict[str, Any] = {
+        "select": "id,date,name,category,description",
+        "is_active": "eq.true",
+        "order": "date.asc",
+    }
+    
+    if start_date and end_date:
+        params["date"] = f"gte.{start_date}&date.lte.{end_date}"
+    elif start_date:
+        params["date"] = f"gte.{start_date}"
+    elif end_date:
+        params["date"] = f"lte.{end_date}"
+    
+    if category:
+        params["category"] = f"eq.{category}"
+    
+    try:
+        holidays = await _request("GET", "holidays", params=params)
+        return holidays if isinstance(holidays, list) else []
+    except Exception:
+        # Return empty list on error instead of raising
+        return []

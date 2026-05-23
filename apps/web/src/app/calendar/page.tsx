@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { Loading } from "@/components/common/Loading";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ROUTES } from "@/constants/routes";
-import { createCalendarEvent, deleteCalendarEvent, getCalendarEvents, updateCalendarEvent, type CalendarEvent, type CalendarEventStatus } from "@/lib/api/calendar";
+import { createCalendarEvent, deleteCalendarEvent, getCalendarEvents, updateCalendarEvent, type CalendarEvent, type CalendarEventStatus, getHolidays, type Holiday } from "@/lib/api/calendar";
 import { getFavorites, type FavoriteItem } from "@/lib/api/favorites";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 
@@ -125,6 +125,7 @@ function isProductionLinked(event: CalendarEvent | EventForm) {
 export default function CalendarPage() {
   const [monthDate, setMonthDate] = useState(() => new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
   const [message, setMessage] = useState("");
@@ -143,6 +144,13 @@ export default function CalendarPage() {
     }, {});
   }, [events]);
 
+  const holidaysByDate = useMemo(() => {
+    return holidays.reduce<Record<string, Holiday>>((acc, holiday) => {
+      acc[holiday.date] = holiday;
+      return acc;
+    }, {});
+  }, [holidays]);
+
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -160,13 +168,15 @@ export default function CalendarPage() {
           return;
         }
 
-        const [loadedEvents, loadedFavorites] = await Promise.all([
+        const [loadedEvents, loadedFavorites, loadedHolidays] = await Promise.all([
           getCalendarEvents(range, controller.signal),
           getFavorites({ type: "recommendation" }, controller.signal),
+          getHolidays(range, controller.signal),
         ]);
         if (active) {
           setEvents(loadedEvents);
           setFavorites(loadedFavorites);
+          setHolidays(loadedHolidays);
           setStatus("ready");
         }
       } catch (error) {
@@ -341,9 +351,15 @@ export default function CalendarPage() {
             const dateKey = formatDate(date);
             const isCurrentMonth = date.getMonth() === monthDate.getMonth();
             const dailyEvents = eventsByDate[dateKey] ?? [];
+            const holiday = holidaysByDate[dateKey];
+            const isHoliday = Boolean(holiday);
+            const isSunday = date.getDay() === 0;
+            
             return (
               <div
-                className="min-h-28 border-b border-r border-violet-100 bg-white p-2 text-left align-top transition hover:bg-violet-50 sm:min-h-32"
+                className={`min-h-28 border-b border-r border-violet-100 p-2 text-left align-top transition sm:min-h-32 ${
+                  isHoliday || isSunday ? "bg-red-50/50" : "bg-white hover:bg-violet-50"
+                }`}
                 key={dateKey}
                 onClick={() => openNewEvent(dateKey)}
                 onKeyDown={(event) => {
@@ -355,13 +371,22 @@ export default function CalendarPage() {
                 role="button"
                 tabIndex={0}
               >
-                <span
-                  className={`inline-flex size-7 items-center justify-center rounded-full text-xs font-bold ${
-                    dateKey === today ? "bg-violet-600 text-white" : isCurrentMonth ? "text-ink" : "text-slate-400"
-                  }`}
-                >
-                  {date.getDate()}
-                </span>
+                <div className="flex items-start justify-between gap-1">
+                  <span
+                    className={`inline-flex size-7 items-center justify-center rounded-full text-xs font-bold ${
+                      dateKey === today ? "bg-violet-600 text-white" : isCurrentMonth ? (isHoliday || isSunday ? "bg-red-100 text-red-700 font-extrabold" : "text-ink") : "text-slate-400"
+                    }`}
+                  >
+                    {date.getDate()}
+                  </span>
+                  {isHoliday && (
+                    <div title={holiday.name} className="text-right">
+                      <span className="inline-block bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-xs font-bold" title={holiday.description || ""}>
+                        {holiday.name}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <div className="mt-2 grid gap-1">
                   {dailyEvents.slice(0, 4).map((event) => {
                     const color = event.color || statusColors[event.status] || statusColors.planned;

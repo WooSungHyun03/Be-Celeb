@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 CalendarEventStatus = Literal["planned", "scripted", "filmed", "edited", "uploaded", "filming", "editing", "scheduled"]
+HolidayCategory = Literal["public_holiday", "observance", "special_date"]
 
 
 class CalendarEventPayload(BaseModel):
@@ -41,3 +42,21 @@ class CalendarEventUpdatePayload(BaseModel):
     color: str | None = None
     platform: str | None = None
     metadata: dict[str, Any] | None = None
+
+
+class Holiday(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    date: str
+    name: str
+    category: HolidayCategory
+    description: str | None = None
+    is_active: bool = True
+
+
+class HolidayResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    holidays: list[Holiday]
+    total_count: int
