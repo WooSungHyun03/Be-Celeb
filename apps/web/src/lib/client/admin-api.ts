@@ -34,7 +34,8 @@ type AdminListParams = {
 };
 
 type AdminCreateChannelPayload = {
-  categoryId: string;
+  categoryId?: string;
+  categoryIds?: string[];
   channelUrl: string;
   youtubeChannelId?: string | null;
   channelTitle?: string | null;
@@ -177,7 +178,7 @@ export function listVideos(params?: AdminListParams) {
   return adminData<{ videos: AdminVideo[]; limit: number; offset: number }>(`/api/admin/videos${toQuery(params)}`);
 }
 
-export function updateVideo(videoId: string, payload: { title?: string; description?: string; tags?: string[] }) {
+export function updateVideo(videoId: string, payload: { title?: string; description?: string; tags?: string[]; categoryIds?: string[] }) {
   return adminData<{ video: unknown }>(`/api/admin/videos/${videoId}`, {
     method: "PATCH",
     body: JSON.stringify(payload),

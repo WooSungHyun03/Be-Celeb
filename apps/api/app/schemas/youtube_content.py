@@ -231,6 +231,7 @@ class PopularVideosResponse(BaseModel):
 class TrendKeywordCount(BaseModel):
     keyword: str
     count: int
+    category: str | None = None
 
 
 class TrendKeywordSeriesPoint(BaseModel):
@@ -239,8 +240,14 @@ class TrendKeywordSeriesPoint(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class TrendKeywordCategoryBreakdown(BaseModel):
+    category: str
+    topKeywords: list[TrendKeywordCount]
+
+
 class TrendKeywordsResponse(BaseModel):
     range: TrendKeywordRange
     topKeywords: list[TrendKeywordCount]
     seriesKeywords: list[str]
     series: list[TrendKeywordSeriesPoint]
+    categoryBreakdown: list[TrendKeywordCategoryBreakdown] = Field(default_factory=list)

@@ -183,6 +183,10 @@ def _video_url(video_id: str) -> str:
     return f"https://www.youtube.com/watch?v={video_id}"
 
 
+def _in_filter(values: list[str]) -> str:
+    return f"in.({','.join(values)})"
+
+
 def _chunked(items: list[dict[str, Any]], size: int) -> Iterable[list[dict[str, Any]]]:
     for index in range(0, len(items), size):
         yield items[index : index + size]
@@ -627,6 +631,35 @@ async def _youtube_rows_for_category(category: str, range_value: TrendRange) -> 
         return []
 
     start = datetime.combine(_range_start(range_value), datetime.min.time(), tzinfo=timezone.utc)
+    try:
+        linked_rows = await _supabase_get(
+            "influencer_video_categories",
+            {
+                "select": "influencer_video_id",
+                "category_id": f"eq.{category_id}",
+                "limit": "1000",
+            },
+        )
+        video_ids = [
+            row["influencer_video_id"]
+            for row in linked_rows
+            if isinstance(row, dict) and isinstance(row.get("influencer_video_id"), str)
+        ] if isinstance(linked_rows, list) else []
+        if video_ids:
+            rows = await _supabase_get(
+                "influencer_videos",
+                {
+                    "select": "youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count",
+                    "id": _in_filter(video_ids),
+                    "published_at": f"gte.{_iso_utc(start)}",
+                    "order": "view_count.desc.nullslast,published_at.desc",
+                    "limit": "1000",
+                },
+            )
+            return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    except Exception as error:
+        logger.warning("Combined trends video-category join query failed category=%s: %s", category, error)
+
     rows = await _supabase_get(
         "influencer_videos",
         {

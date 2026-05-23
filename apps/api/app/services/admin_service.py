@@ -1,6 +1,7 @@
 # Provides protected Supabase-backed admin operations for the Render API.
 from __future__ import annotations
 
+import asyncio
 import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.errors import BackendApiError, missing_env
+from app.core.logging import get_logger
 from app.domains.shop.service import check_naver_shopping_connection
 from app.schemas.admin import AdminCollectionSummary, AdminOverview, AdminSystemStatus, AdminTestResult
 from app.services.llm_service import call_local_llm
@@ -21,6 +23,8 @@ DAILY_COLLECTION_SCHEDULE_TEXT = "Every day 06:00 KST"
 ONE_DAY = timedelta(days=1)
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
+DAILY_COLLECTION_CONCURRENCY = 4
+logger = get_logger(__name__)
 
 
 def _now() -> datetime:
@@ -157,6 +161,39 @@ def _clean_update(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
 
 
+def _unique_strings(values: Any) -> list[str]:
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, list):
+        return []
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def _category_ids_from_payload(payload: dict[str, Any], *, required: bool = False) -> list[str]:
+    category_ids = _unique_strings(payload.get("category_ids") or payload.get("categoryIds"))
+    legacy_category = _trim(payload.get("category_id") or payload.get("categoryId"))
+    if legacy_category and legacy_category not in category_ids:
+        category_ids.insert(0, legacy_category)
+    if required and not category_ids:
+        raise BackendApiError("At least one category is required.", 400, "VALIDATION_ERROR")
+    return category_ids
+
+
+def _in_filter(values: list[str]) -> str:
+    return f"in.({','.join(values)})"
+
+
 def _parse_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
@@ -187,6 +224,79 @@ async def _category_name_by_id() -> dict[str, str]:
         for row in await _category_rows()
         if isinstance(row.get("id"), str) and isinstance(row.get("name"), str)
     }
+
+
+async def _category_link_counts(table: str, legacy_table: str, category_id: str) -> int:
+    try:
+        return await _count(table, {"category_id": f"eq.{category_id}"})
+    except Exception as error:
+        logger.warning("Category link count fallback table=%s: %s", table, error)
+        return await _count(legacy_table, {"category_id": f"eq.{category_id}"})
+
+
+async def _category_links_by_owner(table: str, owner_column: str, owner_ids: list[str]) -> dict[str, list[str]]:
+    if not owner_ids:
+        return {}
+    try:
+        rows = await _get(
+            table,
+            {
+                "select": f"{owner_column},category_id",
+                owner_column: _in_filter(owner_ids),
+            },
+        )
+    except Exception as error:
+        logger.warning("Category link query failed table=%s: %s", table, error)
+        return {}
+
+    result: dict[str, list[str]] = defaultdict(list)
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            owner_id = row.get(owner_column)
+            category_id = row.get("category_id")
+            if isinstance(owner_id, str) and isinstance(category_id, str) and category_id not in result[owner_id]:
+                result[owner_id].append(category_id)
+    return result
+
+
+async def _sync_category_links(table: str, owner_column: str, owner_id: str, category_ids: list[str]) -> None:
+    await _delete(table, {owner_column: f"eq.{owner_id}"}, prefer="return=minimal")
+    if not category_ids:
+        return
+    rows = [{owner_column: owner_id, "category_id": category_id} for category_id in category_ids]
+    await _post(
+        f"{table}?on_conflict={owner_column},category_id",
+        rows,
+        prefer="resolution=ignore-duplicates,return=minimal",
+    )
+
+
+async def _sync_channel_categories(channel_id: str, category_ids: list[str]) -> None:
+    await _sync_category_links("influencer_channel_categories", "influencer_channel_id", channel_id, category_ids)
+
+
+async def _sync_video_categories(video_id: str, category_ids: list[str]) -> None:
+    await _sync_category_links("influencer_video_categories", "influencer_video_id", video_id, category_ids)
+
+
+def _category_summary(
+    row: dict[str, Any],
+    categories: dict[str, str],
+    category_ids_by_owner: dict[str, list[str]],
+) -> tuple[str | None, list[str], str, list[str]]:
+    owner_id = row.get("id")
+    category_ids = category_ids_by_owner.get(owner_id, []) if isinstance(owner_id, str) else []
+    legacy_category_id = row.get("category_id")
+    if isinstance(legacy_category_id, str) and legacy_category_id not in category_ids:
+        category_ids = [legacy_category_id, *category_ids]
+
+    category_names = [categories.get(category_id, "미분류") for category_id in category_ids]
+    if not category_names:
+        category_names = ["미분류"]
+    primary_id = category_ids[0] if category_ids else None
+    return primary_id, category_ids, ", ".join(category_names), category_names
 
 
 async def _audit(action: str, target_table: str, target_id: str | None = None, payload: dict[str, Any] | None = None) -> None:
@@ -252,10 +362,21 @@ async def get_admin_overview() -> AdminOverview:
 
 async def list_admin_categories() -> dict[str, Any]:
     categories = await _category_rows()
-    channels = await _get("influencer_channels", {"select": "id,category_id"})
-    videos = await _get("influencer_videos", {"select": "id,category_id"})
-    channel_counts = Counter(row.get("category_id") for row in channels if isinstance(row, dict))
-    video_counts = Counter(row.get("category_id") for row in videos if isinstance(row, dict))
+    try:
+        channel_links = await _get("influencer_channel_categories", {"select": "category_id"})
+        channel_counts = Counter(row.get("category_id") for row in channel_links if isinstance(row, dict))
+    except Exception as error:
+        logger.warning("Falling back to legacy channel category counts: %s", error)
+        channels = await _get("influencer_channels", {"select": "id,category_id"})
+        channel_counts = Counter(row.get("category_id") for row in channels if isinstance(row, dict))
+
+    try:
+        video_links = await _get("influencer_video_categories", {"select": "category_id"})
+        video_counts = Counter(row.get("category_id") for row in video_links if isinstance(row, dict))
+    except Exception as error:
+        logger.warning("Falling back to legacy video category counts: %s", error)
+        videos = await _get("influencer_videos", {"select": "id,category_id"})
+        video_counts = Counter(row.get("category_id") for row in videos if isinstance(row, dict))
     return {
         "categories": [
             {
@@ -288,8 +409,8 @@ async def update_admin_category(category_id: str, name: str) -> dict[str, Any]:
 
 
 async def delete_admin_category(category_id: str) -> dict[str, Any]:
-    channel_count = await _count("influencer_channels", {"category_id": f"eq.{category_id}"})
-    video_count = await _count("influencer_videos", {"category_id": f"eq.{category_id}"})
+    channel_count = await _category_link_counts("influencer_channel_categories", "influencer_channels", category_id)
+    video_count = await _category_link_counts("influencer_video_categories", "influencer_videos", category_id)
     if channel_count or video_count:
         raise BackendApiError(
             f"Category is still linked to {channel_count} channel(s) and {video_count} video(s).",
@@ -301,12 +422,21 @@ async def delete_admin_category(category_id: str) -> dict[str, Any]:
     return {"deleted": len(rows) if isinstance(rows, list) else 0}
 
 
-def _channel_row(row: dict[str, Any], categories: dict[str, str], video_counts: Counter[str], last_collected: dict[str, str | None]) -> dict[str, Any]:
+def _channel_row(
+    row: dict[str, Any],
+    categories: dict[str, str],
+    category_ids_by_channel: dict[str, list[str]],
+    video_counts: Counter[str],
+    last_collected: dict[str, str | None],
+) -> dict[str, Any]:
     channel_id = row.get("id")
+    primary_id, category_ids, category_label, category_names = _category_summary(row, categories, category_ids_by_channel)
     return {
         "id": channel_id,
-        "categoryId": row.get("category_id"),
-        "category": categories.get(row.get("category_id"), "미분류"),
+        "categoryId": primary_id,
+        "categoryIds": category_ids,
+        "category": category_label,
+        "categoryNames": category_names,
         "channelUrl": row.get("channel_url"),
         "youtubeChannelId": row.get("youtube_channel_id"),
         "channelTitle": row.get("channel_title"),
@@ -327,21 +457,33 @@ async def list_admin_influencer_channels(
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
 ) -> dict[str, Any]:
+    fetch_limit = None if category_id else limit
+    fetch_offset = 0 if category_id else offset
     params: dict[str, Any] = {
         "select": "id,category_id,youtube_channel_id,channel_title,channel_url,description,thumbnail_url,is_active,created_at,updated_at,last_collected_at",
         "order": "created_at.desc",
     }
-    if category_id:
-        params["category_id"] = f"eq.{category_id}"
     if is_active is not None:
         params["is_active"] = f"eq.{str(is_active).lower()}"
     if search:
         q = search.replace("*", "").strip()
         params["or"] = f"(channel_title.ilike.*{q}*,channel_url.ilike.*{q}*,youtube_channel_id.ilike.*{q}*)"
 
-    rows = await _get("influencer_channels", params, limit=limit, offset=offset)
+    rows = await _get("influencer_channels", params, limit=fetch_limit, offset=fetch_offset)
     channels = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     categories = await _category_name_by_id()
+    category_ids_by_channel = await _category_links_by_owner(
+        "influencer_channel_categories",
+        "influencer_channel_id",
+        [row["id"] for row in channels if isinstance(row.get("id"), str)],
+    )
+    if category_id:
+        channels = [
+            row
+            for row in channels
+            if category_id in category_ids_by_channel.get(row.get("id"), [])
+            or row.get("category_id") == category_id
+        ][offset : offset + limit]
     videos = await _get("influencer_videos", {"select": "influencer_channel_id,collected_at"})
     video_counts: Counter[str] = Counter()
     last_collected: dict[str, str | None] = {}
@@ -356,15 +498,16 @@ async def list_admin_influencer_channels(
                 last_collected[influencer_channel_id] = collected_at
 
     return {
-        "channels": [_channel_row(row, categories, video_counts, last_collected) for row in channels],
+        "channels": [_channel_row(row, categories, category_ids_by_channel, video_counts, last_collected) for row in channels],
         "limit": limit,
         "offset": offset,
     }
 
 
 async def create_admin_influencer_channel(payload: dict[str, Any]) -> dict[str, Any]:
+    category_ids = _category_ids_from_payload(payload, required=True)
     row_payload = {
-        "category_id": payload["category_id"],
+        "category_id": category_ids[0],
         "channel_url": _trim(payload.get("channel_url")),
         "youtube_channel_id": _trim(payload.get("youtube_channel_id")),
         "channel_title": _trim(payload.get("channel_title")),
@@ -376,14 +519,18 @@ async def create_admin_influencer_channel(payload: dict[str, Any]) -> dict[str, 
         raise BackendApiError("channelUrl or youtubeChannelId is required.", 400, "VALIDATION_ERROR")
     rows = await _post("influencer_channels", row_payload)
     row = _first_row(rows)
-    await _audit("create_influencer_channel", "influencer_channels", row.get("id"), row_payload)
+    if isinstance(row.get("id"), str):
+        await _sync_channel_categories(row["id"], category_ids)
+    await _audit("create_influencer_channel", "influencer_channels", row.get("id"), {**row_payload, "category_ids": category_ids})
     return {"channel": row}
 
 
 async def update_admin_influencer_channel(channel_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    has_category_update = "category_ids" in payload or "categoryIds" in payload or "category_id" in payload or "categoryId" in payload
+    category_ids = _category_ids_from_payload(payload, required=has_category_update)
     row_payload = _clean_update(
         {
-            "category_id": payload.get("category_id"),
+            "category_id": category_ids[0] if has_category_update else None,
             "channel_url": _trim(payload.get("channel_url")),
             "youtube_channel_id": _trim(payload.get("youtube_channel_id")),
             "channel_title": _trim(payload.get("channel_title")),
@@ -395,7 +542,9 @@ async def update_admin_influencer_channel(channel_id: str, payload: dict[str, An
     )
     rows = await _patch("influencer_channels", row_payload, {"id": f"eq.{channel_id}"})
     row = _first_row(rows)
-    await _audit("update_influencer_channel", "influencer_channels", channel_id, row_payload)
+    if has_category_update:
+        await _sync_channel_categories(channel_id, category_ids)
+    await _audit("update_influencer_channel", "influencer_channels", channel_id, {**row_payload, "category_ids": category_ids if has_category_update else None})
     return {"channel": row}
 
 
@@ -433,14 +582,22 @@ async def sync_admin_influencer_channel(channel_id: str) -> dict[str, Any]:
     return {"channel": updated}
 
 
-def _video_row(row: dict[str, Any], categories: dict[str, str], channels: dict[str, str]) -> dict[str, Any]:
+def _video_row(
+    row: dict[str, Any],
+    categories: dict[str, str],
+    category_ids_by_video: dict[str, list[str]],
+    channels: dict[str, str],
+) -> dict[str, Any]:
     video_id = row.get("youtube_video_id")
+    primary_id, category_ids, category_label, category_names = _category_summary(row, categories, category_ids_by_video)
     return {
         "id": row.get("id"),
         "youtubeVideoId": video_id,
         "youtubeUrl": f"https://www.youtube.com/watch?v={video_id}" if isinstance(video_id, str) else None,
-        "categoryId": row.get("category_id"),
-        "category": categories.get(row.get("category_id"), "미분류"),
+        "categoryId": primary_id,
+        "categoryIds": category_ids,
+        "category": category_label,
+        "categoryNames": category_names,
         "influencerChannelId": row.get("influencer_channel_id"),
         "channel": channels.get(row.get("influencer_channel_id"), row.get("youtube_channel_id") or "Unknown"),
         "youtubeChannelId": row.get("youtube_channel_id"),
@@ -481,12 +638,12 @@ async def list_admin_videos(
 ) -> dict[str, Any]:
     safe_sort = sort_by if sort_by in {"published_at", "view_count", "like_count", "comment_count", "collected_at", "created_at"} else "published_at"
     safe_order = "asc" if sort_order == "asc" else "desc"
+    fetch_limit = None if category_id else limit
+    fetch_offset = 0 if category_id else offset
     params: dict[str, Any] = {
         "select": "id,category_id,influencer_channel_id,youtube_channel_id,youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw,collected_at,created_at",
         "order": f"{safe_sort}.{safe_order}.nullslast",
     }
-    if category_id:
-        params["category_id"] = f"eq.{category_id}"
     if channel_id:
         params["influencer_channel_id"] = f"eq.{channel_id}"
     if date_from:
@@ -497,12 +654,24 @@ async def list_admin_videos(
         q = search.replace("*", "").strip()
         params["or"] = f"(title.ilike.*{q}*,description.ilike.*{q}*,youtube_video_id.ilike.*{q}*)"
 
-    rows = await _get("influencer_videos", params, limit=limit, offset=offset)
+    rows = await _get("influencer_videos", params, limit=fetch_limit, offset=fetch_offset)
     videos = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     categories = await _category_name_by_id()
+    category_ids_by_video = await _category_links_by_owner(
+        "influencer_video_categories",
+        "influencer_video_id",
+        [row["id"] for row in videos if isinstance(row.get("id"), str)],
+    )
+    if category_id:
+        videos = [
+            row
+            for row in videos
+            if category_id in category_ids_by_video.get(row.get("id"), [])
+            or row.get("category_id") == category_id
+        ][offset : offset + limit]
     channels = await _channel_title_by_id()
     return {
-        "videos": [_video_row(row, categories, channels) for row in videos],
+        "videos": [_video_row(row, categories, category_ids_by_video, channels) for row in videos],
         "limit": limit,
         "offset": offset,
     }
@@ -511,20 +680,26 @@ async def list_admin_videos(
 async def get_admin_video(video_id: str) -> dict[str, Any]:
     rows = await _get("influencer_videos", {"select": "*", "id": f"eq.{video_id}", "limit": "1"})
     row = _first_row(rows, "Video not found.")
-    return {"video": _video_row(row, await _category_name_by_id(), await _channel_title_by_id())}
+    category_ids_by_video = await _category_links_by_owner("influencer_video_categories", "influencer_video_id", [video_id])
+    return {"video": _video_row(row, await _category_name_by_id(), category_ids_by_video, await _channel_title_by_id())}
 
 
 async def update_admin_video(video_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    has_category_update = "category_ids" in payload or "categoryIds" in payload
+    category_ids = _category_ids_from_payload(payload, required=has_category_update)
     row_payload = _clean_update(
         {
             "title": _trim(payload.get("title")),
             "description": _trim(payload.get("description")),
             "tags": payload.get("tags"),
+            "category_id": category_ids[0] if has_category_update else None,
         }
     )
     rows = await _patch("influencer_videos", row_payload, {"id": f"eq.{video_id}"})
     row = _first_row(rows)
-    await _audit("update_video", "influencer_videos", video_id, row_payload)
+    if has_category_update:
+        await _sync_video_categories(video_id, category_ids)
+    await _audit("update_video", "influencer_videos", video_id, {**row_payload, "category_ids": category_ids if has_category_update else None})
     return {"video": row}
 
 
@@ -570,6 +745,140 @@ async def _finish_collection_log(log_id: str | None, status: str, summary: dict[
         return
 
 
+def _category_ids_for_channel_row(row: dict[str, Any], category_ids_by_channel: dict[str, list[str]]) -> list[str]:
+    channel_id = row.get("id")
+    category_ids = category_ids_by_channel.get(channel_id, []) if isinstance(channel_id, str) else []
+    legacy_category_id = row.get("category_id")
+    if isinstance(legacy_category_id, str) and legacy_category_id not in category_ids:
+        category_ids = [legacy_category_id, *category_ids]
+    return category_ids
+
+
+async def _sync_video_categories_for_youtube_ids(youtube_video_ids: list[str], category_ids: list[str]) -> None:
+    if not youtube_video_ids or not category_ids:
+        return
+    try:
+        rows = await _get(
+            "influencer_videos",
+            {
+                "select": "id,youtube_video_id",
+                "youtube_video_id": _in_filter(youtube_video_ids),
+            },
+        )
+        video_ids = [row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)] if isinstance(rows, list) else []
+        if not video_ids:
+            return
+        await _delete("influencer_video_categories", {"influencer_video_id": _in_filter(video_ids)}, prefer="return=minimal")
+        link_rows = [
+            {"influencer_video_id": video_id, "category_id": category_id}
+            for video_id in video_ids
+            for category_id in category_ids
+        ]
+        await _post(
+            "influencer_video_categories?on_conflict=influencer_video_id,category_id",
+            link_rows,
+            prefer="resolution=ignore-duplicates,return=minimal",
+        )
+    except Exception as error:
+        logger.warning("Failed to sync video category links after daily collection: %s", error)
+
+
+async def _collect_daily_channel(
+    row: dict[str, Any],
+    *,
+    category_names: dict[Any, Any],
+    category_ids_by_channel: dict[str, list[str]],
+    window_start: datetime,
+    started_at: str,
+    semaphore: asyncio.Semaphore,
+) -> dict[str, Any]:
+    async with semaphore:
+        channel_identifier = row.get("youtube_channel_id") or row.get("channel_url") or row.get("id")
+        logger.info("Daily YouTube collection started for channel=%s", channel_identifier)
+        try:
+            channel_input = row.get("channel_url") or row.get("youtube_channel_id")
+            if not isinstance(channel_input, str) or not channel_input.strip():
+                raise BackendApiError("Influencer channel is missing a YouTube URL or id.", 400, "VALIDATION_ERROR")
+            category_ids = _category_ids_for_channel_row(row, category_ids_by_channel)
+            if not category_ids:
+                raise BackendApiError("Influencer channel has no linked creator categories.", 400, "VALIDATION_ERROR")
+
+            channel = await get_channel_info(channel_input)
+            await _patch(
+                "influencer_channels",
+                {
+                    "youtube_channel_id": channel.youtubeChannelId,
+                    "channel_title": channel.channelTitle,
+                    "channel_url": row.get("channel_url") or channel.channelUrl,
+                    "description": channel.description,
+                    "thumbnail_url": channel.thumbnailUrl,
+                    "last_collected_at": started_at,
+                    "updated_at": started_at,
+                },
+                {"id": f"eq.{row.get('id')}"},
+                prefer="return=minimal",
+            )
+
+            recent_videos = await get_recent_videos(channel)
+            last_day_videos = [
+                video
+                for video in recent_videos
+                if (published := _parse_datetime(video.publishedAt)) is not None and published >= window_start
+            ]
+            if not last_day_videos:
+                logger.info("Daily YouTube collection finished for channel=%s videosFound=0", channel.youtubeChannelId)
+                return {"videosFound": 0, "videosUpserted": 0, "error": None}
+
+            upsert_rows = [
+                {
+                    "category_id": category_ids[0],
+                    "influencer_channel_id": row.get("id"),
+                    "youtube_channel_id": channel.youtubeChannelId,
+                    "youtube_video_id": video.youtubeVideoId,
+                    "published_at": video.publishedAt,
+                    "title": video.title,
+                    "description": video.description,
+                    "thumbnails": {key: item.model_dump(mode="json") for key, item in video.thumbnails.items()},
+                    "tags": video.tags,
+                    "view_count": video.viewCount,
+                    "like_count": video.likeCount,
+                    "comment_count": video.commentCount,
+                    "raw": video.raw,
+                    "collected_at": started_at,
+                }
+                for video in last_day_videos
+            ]
+            await _post(
+                "influencer_videos?on_conflict=youtube_video_id",
+                upsert_rows,
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+            await _sync_video_categories_for_youtube_ids(
+                [video.youtubeVideoId for video in last_day_videos if isinstance(video.youtubeVideoId, str)],
+                category_ids,
+            )
+            logger.info(
+                "Daily YouTube collection finished for channel=%s videosFound=%s videosUpserted=%s",
+                channel.youtubeChannelId,
+                len(last_day_videos),
+                len(upsert_rows),
+            )
+            return {"videosFound": len(last_day_videos), "videosUpserted": len(upsert_rows), "error": None}
+        except Exception as error:
+            logger.exception("Daily YouTube collection failed for channel=%s", channel_identifier)
+            return {
+                "videosFound": 0,
+                "videosUpserted": 0,
+                "error": {
+                    "category": category_names.get(row.get("category_id")),
+                    "categories": [category_names.get(category_id, category_id) for category_id in _category_ids_for_channel_row(row, category_ids_by_channel)],
+                    "channelId": row.get("youtube_channel_id"),
+                    "channelUrl": row.get("channel_url"),
+                    "message": str(error),
+                },
+            }
+
+
 async def collect_admin_now() -> AdminCollectionSummary:
     started = _now()
     started_at = _iso(started)
@@ -586,77 +895,37 @@ async def collect_admin_now() -> AdminCollectionSummary:
         },
     )
     channels = [row for row in channel_rows if isinstance(row, dict)] if isinstance(channel_rows, list) else []
+    category_ids_by_channel = await _category_links_by_owner(
+        "influencer_channel_categories",
+        "influencer_channel_id",
+        [row["id"] for row in channels if isinstance(row.get("id"), str)],
+    )
     errors: list[dict[str, Any]] = []
     videos_found = 0
     videos_upserted = 0
 
     try:
-        for row in channels:
-            try:
-                channel_input = row.get("channel_url") or row.get("youtube_channel_id")
-                if not isinstance(channel_input, str) or not channel_input.strip():
-                    raise BackendApiError("Influencer channel is missing a YouTube URL or id.", 400, "VALIDATION_ERROR")
-
-                channel = await get_channel_info(channel_input)
-                await _patch(
-                    "influencer_channels",
-                    {
-                        "youtube_channel_id": channel.youtubeChannelId,
-                        "channel_title": channel.channelTitle,
-                        "channel_url": row.get("channel_url") or channel.channelUrl,
-                        "description": channel.description,
-                        "thumbnail_url": channel.thumbnailUrl,
-                        "last_collected_at": started_at,
-                        "updated_at": started_at,
-                    },
-                    {"id": f"eq.{row.get('id')}"},
-                    prefer="return=minimal",
+        logger.info("Daily YouTube collection started: channels=%s concurrency=%s", len(channels), DAILY_COLLECTION_CONCURRENCY)
+        semaphore = asyncio.Semaphore(DAILY_COLLECTION_CONCURRENCY)
+        results = await asyncio.gather(
+            *[
+                _collect_daily_channel(
+                    row,
+                    category_names=category_names,
+                    category_ids_by_channel=category_ids_by_channel,
+                    window_start=window_start,
+                    started_at=started_at,
+                    semaphore=semaphore,
                 )
+                for row in channels
+            ]
+        )
 
-                recent_videos = await get_recent_videos(channel)
-                last_day_videos = [
-                    video
-                    for video in recent_videos
-                    if (published := _parse_datetime(video.publishedAt)) is not None and published >= window_start
-                ]
-                videos_found += len(last_day_videos)
-                if not last_day_videos:
-                    continue
-
-                upsert_rows = [
-                    {
-                        "category_id": row.get("category_id"),
-                        "influencer_channel_id": row.get("id"),
-                        "youtube_channel_id": channel.youtubeChannelId,
-                        "youtube_video_id": video.youtubeVideoId,
-                        "published_at": video.publishedAt,
-                        "title": video.title,
-                        "description": video.description,
-                        "thumbnails": {key: item.model_dump(mode="json") for key, item in video.thumbnails.items()},
-                        "tags": video.tags,
-                        "view_count": video.viewCount,
-                        "like_count": video.likeCount,
-                        "comment_count": video.commentCount,
-                        "raw": video.raw,
-                        "collected_at": started_at,
-                    }
-                    for video in last_day_videos
-                ]
-                await _post(
-                    "influencer_videos?on_conflict=youtube_video_id",
-                    upsert_rows,
-                    prefer="resolution=merge-duplicates,return=minimal",
-                )
-                videos_upserted += len(upsert_rows)
-            except Exception as error:
-                errors.append(
-                    {
-                        "category": category_names.get(row.get("category_id")),
-                        "channelId": row.get("youtube_channel_id"),
-                        "channelUrl": row.get("channel_url"),
-                        "message": str(error),
-                    }
-                )
+        for result in results:
+            videos_found += int(result.get("videosFound") or 0)
+            videos_upserted += int(result.get("videosUpserted") or 0)
+            if result.get("error"):
+                errors.append(result["error"])
 
         summary = AdminCollectionSummary(
             collectedAt=started_at,
@@ -805,7 +1074,22 @@ async def test_admin_shop() -> AdminTestResult:
 async def danger_delete_videos_by_category(category_id: str, confirm: str) -> dict[str, Any]:
     if confirm != "DELETE":
         raise BackendApiError('Type "DELETE" to confirm this danger action.', 400, "VALIDATION_ERROR")
-    rows = await _delete("influencer_videos", {"category_id": f"eq.{category_id}"})
+    video_ids: set[str] = set()
+    try:
+        links = await _get("influencer_video_categories", {"select": "influencer_video_id", "category_id": f"eq.{category_id}"})
+        if isinstance(links, list):
+            video_ids.update(row["influencer_video_id"] for row in links if isinstance(row, dict) and isinstance(row.get("influencer_video_id"), str))
+    except Exception as error:
+        logger.warning("Failed to load video category links for danger delete: %s", error)
+
+    legacy_rows = await _get("influencer_videos", {"select": "id", "category_id": f"eq.{category_id}"})
+    if isinstance(legacy_rows, list):
+        video_ids.update(row["id"] for row in legacy_rows if isinstance(row, dict) and isinstance(row.get("id"), str))
+
+    if video_ids:
+        rows = await _delete("influencer_videos", {"id": _in_filter(sorted(video_ids))})
+    else:
+        rows = []
     deleted = len(rows) if isinstance(rows, list) else 0
     await _audit("danger_delete_videos_by_category", "influencer_videos", category_id, {"deleted": deleted})
     return {"deleted": deleted}

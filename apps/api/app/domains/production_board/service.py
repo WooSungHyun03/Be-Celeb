@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 import httpx
@@ -13,15 +13,23 @@ from app.domains.production_board.schemas import (
     ProductionBoardCreatePayload,
     ProductionBoardMemoUpdatePayload,
     ProductionBoardStatusUpdatePayload,
+    ProductionBoardUpdatePayload,
 )
 from app.services.database_service import fetch_content_recommendation_detail
 
 PRODUCTION_BOARD_SELECT = (
+    "id,user_id,favorite_id,recommendation_id,calendar_event_id,title,description,hook,reason,hashtags,storyboard,category,"
+    "status,priority,memo,shoot_start_date,shoot_end_date,metadata,due_date,upload_scheduled_at,created_at,updated_at"
+)
+PRODUCTION_BOARD_LEGACY_SELECT = (
     "id,user_id,favorite_id,recommendation_id,title,hook,reason,hashtags,storyboard,category,"
     "status,priority,memo,due_date,upload_scheduled_at,created_at,updated_at"
 )
 CHECKLIST_SELECT = "id,board_item_id,user_id,text,is_done,sort_order,created_at,updated_at"
-PRODUCTION_BOARD_STATUSES = ("idea", "script", "filming", "editing", "uploaded")
+PRODUCTION_BOARD_STATUSES = ("idea", "planned", "filming", "editing", "scheduled", "uploaded")
+PRODUCTION_CALENDAR_COLOR = "#7c3aed"
+PRODUCTION_BOARD_NEW_COLUMNS = {"calendar_event_id", "description", "shoot_start_date", "shoot_end_date", "metadata"}
+LEGACY_STATUS_MAP = {"planned": "script", "scheduled": "editing"}
 
 
 class ProductionBoardAlreadyAddedError(BackendApiError):
@@ -78,27 +86,150 @@ async def _request(
     return response.json() if response.text else None
 
 
+def _is_schema_compat_error(error: Exception) -> bool:
+    text = str(error)
+    return (
+        "42703" in text
+        or "does not exist" in text
+        or "production_board_items_status_check" in text
+        or "violates check constraint" in text
+    )
+
+
+def _legacy_board_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    legacy = {key: value for key, value in payload.items() if key not in PRODUCTION_BOARD_NEW_COLUMNS}
+    status = legacy.get("status")
+    if isinstance(status, str):
+        legacy["status"] = LEGACY_STATUS_MAP.get(status, status)
+    return legacy
+
+
+async def _get_board_rows(params: dict[str, Any]) -> Any:
+    try:
+        return await _request("GET", "production_board_items", params={**params, "select": PRODUCTION_BOARD_SELECT})
+    except BackendApiError as error:
+        if not _is_schema_compat_error(error):
+            raise
+        return await _request("GET", "production_board_items", params={**params, "select": PRODUCTION_BOARD_LEGACY_SELECT})
+
+
+async def _post_board_item(payload: dict[str, Any]) -> Any:
+    try:
+        return await _request(
+            "POST",
+            f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+            payload=payload,
+            prefer="return=representation",
+        )
+    except BackendApiError as error:
+        if not _is_schema_compat_error(error):
+            raise
+        return await _request(
+            "POST",
+            f"production_board_items?select={PRODUCTION_BOARD_LEGACY_SELECT}",
+            payload=_legacy_board_payload(payload),
+            prefer="return=representation",
+        )
+
+
+async def _patch_board_item(params: dict[str, Any], payload: dict[str, Any]) -> Any:
+    try:
+        return await _request(
+            "PATCH",
+            f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+            params=params,
+            payload=payload,
+            prefer="return=representation",
+        )
+    except BackendApiError as error:
+        if not _is_schema_compat_error(error):
+            raise
+        return await _request(
+            "PATCH",
+            f"production_board_items?select={PRODUCTION_BOARD_LEGACY_SELECT}",
+            params=params,
+            payload=_legacy_board_payload(payload),
+            prefer="return=representation",
+        )
+
+
 def _as_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str) and item.strip()]
 
 
+def _validate_date(value: str, field: str) -> str:
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        raise BadRequestException(f"{field} must be YYYY-MM-DD.", "VALIDATION_ERROR")
+    return value
+
+
+def _validate_shoot_dates(start_date: str | None, end_date: str | None) -> tuple[str | None, str | None]:
+    if not start_date and end_date:
+        raise BadRequestException("shootStartDate is required when shootEndDate is set.", "VALIDATION_ERROR")
+    if not start_date:
+        return None, None
+    validated_start = _validate_date(start_date, "shootStartDate")
+    validated_end = _validate_date(end_date, "shootEndDate") if end_date else validated_start
+    if date.fromisoformat(validated_end) < date.fromisoformat(validated_start):
+        raise BadRequestException("shootEndDate must be the same as or after shootStartDate.", "VALIDATION_ERROR")
+    return validated_start, validated_end
+
+
+def _storyboard_from_text(value: str) -> list[dict[str, Any]]:
+    return [
+        {"scene": index + 1, "description": line.strip()}
+        for index, line in enumerate(value.splitlines())
+        if line.strip()
+    ]
+
+
+def _normalize_storyboard(value: Any) -> Any:
+    if isinstance(value, str):
+        return _storyboard_from_text(value)
+    return value
+
+
+def _normalize_hashtags(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        tag = item.strip()
+        if not tag:
+            continue
+        normalized.append(tag if tag.startswith("#") else f"#{tag}")
+    return normalized
+
+
 def _item_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    status = row.get("status")
+    if status == "script":
+        status = "planned"
     return {
         "id": row.get("id"),
         "userId": row.get("user_id"),
         "favoriteId": row.get("favorite_id"),
         "recommendationId": row.get("recommendation_id"),
+        "calendarEventId": row.get("calendar_event_id"),
         "title": row.get("title"),
+        "description": row.get("description"),
         "hook": row.get("hook"),
         "reason": row.get("reason"),
         "hashtags": _as_string_list(row.get("hashtags")),
         "storyboard": row.get("storyboard"),
         "category": row.get("category"),
-        "status": row.get("status"),
+        "status": status,
         "priority": row.get("priority") or "normal",
         "memo": row.get("memo"),
+        "shootStartDate": row.get("shoot_start_date"),
+        "shootEndDate": row.get("shoot_end_date"),
+        "metadata": row.get("metadata") if isinstance(row.get("metadata"), dict) else {},
         "checklistTotal": row.get("checklist_total") if isinstance(row.get("checklist_total"), int) else 0,
         "checklistDone": row.get("checklist_done") if isinstance(row.get("checklist_done"), int) else 0,
         "dueDate": row.get("due_date"),
@@ -220,14 +351,11 @@ async def _find_existing_board_item(
 
 
 async def list_production_board_items(user_id: str) -> dict[str, Any]:
-    rows = await _request(
-        "GET",
-        "production_board_items",
-        params={
-            "select": PRODUCTION_BOARD_SELECT,
+    rows = await _get_board_rows(
+        {
             "user_id": f"eq.{user_id}",
             "order": "created_at.desc",
-        },
+        }
     )
     raw_items = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     item_ids = [row["id"] for row in raw_items if isinstance(row.get("id"), str)]
@@ -263,20 +391,102 @@ async def list_production_board_items(user_id: str) -> dict[str, Any]:
 
 
 async def _find_board_item_by_id(user_id: str, item_id: str) -> dict[str, Any]:
-    rows = await _request(
-        "GET",
-        "production_board_items",
-        params={
-            "select": PRODUCTION_BOARD_SELECT,
+    rows = await _get_board_rows(
+        {
             "id": f"eq.{item_id}",
             "user_id": f"eq.{user_id}",
             "limit": "1",
-        },
+        }
     )
     row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not row:
         raise NotFoundException("Production board item not found.")
     return row
+
+
+def _calendar_status_for_production(status: str | None) -> str:
+    if status in {"filming", "editing", "scheduled", "uploaded"}:
+        return status
+    return "planned"
+
+
+def _calendar_metadata_for_item(row: dict[str, Any]) -> dict[str, Any]:
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    return {
+        **metadata,
+        "source": "production-board",
+        "productionItemId": row.get("id"),
+    }
+
+
+async def _delete_linked_calendar_event(user_id: str, row: dict[str, Any]) -> dict[str, Any]:
+    calendar_event_id = row.get("calendar_event_id")
+    if isinstance(calendar_event_id, str) and calendar_event_id:
+        await _request(
+            "DELETE",
+            "calendar_events",
+            params={"id": f"eq.{calendar_event_id}", "user_id": f"eq.{user_id}"},
+            prefer="return=minimal",
+        )
+        row = {**row, "calendar_event_id": None}
+        await _request(
+            "PATCH",
+            "production_board_items",
+            params={"id": f"eq.{row.get('id')}", "user_id": f"eq.{user_id}"},
+            payload={"calendar_event_id": None},
+            prefer="return=minimal",
+        )
+    return row
+
+
+async def _upsert_calendar_event_for_item(user_id: str, row: dict[str, Any]) -> dict[str, Any]:
+    item_id = row.get("id")
+    start_date = row.get("shoot_start_date")
+    end_date = row.get("shoot_end_date") or start_date
+    if not isinstance(item_id, str):
+        return row
+    if not isinstance(start_date, str) or not start_date:
+        return await _delete_linked_calendar_event(user_id, row)
+
+    payload = {
+        "user_id": user_id,
+        "production_item_id": item_id,
+        "title": row.get("title") or "촬영 일정",
+        "description": row.get("description") or row.get("memo"),
+        "scheduled_date": start_date,
+        "start_date": start_date,
+        "end_date": end_date,
+        "status": _calendar_status_for_production(row.get("status")),
+        "platform": "youtube",
+        "color": PRODUCTION_CALENDAR_COLOR,
+        "metadata": _calendar_metadata_for_item(row),
+    }
+    calendar_event_id = row.get("calendar_event_id")
+    if isinstance(calendar_event_id, str) and calendar_event_id:
+        rows = await _request(
+            "PATCH",
+            "calendar_events",
+            params={"id": f"eq.{calendar_event_id}", "user_id": f"eq.{user_id}"},
+            payload=payload,
+            prefer="return=representation",
+        )
+        if not isinstance(rows, list) or not rows:
+            rows = await _request("POST", "calendar_events", payload=payload, prefer="return=representation")
+    else:
+        rows = await _request("POST", "calendar_events", payload=payload, prefer="return=representation")
+
+    calendar_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not calendar_row or not isinstance(calendar_row.get("id"), str):
+        return row
+    if row.get("calendar_event_id") != calendar_row["id"]:
+        await _request(
+            "PATCH",
+            "production_board_items",
+            params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
+            payload={"calendar_event_id": calendar_row["id"]},
+            prefer="return=minimal",
+        )
+    return {**row, "calendar_event_id": calendar_row["id"]}
 
 
 async def update_production_board_item_status(
@@ -293,21 +503,19 @@ async def update_production_board_item_status(
     if requested_status == current_status:
         return {"item": _item_from_row(current_row)}
 
-    rows = await _request(
-        "PATCH",
-        f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+    rows = await _patch_board_item(
         params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
         payload={
             "status": requested_status,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
-        prefer="return=representation",
     )
     updated_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not updated_row:
         updated_row = await _find_board_item_by_id(user_id, item_id)
         if updated_row.get("status") != requested_status:
             raise BackendApiError("상태 변경에 실패했습니다.", 502, "SUPABASE_ERROR")
+    updated_row = await _upsert_calendar_event_for_item(user_id, updated_row)
     return {"item": _item_from_row(updated_row)}
 
 
@@ -318,15 +526,12 @@ async def update_production_board_item_memo(
 ) -> dict[str, Any]:
     await _find_board_item_by_id(user_id, item_id)
     memo = payload.memo
-    rows = await _request(
-        "PATCH",
-        f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
+    rows = await _patch_board_item(
         params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
         payload={
             "memo": memo,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
-        prefer="return=representation",
     )
     updated_row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not updated_row:
@@ -456,6 +661,15 @@ async def delete_production_board_checklist_item(user_id: str, checklist_item_id
 
 
 async def delete_production_board_item(user_id: str, item_id: str) -> dict[str, Any]:
+    existing = await _find_board_item_by_id(user_id, item_id)
+    calendar_event_id = existing.get("calendar_event_id")
+    if isinstance(calendar_event_id, str) and calendar_event_id:
+        await _request(
+            "DELETE",
+            "calendar_events",
+            params={"id": f"eq.{calendar_event_id}", "user_id": f"eq.{user_id}"},
+            prefer="return=minimal",
+        )
     rows = await _request(
         "DELETE",
         "production_board_items",
@@ -468,8 +682,32 @@ async def delete_production_board_item(user_id: str, item_id: str) -> dict[str, 
 
 
 async def add_production_board_item(user_id: str, payload: ProductionBoardCreatePayload) -> dict[str, Any]:
+    if payload.title:
+        shoot_start_date, shoot_end_date = _validate_shoot_dates(payload.shoot_start_date, payload.shoot_end_date)
+        row_payload = {
+            "user_id": user_id,
+            "favorite_id": payload.favorite_id,
+            "recommendation_id": payload.recommendation_id,
+            "title": payload.title.strip(),
+            "description": payload.description,
+            "memo": payload.memo,
+            "hashtags": _normalize_hashtags(payload.hashtags),
+            "storyboard": _normalize_storyboard(payload.storyboard),
+            "status": payload.status,
+            "priority": "normal",
+            "shoot_start_date": shoot_start_date,
+            "shoot_end_date": shoot_end_date,
+            "metadata": payload.metadata or {"source": "manual"},
+        }
+        rows = await _post_board_item(row_payload)
+        row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+        if not row:
+            raise BackendApiError("Production board item insert did not return a row.", 502, "SUPABASE_ERROR")
+        row = await _upsert_calendar_event_for_item(user_id, row)
+        return {"item": _item_from_row(row)}
+
     if not payload.favorite_id and not payload.recommendation_id:
-        raise BadRequestException("favoriteId or recommendationId is required.", "VALIDATION_ERROR")
+        raise BadRequestException("title, favoriteId, or recommendationId is required.", "VALIDATION_ERROR")
 
     favorite = (
         await _find_favorite_by_id(user_id, payload.favorite_id)
@@ -497,6 +735,7 @@ async def add_production_board_item(user_id: str, payload: ProductionBoardCreate
         "favorite_id": favorite_id,
         "recommendation_id": recommendation_id,
         "title": detail.recommendation.title,
+        "description": detail.recommendation.reason,
         "hook": detail.recommendation.hook,
         "reason": detail.recommendation.reason,
         "hashtags": detail.recommendation.hashtags or [],
@@ -504,14 +743,10 @@ async def add_production_board_item(user_id: str, payload: ProductionBoardCreate
         "category": detail.selectedCategory,
         "status": "idea",
         "priority": "normal",
+        "metadata": {"source": "favorite"},
     }
     try:
-        rows = await _request(
-            "POST",
-            f"production_board_items?select={PRODUCTION_BOARD_SELECT}",
-            payload=row_payload,
-            prefer="return=representation",
-        )
+        rows = await _post_board_item(row_payload)
     except BackendApiError as error:
         if error.status_code == 409:
             existing_after_conflict = await _find_existing_board_item(
@@ -525,4 +760,39 @@ async def add_production_board_item(user_id: str, payload: ProductionBoardCreate
     row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if not row:
         raise BackendApiError("Production board item insert did not return a row.", 502, "SUPABASE_ERROR")
+    return {"item": _item_from_row(row)}
+
+
+async def update_production_board_item(
+    user_id: str,
+    item_id: str,
+    payload: ProductionBoardUpdatePayload,
+) -> dict[str, Any]:
+    await _find_board_item_by_id(user_id, item_id)
+    raw = payload.model_dump(exclude_unset=True, by_alias=False)
+    patch: dict[str, Any] = {}
+    if "title" in raw and isinstance(raw.get("title"), str):
+        patch["title"] = raw["title"].strip()
+    for key in ("description", "memo", "status", "metadata"):
+        if key in raw:
+            patch[key] = raw.get(key)
+    if "hashtags" in raw:
+        patch["hashtags"] = _normalize_hashtags(raw.get("hashtags"))
+    if "storyboard" in raw:
+        patch["storyboard"] = _normalize_storyboard(raw.get("storyboard"))
+    if "shoot_start_date" in raw or "shoot_end_date" in raw:
+        shoot_start_date, shoot_end_date = _validate_shoot_dates(raw.get("shoot_start_date"), raw.get("shoot_end_date"))
+        patch["shoot_start_date"] = shoot_start_date
+        patch["shoot_end_date"] = shoot_end_date
+    if not patch:
+        raise BadRequestException("No fields to update.", "VALIDATION_ERROR")
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    rows = await _patch_board_item(
+        params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
+        payload=patch,
+    )
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    if not row:
+        raise NotFoundException("Production board item not found.")
+    row = await _upsert_calendar_event_for_item(user_id, row)
     return {"item": _item_from_row(row)}

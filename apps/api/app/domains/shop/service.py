@@ -10,7 +10,15 @@ from app.common.text import strip_html_tags
 from app.core.config import get_settings
 from app.core.exceptions import BackendApiError, ExternalAPIException, missing_env
 from app.core.logging import get_logger
-from app.domains.shop.schemas import ShopCollectionSummary, ShopProduct, ShopSection, ShopSectionInfo, ShopSectionsResponse
+from app.domains.shop.schemas import (
+    ShopCollectionSummary,
+    ShopProduct,
+    ShopSection,
+    ShopSectionInfo,
+    ShopSectionsResponse,
+    ShopSet,
+    ShopSetsResponse,
+)
 
 logger = get_logger(__name__)
 
@@ -18,7 +26,9 @@ NAVER_SHOP_URL = "https://openapi.naver.com/v1/search/shop.json"
 SHOP_JOB_NAME = "creator_shop_products_daily_collection"
 DEFAULT_LIMIT = 8
 MAX_LIMIT = 20
-SHOP_FALLBACK_MESSAGE = "실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다."
+SHOP_FALLBACK_MESSAGE = "수집된 상품 캐시가 없어 기본 추천 장비를 표시합니다."
+DEFAULT_SORT = "popular"
+SORT_OPTIONS = {"price_asc", "price_desc", "popular", "latest"}
 
 EQUIPMENT_KEYWORDS: dict[str, list[str]] = {
     "카메라": ["브이로그 카메라", "유튜브 카메라", "액션캠"],
@@ -30,6 +40,38 @@ EQUIPMENT_KEYWORDS: dict[str, list[str]] = {
     "저장장치": ["외장 SSD", "SD 카드", "CFexpress 카드"],
     "라이브/스트리밍 장비": ["웹캠", "캡처보드", "스트림덱"],
 }
+
+FALLBACK_PRODUCTS: dict[str, list[str]] = {
+    "카메라": ["브이로그 카메라", "유튜브 카메라", "액션캠", "스마트폰 짐벌", "웹캠 카메라"],
+    "마이크": ["기본 마이크", "유튜브 마이크", "무선 핀마이크", "USB 마이크", "샷건 마이크"],
+    "조명": ["링라이트", "유튜브 조명", "촬영 조명", "스튜디오 조명", "고성능 조명"],
+    "편집툴": ["영상 편집 키보드", "편집 모니터", "외장 SSD", "편집 컨트롤러", "컬러 캘리브레이터"],
+    "삼각대/거치대": ["카메라 삼각대", "스마트폰 삼각대", "책상 거치대", "미니 삼각대", "모니터 암"],
+    "배경/소품": ["촬영 배경지", "크로마키 배경", "제품 촬영 소품", "테이블 매트", "촬영 소품 박스"],
+    "저장장치": ["외장 SSD", "SD 카드", "CFexpress 카드", "카드 리더기", "백업 외장하드"],
+    "라이브/스트리밍 장비": ["웹캠", "캡처보드", "스트림덱", "방송용 오디오 믹서", "라이브 조명"],
+}
+
+SHOP_SET_CONFIG: list[dict[str, Any]] = [
+    {
+        "level": "beginner",
+        "title": "입문용 세트",
+        "description": "스마트폰이나 기본 카메라로 바로 촬영을 시작할 때 필요한 기본 구성입니다.",
+        "items": ["기본 마이크", "링라이트", "스마트폰 삼각대"],
+    },
+    {
+        "level": "intermediate",
+        "title": "중급자용 세트",
+        "description": "음성 품질과 촬영 안정성을 함께 올리고 편집 파일을 안정적으로 관리하는 구성입니다.",
+        "items": ["무선 핀마이크", "촬영 조명", "카메라 삼각대", "외장 SSD"],
+    },
+    {
+        "level": "advanced",
+        "title": "고급자용 세트",
+        "description": "라이브, 리뷰, 스튜디오 촬영까지 확장할 수 있는 고급 제작 장비 구성입니다.",
+        "items": ["고급 카메라", "오디오 인터페이스", "캡처보드", "스트림덱", "고성능 조명"],
+    },
+]
 
 
 class NaverShoppingAuthError(ExternalAPIException):
@@ -108,10 +150,29 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
+def _as_float(value: Any) -> float:
+    try:
+        parsed = float(value)
+        return parsed if parsed >= 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
 def _normalize_limit(limit: int | None) -> int:
     if limit is None:
         return DEFAULT_LIMIT
     return min(max(int(limit), 1), MAX_LIMIT)
+
+
+def _normalize_sort(sort: str | None) -> str:
+    normalized = (sort or DEFAULT_SORT).strip().lower()
+    return normalized if normalized in SORT_OPTIONS else DEFAULT_SORT
+
+
+def _normalize_level(level: str | None) -> str | None:
+    normalized = (level or "").strip().lower()
+    known_levels = {item["level"] for item in SHOP_SET_CONFIG}
+    return normalized if normalized in known_levels else None
 
 
 def _search_url(keyword: str) -> str:
@@ -120,6 +181,30 @@ def _search_url(keyword: str) -> str:
 
 def _safe_text(value: Any) -> str:
     return strip_html_tags(str(value or "")).strip()
+
+
+def _recommended_level_for_keyword(keyword: str) -> str | None:
+    normalized = keyword.lower().replace(" ", "")
+    beginner = {"기본마이크", "링라이트", "스마트폰삼각대", "usb마이크", "책상거치대"}
+    intermediate = {"무선핀마이크", "촬영조명", "카메라삼각대", "외장ssd", "유튜브조명"}
+    advanced = {"고급카메라", "오디오인터페이스", "캡처보드", "스트림덱", "고성능조명", "액션캠"}
+    if normalized in beginner:
+        return "beginner"
+    if normalized in intermediate:
+        return "intermediate"
+    if normalized in advanced:
+        return "advanced"
+    return None
+
+
+def _sort_products(products: list[ShopProduct], sort: str) -> list[ShopProduct]:
+    if sort == "price_asc":
+        return sorted(products, key=lambda product: (product.price is None, product.price or 0, -product.popularityScore))
+    if sort == "price_desc":
+        return sorted(products, key=lambda product: (product.price is None, -(product.price or 0), -product.popularityScore))
+    if sort == "latest":
+        return sorted(products, key=lambda product: product.collectedAt or "", reverse=True)
+    return sorted(products, key=lambda product: (product.popularityScore, product.collectedAt or ""), reverse=True)
 
 
 def _naver_credentials() -> tuple[str, str, str]:
@@ -169,11 +254,19 @@ def _product_from_row(row: dict[str, Any]) -> ShopProduct:
         maker=row.get("maker") if isinstance(row.get("maker"), str) else None,
         equipmentCategory=equipment_category,
         searchKeyword=keyword,
+        popularityScore=_as_float(row.get("popularity_score")),
+        recommendedLevel=row.get("recommended_level") if isinstance(row.get("recommended_level"), str) else None,
         collectedAt=row.get("collected_at") if isinstance(row.get("collected_at"), str) else None,
     )
 
 
-def _row_from_naver_item(item: dict[str, Any], equipment_category: str, keyword: str, collected_at: str) -> dict[str, Any]:
+def _row_from_naver_item(
+    item: dict[str, Any],
+    equipment_category: str,
+    keyword: str,
+    collected_at: str,
+    rank: int = 0,
+) -> dict[str, Any]:
     product_url = str(item.get("link") or "").strip()
     source_product_id = str(item.get("productId") or "").strip() or product_url
     return {
@@ -188,6 +281,8 @@ def _row_from_naver_item(item: dict[str, Any], equipment_category: str, keyword:
         "maker": _safe_text(item.get("maker")) or None,
         "equipment_category": equipment_category,
         "search_keyword": keyword,
+        "popularity_score": max(0, 100 - rank),
+        "recommended_level": _recommended_level_for_keyword(keyword),
         "raw": item,
         "collected_at": collected_at,
     }
@@ -239,15 +334,36 @@ async def _keywords_for_section(equipment_category: str) -> list[str]:
     return keywords or EQUIPMENT_KEYWORDS.get(equipment_category, [])
 
 
-async def _cached_products(equipment_category: str, limit: int) -> list[ShopProduct]:
+def _supabase_order(sort: str) -> str:
+    if sort == "price_asc":
+        return "price.asc.nullslast,popularity_score.desc.nullslast,collected_at.desc"
+    if sort == "price_desc":
+        return "price.desc.nullslast,popularity_score.desc.nullslast,collected_at.desc"
+    if sort == "latest":
+        return "collected_at.desc,popularity_score.desc.nullslast"
+    return "popularity_score.desc.nullslast,collected_at.desc,price.asc.nullslast"
+
+
+async def _cached_products(
+    equipment_category: str,
+    limit: int,
+    sort: str = DEFAULT_SORT,
+    level: str | None = None,
+) -> list[ShopProduct]:
+    params: dict[str, Any] = {
+        "select": (
+            "id,source,source_product_id,title,image_url,price,mall_name,product_url,brand,maker,"
+            "equipment_category,search_keyword,popularity_score,recommended_level,collected_at"
+        ),
+        "equipment_category": f"eq.{equipment_category}",
+        "order": _supabase_order(sort),
+        "limit": str(max(limit * 4, limit)),
+    }
+    if level:
+        params["recommended_level"] = f"eq.{level}"
     rows = await _get(
         "creator_shop_products",
-        {
-            "select": "id,source,source_product_id,title,image_url,price,mall_name,product_url,brand,maker,equipment_category,search_keyword,collected_at",
-            "equipment_category": f"eq.{equipment_category}",
-            "order": "collected_at.desc,price.asc.nullslast",
-            "limit": str(max(limit * 3, limit)),
-        },
+        params,
     )
     products = [_product_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     return _dedupe_products(products, limit)
@@ -378,30 +494,18 @@ async def _upsert_products(rows: list[dict[str, Any]]) -> int:
     return len(rows)
 
 
-async def _fetch_and_cache(equipment_category: str, keywords: list[str], limit: int) -> list[ShopProduct]:
-    collected_at = _now_iso()
-    rows: list[dict[str, Any]] = []
-    per_keyword_limit = max(4, min(10, limit))
-
-    for keyword in keywords:
-        items = await _fetch_naver_shop(keyword, per_keyword_limit)
-        rows.extend(_row_from_naver_item(item, equipment_category, keyword, collected_at) for item in items)
-        if len(rows) >= limit:
-            break
-
-    try:
-        await _upsert_products(rows)
-    except Exception as error:
-        logger.warning("Failed to upsert shop product cache for %s: %s", equipment_category, error)
-
-    products = [_product_from_row(row) for row in rows]
-    products.sort(key=lambda product: (product.price is None, product.price or 0, product.title))
-    return _dedupe_products(products, limit)
-
-
-def _fallback_products(equipment_category: str, limit: int) -> list[ShopProduct]:
+def _fallback_products(
+    equipment_category: str,
+    limit: int,
+    sort: str = DEFAULT_SORT,
+    level: str | None = None,
+) -> list[ShopProduct]:
     products: list[ShopProduct] = []
-    for keyword in EQUIPMENT_KEYWORDS.get(equipment_category, [])[:limit]:
+    candidates = FALLBACK_PRODUCTS.get(equipment_category, EQUIPMENT_KEYWORDS.get(equipment_category, []))
+    for index, keyword in enumerate(candidates):
+        recommended_level = _recommended_level_for_keyword(keyword)
+        if level and recommended_level != level:
+            continue
         products.append(
             ShopProduct(
                 id=None,
@@ -410,16 +514,18 @@ def _fallback_products(equipment_category: str, limit: int) -> list[ShopProduct]
                 title=f"{keyword} 추천 검색",
                 imageUrl=None,
                 price=None,
-                mallName="Naver Shopping 검색",
+                mallName="기본 추천 장비",
                 productUrl=_search_url(keyword),
                 brand=None,
                 maker=None,
                 equipmentCategory=equipment_category,
                 searchKeyword=keyword,
+                popularityScore=max(0, 100 - index * 5),
+                recommendedLevel=recommended_level,
                 collectedAt=None,
             )
         )
-    return products
+    return _sort_products(products, sort)[:limit]
 
 
 def _fallback_message(error: Exception) -> str:
@@ -429,42 +535,23 @@ def _fallback_message(error: Exception) -> str:
     return SHOP_FALLBACK_MESSAGE
 
 
-async def _section_products(equipment_category: str, limit: int, refresh: bool) -> ShopSection:
-    cached: list[ShopProduct] = []
-    if not refresh:
-        try:
-            cached = await _cached_products(equipment_category, limit)
-            if len(cached) >= min(4, limit):
-                return ShopSection(equipmentCategory=equipment_category, items=cached, isFallback=False)
-        except Exception as error:
-            logger.warning("Failed to read shop product cache for %s: %s", equipment_category, error)
-
+async def _section_products(equipment_category: str, limit: int, sort: str, level: str | None) -> ShopSection:
     try:
-        keywords = await _keywords_for_section(equipment_category)
-        products = await _fetch_and_cache(equipment_category, keywords, limit)
-        if products:
-            return ShopSection(equipmentCategory=equipment_category, items=products, isFallback=False)
-    except Exception as error:
-        logger.warning("Shop live product load failed for %s: %s", equipment_category, error)
+        cached = await _cached_products(equipment_category, limit, sort, level)
         if cached:
-            return ShopSection(
-                equipmentCategory=equipment_category,
-                items=cached,
-                error=_fallback_message(error),
-                isFallback=False,
-            )
+            return ShopSection(equipmentCategory=equipment_category, items=cached, isFallback=False)
+    except Exception as error:
+        logger.warning("Failed to read shop product cache for %s: %s", equipment_category, error)
         return ShopSection(
             equipmentCategory=equipment_category,
-            items=_fallback_products(equipment_category, limit),
+            items=_fallback_products(equipment_category, limit, sort, level),
             error=_fallback_message(error),
             isFallback=True,
         )
 
-    if cached:
-        return ShopSection(equipmentCategory=equipment_category, items=cached, error=SHOP_FALLBACK_MESSAGE, isFallback=False)
     return ShopSection(
         equipmentCategory=equipment_category,
-        items=_fallback_products(equipment_category, limit),
+        items=_fallback_products(equipment_category, limit, sort, level),
         error=SHOP_FALLBACK_MESSAGE,
         isFallback=True,
     )
@@ -479,18 +566,52 @@ async def list_shop_sections() -> dict[str, list[ShopSectionInfo]]:
     }
 
 
+def _configured_set(level: str) -> dict[str, Any] | None:
+    return next((item for item in SHOP_SET_CONFIG if item["level"] == level), None)
+
+
+async def list_shop_sets() -> ShopSetsResponse:
+    rows: list[dict[str, Any]] = []
+    try:
+        payload = await _get("creator_shop_sets", {"select": "level,title,description,product_ids", "order": "created_at.asc"})
+        rows = [row for row in payload if isinstance(row, dict)] if isinstance(payload, list) else []
+    except Exception as error:
+        logger.warning("Failed to load creator shop sets from cache: %s", error)
+
+    source_rows = rows or SHOP_SET_CONFIG
+    sets: list[ShopSet] = []
+    for row in source_rows:
+        level = str(row.get("level") or "")
+        config = _configured_set(level) or row
+        sets.append(
+            ShopSet(
+                level=level,
+                title=str(row.get("title") or config.get("title") or level),
+                description=row.get("description") if isinstance(row.get("description"), str) else config.get("description"),
+                items=list(config.get("items") or []),
+            )
+        )
+    return ShopSetsResponse(sets=sets)
+
+
 async def get_shop_products(
     equipment_category: str | None = None,
     limit: int | None = None,
-    refresh: bool = False,
+    sort: str | None = None,
+    level: str | None = None,
 ) -> ShopSectionsResponse:
     normalized_limit = _normalize_limit(limit)
+    normalized_sort = _normalize_sort(sort)
+    normalized_level = _normalize_level(level)
     sections = [equipment_category] if equipment_category else list(EQUIPMENT_KEYWORDS)
     sections = [section for section in sections if section in EQUIPMENT_KEYWORDS]
     if equipment_category and not sections:
         return ShopSectionsResponse(sections=[])
     return ShopSectionsResponse(
-        sections=[await _section_products(section, normalized_limit, refresh) for section in sections]
+        sections=[
+            await _section_products(section, normalized_limit, normalized_sort, normalized_level)
+            for section in sections
+        ]
     )
 
 
@@ -537,7 +658,8 @@ async def _collection_keywords() -> list[dict[str, Any]]:
     except Exception as error:
         logger.warning("Failed to load active shop keywords for collection: %s", error)
         rows = []
-    return rows or _default_keyword_rows()
+    valid_rows = [row for row in rows if str(row.get("equipment_category") or "") in EQUIPMENT_KEYWORDS]
+    return valid_rows or _default_keyword_rows()
 
 
 async def collect_shop_products() -> ShopCollectionSummary:
@@ -559,7 +681,10 @@ async def collect_shop_products() -> ShopCollectionSummary:
             try:
                 items = await _fetch_naver_shop(keyword, 10)
                 collected_at = _now_iso()
-                product_rows = [_row_from_naver_item(item, equipment_category, keyword, collected_at) for item in items]
+                product_rows = [
+                    _row_from_naver_item(item, equipment_category, keyword, collected_at, rank=index)
+                    for index, item in enumerate(items)
+                ]
                 products_upserted += await _upsert_products(product_rows)
             except Exception as error:
                 logger.exception("Shop product collection failed for %s / %s", equipment_category, keyword)

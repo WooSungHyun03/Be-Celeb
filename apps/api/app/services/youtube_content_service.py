@@ -87,6 +87,10 @@ def _as_str_list(value: Any) -> list[str]:
     return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
 
+def _in_filter(values: list[str]) -> str:
+    return f"in.({','.join(values)})"
+
+
 def _normalize_supabase_url() -> str:
     settings = get_settings()
     if not settings.supabase_url:
@@ -484,6 +488,34 @@ def _video_from_row(row: dict[str, Any]) -> YouTubeVideoAnalysis:
 
 async def _get_influencer_videos(category_name: CreatorCategoryName) -> list[YouTubeVideoAnalysis]:
     category_id = await _get_category_id(category_name)
+    try:
+        linked_rows = await _supabase_get(
+            "influencer_video_categories",
+            {
+                "select": "influencer_video_id",
+                "category_id": f"eq.{category_id}",
+                "limit": "80",
+            },
+        )
+        video_ids = [
+            row["influencer_video_id"]
+            for row in linked_rows
+            if isinstance(row, dict) and isinstance(row.get("influencer_video_id"), str)
+        ] if isinstance(linked_rows, list) else []
+        if video_ids:
+            rows = await _supabase_get(
+                "influencer_videos",
+                {
+                    "select": "youtube_video_id,youtube_channel_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
+                    "id": _in_filter(video_ids),
+                    "order": "published_at.desc",
+                    "limit": "40",
+                },
+            )
+            return [_video_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    except Exception as error:
+        logger.warning("Influencer video category join query failed for category=%s: %s", category_name, error)
+
     rows = await _supabase_get(
         "influencer_videos",
         {
@@ -905,15 +937,15 @@ async def _popular_video_rows() -> list[dict[str, Any]]:
     select_candidates = [
         (
             "canonical",
-            "category_id,youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
+            "id,category_id,youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
         ),
         (
             "video_id_thumbnail_url",
-            "category_id,video_id,published_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
+            "id,category_id,video_id,published_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
         ),
         (
             "category_name",
-            "category_name,category,youtube_video_id,published_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
+            "id,category_name,category,youtube_video_id,published_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
         ),
         ("wildcard", "*"),
     ]
@@ -933,6 +965,46 @@ async def _popular_video_rows() -> list[dict[str, Any]]:
     return []
 
 
+async def _video_category_links_by_video_id(video_ids: list[str]) -> dict[str, list[str]]:
+    if not video_ids:
+        return {}
+    try:
+        rows = await _supabase_get(
+            "influencer_video_categories",
+            {
+                "select": "influencer_video_id,category_id",
+                "influencer_video_id": _in_filter(video_ids),
+            },
+        )
+    except Exception as error:
+        logger.warning("Popular videos category link query failed: %s", error)
+        return {}
+
+    links: dict[str, list[str]] = defaultdict(list)
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            video_id = row.get("influencer_video_id")
+            category_id = row.get("category_id")
+            if isinstance(video_id, str) and isinstance(category_id, str) and category_id not in links[video_id]:
+                links[video_id].append(category_id)
+    return links
+
+
+def _categories_for_video_row(row: dict[str, Any], category_map: dict[str, str], links: dict[str, list[str]]) -> list[str]:
+    row_id = row.get("id")
+    category_ids = links.get(row_id, []) if isinstance(row_id, str) else []
+    legacy_category_id = row.get("category_id") or row.get("categoryId")
+    if isinstance(legacy_category_id, str) and legacy_category_id not in category_ids:
+        category_ids = [legacy_category_id, *category_ids]
+
+    categories = [category_map.get(category_id, "기타") for category_id in category_ids]
+    if categories:
+        return categories
+    return [_popular_category(row, category_map)]
+
+
 async def get_popular_videos_by_category() -> PopularVideosResponse:
     try:
         categories = await _supabase_get("creator_categories", {"select": "id,name"})
@@ -946,6 +1018,9 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
         category_map = {}
 
     rows = await _popular_video_rows()
+    links_by_video = await _video_category_links_by_video_id(
+        [row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)]
+    )
 
     best_by_category: dict[str, PopularTrendVideo] = {}
 
@@ -954,17 +1029,20 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
         if not video_id:
             logger.warning("Skipping popular video row without a YouTube video id.")
             continue
-        category = _popular_category(row, category_map)
-        try:
-            normalized = _popular_video_from_row(row, category)
-        except Exception as error:
-            logger.warning("Failed to normalize popular video row: %s", error)
-            continue
-        current = best_by_category.get(category)
-        current_score = (current.viewCount or 0, current.publishedAt or "")
-        normalized_score = (normalized.viewCount or 0, normalized.publishedAt or "")
-        if current is None or normalized_score > current_score:
-            best_by_category[category] = normalized
+        for category in _categories_for_video_row(row, category_map, links_by_video):
+            try:
+                normalized = _popular_video_from_row(row, category)
+            except Exception as error:
+                logger.warning("Failed to normalize popular video row: %s", error)
+                continue
+            current = best_by_category.get(category)
+            normalized_score = (normalized.viewCount or 0, normalized.publishedAt or "")
+            if current is None:
+                best_by_category[category] = normalized
+                continue
+            current_score = (current.viewCount or 0, current.publishedAt or "")
+            if normalized_score > current_score:
+                best_by_category[category] = normalized
 
     videos = sorted(best_by_category.values(), key=lambda video: (video.viewCount or 0, video.publishedAt or ""), reverse=True)
     return PopularVideosResponse(videos=videos)
@@ -1016,17 +1094,92 @@ def _parse_datetime(value: str) -> datetime | None:
         return None
 
 
+async def _creator_category_maps() -> tuple[dict[str, str], dict[str, str]]:
+    try:
+        rows = await _supabase_get("creator_categories", {"select": "id,name"})
+    except Exception as error:
+        logger.warning("Failed to load creator category map for keyword trends: %s", error)
+        return {}, {}
+    id_to_name = {
+        row["id"]: row["name"]
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("id"), str) and isinstance(row.get("name"), str)
+    } if isinstance(rows, list) else {}
+    name_to_id = {name: category_id for category_id, name in id_to_name.items()}
+    return id_to_name, name_to_id
+
+
+async def _keyword_video_category_links(video_ids: list[str]) -> dict[str, list[str]]:
+    return await _video_category_links_by_video_id(video_ids)
+
+
+async def _search_interest_keyword_boost(start: datetime) -> dict[str, Counter[str]]:
+    boosts: dict[str, Counter[str]] = defaultdict(Counter)
+    try:
+        groups = await _supabase_get(
+            "naver_trend_keyword_groups",
+            {
+                "select": "id,category_name,keywords,is_active",
+                "is_active": "eq.true",
+            },
+        )
+        group_by_id = {
+            row["id"]: row
+            for row in groups
+            if isinstance(row, dict) and isinstance(row.get("id"), str)
+        } if isinstance(groups, list) else {}
+        if not group_by_id:
+            return boosts
+
+        points = await _supabase_get(
+            "naver_trend_daily_points",
+            {
+                "select": "group_id,ratio,period",
+                "period": f"gte.{start.date().isoformat()}",
+            },
+        )
+        ratio_values: dict[str, list[float]] = defaultdict(list)
+        if isinstance(points, list):
+            for row in points:
+                if not isinstance(row, dict) or not isinstance(row.get("group_id"), str):
+                    continue
+                try:
+                    ratio_values[row["group_id"]].append(float(row.get("ratio") or 0))
+                except (TypeError, ValueError):
+                    continue
+
+        for group_id, values in ratio_values.items():
+            group = group_by_id.get(group_id)
+            if not group or not values:
+                continue
+            category = _as_str(group.get("category_name"), "기타")
+            keywords = _as_str_list(group.get("keywords"))
+            boost = max(1, min(5, round((sum(values) / len(values)) / 25)))
+            for keyword in keywords:
+                normalized = _normalize_keyword_tag(keyword)
+                if normalized:
+                    boosts[category][normalized] += boost
+    except Exception as error:
+        logger.warning("Search interest keyword boost skipped: %s", error)
+    return boosts
+
+
 async def get_keyword_trends(range_value: TrendKeywordRange) -> TrendKeywordsResponse:
     start, periods, get_period = _period_config(range_value)
     rows = await _supabase_get(
         "influencer_videos",
         {
-            "select": "published_at,tags",
+            "select": "id,category_id,published_at,tags",
             "published_at": f"gte.{start.isoformat().replace('+00:00', 'Z')}",
         },
     )
     total_counts: Counter[str] = Counter()
+    category_counts: dict[str, Counter[str]] = defaultdict(Counter)
     period_counts: dict[str, Counter[str]] = {period: Counter() for period in periods}
+    id_to_category, _name_to_category = await _creator_category_maps()
+    video_links = await _keyword_video_category_links(
+        [row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)]
+    ) if isinstance(rows, list) else {}
 
     if isinstance(rows, list):
         for row in rows:
@@ -1040,18 +1193,71 @@ async def get_keyword_trends(range_value: TrendKeywordRange) -> TrendKeywordsRes
             if period not in period_counts:
                 continue
             normalized_tags = {_normalize_keyword_tag(tag) for tag in tags if _normalize_keyword_tag(tag)}
+            row_id = row.get("id")
+            category_ids = video_links.get(row_id, []) if isinstance(row_id, str) else []
+            legacy_category_id = row.get("category_id")
+            if isinstance(legacy_category_id, str) and legacy_category_id not in category_ids:
+                category_ids = [legacy_category_id, *category_ids]
+            category_names = [id_to_category.get(category_id, "기타") for category_id in category_ids] or ["기타"]
             for tag in normalized_tags:
                 total_counts[tag] += 1
                 period_counts[period][tag] += 1
+                for category in category_names:
+                    category_counts[category][tag] += 1
 
-    top_keywords = [
-        TrendKeywordCount(keyword=keyword, count=count)
-        for keyword, count in sorted(total_counts.items(), key=lambda item: (-item[1], item[0]))[:TOP_KEYWORD_COUNT]
-    ]
+    search_interest_boosts = await _search_interest_keyword_boost(start)
+    for category, boosts in search_interest_boosts.items():
+        for keyword, count in boosts.items():
+            category_counts[category][keyword] += count
+            total_counts[keyword] += count
+
+    category_order = [*CREATOR_CATEGORIES, *sorted(category for category in category_counts if category not in CREATOR_CATEGORIES)]
+    ranked_by_category = {
+        category: sorted(category_counts[category].items(), key=lambda item: (-item[1], item[0]))[:5]
+        for category in category_order
+        if category_counts.get(category)
+    }
+    top_keywords: list[TrendKeywordCount] = []
+    seen_keywords: set[str] = set()
+    for rank in range(5):
+        for category in category_order:
+            items = ranked_by_category.get(category, [])
+            if rank >= len(items):
+                continue
+            keyword, count = items[rank]
+            if keyword in seen_keywords:
+                continue
+            top_keywords.append(TrendKeywordCount(keyword=keyword, count=count, category=category))
+            seen_keywords.add(keyword)
+            if len(top_keywords) >= TOP_KEYWORD_COUNT:
+                break
+        if len(top_keywords) >= TOP_KEYWORD_COUNT:
+            break
+
+    if len(top_keywords) < TOP_KEYWORD_COUNT:
+        for keyword, count in sorted(total_counts.items(), key=lambda item: (-item[1], item[0])):
+            if keyword in seen_keywords:
+                continue
+            top_keywords.append(TrendKeywordCount(keyword=keyword, count=count))
+            seen_keywords.add(keyword)
+            if len(top_keywords) >= TOP_KEYWORD_COUNT:
+                break
+
     series_keywords = [item.keyword for item in top_keywords[:SERIES_KEYWORD_COUNT]]
     series = [
         {"period": period, **{keyword: period_counts[period].get(keyword, 0) for keyword in series_keywords}}
         for period in periods
+    ]
+    category_breakdown = [
+        {
+            "category": category,
+            "topKeywords": [
+                TrendKeywordCount(keyword=keyword, count=count, category=category)
+                for keyword, count in ranked_by_category.get(category, [])[:5]
+            ],
+        }
+        for category in category_order
+        if ranked_by_category.get(category)
     ]
 
     return TrendKeywordsResponse(
@@ -1059,4 +1265,5 @@ async def get_keyword_trends(range_value: TrendKeywordRange) -> TrendKeywordsRes
         topKeywords=top_keywords,
         seriesKeywords=series_keywords,
         series=series,
+        categoryBreakdown=category_breakdown,
     )

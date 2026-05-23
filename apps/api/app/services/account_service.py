@@ -80,13 +80,38 @@ async def get_user_channel_settings(user_id: str) -> dict[str, Any]:
     return {"settings": _to_setting(row)}
 
 
+async def _delete_growth_snapshots(user_id: str) -> None:
+    await _request("DELETE", "channel_growth_snapshots", params={"user_id": f"eq.{user_id}"}, prefer="return=minimal")
+    await _request("DELETE", "video_growth_snapshots", params={"user_id": f"eq.{user_id}"}, prefer="return=minimal")
+
+
 async def upsert_user_channel_settings(user_id: str, channel_url: str, category: str) -> dict[str, Any]:
     if not channel_url.strip():
         raise BackendApiError("channelUrl is required.", 400, "VALIDATION_ERROR")
     if not category.strip():
         raise BackendApiError("category is required.", 400, "VALIDATION_ERROR")
 
+    existing_result = await get_user_channel_settings(user_id)
+    existing = existing_result.get("settings") if isinstance(existing_result, dict) else None
+    existing_channel_id = existing.get("youtubeChannelId") if isinstance(existing, dict) else None
+    existing_channel_url = existing.get("channelUrl") if isinstance(existing, dict) else None
+
     channel = await get_channel_info(channel_url)
+    should_reset_growth = (
+        isinstance(existing_channel_id, str)
+        and existing_channel_id
+        and existing_channel_id != channel.youtubeChannelId
+    ) or (
+        not existing_channel_id
+        and isinstance(existing_channel_url, str)
+        and existing_channel_url.strip()
+        and existing_channel_url.strip() != channel_url.strip()
+    )
+    if should_reset_growth:
+        # Growth reports are channel-specific. When a member switches to a different
+        # YouTube channel, old growth snapshots are deleted so charts restart cleanly.
+        await _delete_growth_snapshots(user_id)
+
     rows = await _request(
         "POST",
         "user_channel_settings?on_conflict=user_id",
@@ -130,6 +155,7 @@ async def delete_account(user_id: str) -> dict[str, Any]:
     # Keep historical recommendation records anonymized, and cascade owned account rows through auth.users.
     await _request("PATCH", "user_channel_analyses", params={"user_id": f"eq.{user_id}"}, payload={"user_id": None}, prefer="return=minimal")
     await _request("PATCH", "content_recommendations", params={"user_id": f"eq.{user_id}"}, payload={"user_id": None}, prefer="return=minimal")
+    await _delete_growth_snapshots(user_id)
     await _request("DELETE", "user_channel_settings", params={"user_id": f"eq.{user_id}"}, prefer="return=minimal")
 
     async with httpx.AsyncClient(timeout=20) as client:

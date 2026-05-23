@@ -99,6 +99,10 @@ GET  /api/favorites
 POST /api/favorites
 PATCH /api/favorites/{favorite_id}
 DELETE /api/favorites/{favorite_id}
+GET  /api/production-items
+POST /api/production-items
+PATCH /api/production-items/{id}
+DELETE /api/production-items/{id}
 GET  /api/calendar/events?start=YYYY-MM-DD&end=YYYY-MM-DD
 POST /api/calendar/events
 PATCH /api/calendar/events/{event_id}
@@ -106,7 +110,8 @@ DELETE /api/calendar/events/{event_id}
 GET  /api/growth-report
 POST /api/growth-report/refresh
 GET  /api/shop/sections
-GET  /api/shop/products?equipmentCategory=카메라&limit=8&refresh=false
+GET  /api/shop/products?equipmentCategory=카메라&limit=8&sort=popular
+GET  /api/shop/sets
 POST /api/cron/collect-shop-products
 GET  /api/admin/llm-prompts
 GET  /api/trends/popular-videos
@@ -145,37 +150,53 @@ Dashboard의 기본 추천 플로우는 1회 LLM 호출 API와 결과 조회 API
 
 LLM `max_tokens`는 선택 옵션에 따라 동적으로 증가한다. 기본 추천은 1200~1600 수준, 추천이유/해시태그 중심은 약 1800, 콘티 포함 시 3500~5000, 콘티와 hook/thumbnail/uploadTips를 모두 포함하면 5000~7000 범위를 사용한다. `storyboard=true`일 때는 8~12 scene, scene별 `duration`, `visual`, `dialogue`, `caption`, `shootingTip`을 요구한다.
 
-## Favorites / Calendar / Growth Report
+## Favorites / Production Board / Calendar / Growth Report
 
-사용자 생산 워크플로우는 다음 테이블에 저장된다. migration은 `supabase/migrations/20260519001000_planning_growth_features.sql`이다.
+사용자 생산 워크플로우는 다음 테이블에 저장된다. 기본 migration은 `supabase/migrations/20260519001000_planning_growth_features.sql`이고, 제작 보드/캘린더 연동 확장은 `supabase/migrations/20260522004000_production_calendar_schedule_link.sql`이다.
 
-- `favorites`: 추천 결과 또는 콘텐츠 아이디어 찜 목록. `recommendation_id`, `title`, `reason`, `hashtags`, `storyboard`, `source`를 저장한다.
-- `calendar_events`: 업로드 예정일과 제작 상태. `planned`, `scripted`, `filmed`, `edited`, `uploaded` 상태를 사용한다.
+- `favorites`: 추천 결과 또는 콘텐츠 아이디어 즐겨찾기 목록. `recommendation_id`, `title`, `reason`, `hashtags`, `storyboard`, `source`를 저장한다.
+- `production_board_items`: 직접 만든 콘텐츠 또는 즐겨찾기/추천 결과에서 전환한 제작 카드. `title`, `description`, `hashtags`, `storyboard`, `status`, `shoot_start_date`, `shoot_end_date`, `calendar_event_id`를 저장한다.
+- `production_items`: `production_board_items`를 노출하는 compatibility view. API는 기존 테이블을 기준으로 동작한다.
+- `calendar_events`: 업로드/촬영 일정. `start_date`, `end_date`, `color`, `production_item_id`, `metadata`로 multi-day 일정과 제작 보드 연동을 지원한다.
 - `channel_growth_snapshots`: YouTube 채널의 구독자 수, 전체 조회수, 영상 수, 최근 영상 통계를 스냅샷으로 저장한다.
+- `video_growth_snapshots`: 최근 영상별 조회수, 좋아요, 댓글 스냅샷을 저장한다. migration은 `supabase/migrations/20260522001000_video_growth_snapshots.sql`이다.
 
 Frontend 라우트:
 
 ```text
 /favorites
+/production-board
 /calendar
 /growth-report
+/growth-report/videos/[videoId]
 ```
 
-`/favorites`는 추천 결과에서 누른 찜을 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다.
+`/favorites`는 추천 결과에서 저장한 즐겨찾기를 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/production-board`는 직접 콘텐츠를 만들거나 즐겨찾기/추천 결과에서 제작 카드로 전환하며, 제목/설명/해시태그/콘티/메모/촬영일을 관리한다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. 일정은 색상과 시작일/종료일을 가질 수 있고, multi-day 일정은 범위 내 각 날짜 칸에 표시된다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다. 최근 영상 성과를 클릭하면 `/growth-report/videos/[videoId]`로 이동해 영상별 조회수, 좋아요, 댓글 추이 그래프를 확인한다.
+
+Production board와 calendar 연동 정책:
+
+- production item에 `shoot_start_date`가 있으면 backend가 `calendar_events`를 자동 upsert한다.
+- 생성된 calendar event는 `metadata.source = "production-board"`와 `metadata.productionItemId`를 가진다.
+- production item의 촬영 시작일/종료일을 수정하면 연결된 calendar event의 `start_date`/`end_date`도 갱신된다.
+- calendar에서 production-linked event의 날짜를 수정하면 production item의 `shoot_start_date`/`shoot_end_date`도 갱신된다.
+- production item에서 촬영일을 제거하면 연결된 calendar event를 삭제하고 `calendar_event_id`를 비운다.
 
 Growth report 그래프:
 
 - snapshot이 2개 이상이면 Recharts line chart로 `subscriber_count`, `view_count`, `video_count` 추이를 표시
 - snapshot이 1개 이하이면 “추이 데이터가 더 필요합니다” 안내 표시
 - “지금 갱신” 버튼은 `POST /api/growth-report/refresh`로 최신 snapshot을 저장
+- 영상 상세 그래프는 `video_growth_snapshots`의 일일 point를 사용한다. point가 1개 이하이면 “추이 데이터가 더 필요합니다” 안내를 표시한다.
 
-성장 리포트 refresh는 YouTube API quota를 사용한다. 운영에서는 refresh 버튼을 과도하게 누르지 않도록 UI/정책을 조정할 수 있다.
+성장 리포트 refresh는 YouTube API quota를 사용한다. 운영에서는 refresh 버튼을 과도하게 누르지 않도록 UI/정책을 조정할 수 있다. 매일 자동 갱신은 `POST /api/cron/collect-growth-report`가 `CRON_SECRET` 검증 후 `user_channel_settings`의 모든 회원 채널을 순회해 채널/영상 스냅샷을 저장한다.
+
+회원이 채널 URL을 다른 YouTube 채널로 변경하면 backend는 기존 `channel_growth_snapshots`와 `video_growth_snapshots`를 삭제한다. 성장 리포트는 채널별 시계열 데이터이므로 새 채널 기준으로 그래프를 다시 시작하는 “삭제 후 초기화” 정책을 사용한다. 같은 YouTube 채널을 다른 URL 형태로 저장하는 경우에는 `youtube_channel_id`가 같으므로 기존 스냅샷을 유지한다.
 
 Admin에서 favorites/calendar/growth snapshots 전체 관리 UI는 아직 확장하지 않았다. 운영 필요 시 admin 도메인에서 목록/삭제 API를 추가하면 된다.
 
 ## Profile / Password
 
-`/profile`은 추천 사용량과 구독 상태 UI를 표시하지 않는다. 현재 계정 설정 화면은 다음만 제공한다.
+`/profile`은 추천 사용량과 서비스 이용 상태 UI를 표시하지 않는다. 현재 계정 설정 화면은 다음만 제공한다.
 
 - 닉네임 변경
 - YouTube 채널 URL/category 변경
@@ -209,10 +230,11 @@ X-Naver-Client-Secret: NAVER_SHOPPING_CLIENT_SECRET 또는 NAVER_CLIENT_SECRET
 
 검색어트렌드 DataLab은 `POST /v1/datalab/search`를 사용하지만 `/shop` 상품 카드는 `GET /v1/search/shop.json`을 사용한다. 두 API는 Naver Developers 권한이 다르다. DataLab 검색어트렌드가 정상이어도 “검색 API / 쇼핑 검색” 권한이 없는 키면 `/shop`은 fallback을 표시한다. 운영에서는 쇼핑 검색 권한이 있는 별도 앱 키를 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 넣는 것을 권장한다. 이 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`으로 fallback한다.
 
-저장 테이블은 migration `supabase/migrations/20260519002000_creator_shop_products.sql`와 장비 섹션 전환 migration `supabase/migrations/20260520001000_shop_equipment_store.sql`에 포함되어 있다.
+저장 테이블은 migration `supabase/migrations/20260519002000_creator_shop_products.sql`, 장비 섹션 전환 migration `supabase/migrations/20260520001000_shop_equipment_store.sql`, 캐시 상점 확장 migration `supabase/migrations/20260522003000_shop_cache_storefront.sql`에 포함되어 있다.
 
 - `creator_shop_keywords`: 장비 섹션별 active 쇼핑 검색어
-- `creator_shop_products`: Naver Shopping 상품 캐시. `source`, `source_product_id`, `equipment_category`, `search_keyword` 기준 upsert
+- `creator_shop_products`: Naver Shopping 상품 캐시. `source`, `source_product_id`, `equipment_category`, `search_keyword` 기준 upsert. `popularity_score`, `recommended_level`, `collected_at`으로 상점 정렬과 세트 필터를 지원
+- `creator_shop_sets`: 입문용/중급자용/고급자용 장비 세트 설명
 - `creator_shop_collection_logs`: daily shop 수집 결과와 오류 요약
 
 기본 장비 섹션과 검색어 seed:
@@ -231,12 +253,13 @@ X-Naver-Client-Secret: NAVER_SHOPPING_CLIENT_SECRET 또는 NAVER_CLIENT_SECRET
 API 동작:
 
 - `GET /api/shop/sections`: 기본 장비 섹션과 검색어 반환
-- `GET /api/shop/products?equipmentCategory=카메라&limit=8`: cache 우선 반환. `equipmentCategory`가 없으면 모든 기본 섹션 반환
-- cache가 부족하거나 `refresh=true`면 Naver Shopping API 호출 후 upsert
-- Naver API 실패, quota, 네트워크 오류, 인증 오류가 있어도 페이지 전체를 깨지 않고 cache 또는 fallback 추천 검색 섹션을 반환
+- `GET /api/shop/products?equipmentCategory=카메라&limit=8&sort=popular`: DB cache만 조회. `equipmentCategory`가 없으면 모든 기본 섹션 반환
+- `sort`는 `popular`, `price_asc`, `price_desc`, `latest`를 지원한다. `level=beginner|intermediate|advanced`로 세트 수준 상품만 볼 수 있다.
+- `GET /api/shop/sets`: 입문용, 중급자용, 고급자용 장비 세트 반환
+- cache가 비어 있거나 DB 조회가 실패하면 Naver API를 즉시 호출하지 않고 기본 curated fallback 장비를 반환
 - `POST /api/cron/collect-shop-products`: `CRON_SECRET` 검증 후 active keyword 전체 daily 수집
 
-Shop 페이지는 광고/제휴 링크가 아니라 Naver Shopping 검색 결과임을 표시한다. `source` 컬럼은 추후 Coupang Partners 같은 다른 source를 추가할 수 있도록 유지한다.
+Shop 페이지는 광고/제휴 링크가 아니라 매일 수집된 쇼핑 cache 기반 장비 목록이다. Naver API 호출은 daily collector 또는 admin 테스트/수집에서만 실행한다. `source` 컬럼은 추후 Coupang Partners 같은 다른 source를 추가할 수 있도록 유지한다.
 
 Naver Shopping 401 `errorCode: 024`는 보통 “Scope Status Invalid / Authentication failed”다. 코드에서는 endpoint와 header를 다음처럼 고정한다.
 
@@ -294,7 +317,11 @@ Content-Type: application/json
 게임, 운동, IT, 노래, OTT, 일상, 뷰티, 스터디, 코미디, 먹방, 춤
 ```
 
-Trends 페이지는 기존 YouTube 인기 영상/태그 집계를 유지하고, 아래에 검색 관심도와 결합 트렌드를 추가한다. 결합 점수는 keyword 단위로 다음 값을 정규화해 계산한다.
+Trends 페이지는 기존 YouTube 인기 영상/태그 집계를 유지하고, 아래에 검색 관심도와 결합 트렌드를 추가한다. 인플루언서 채널과 영상은 여러 카테고리에 연결될 수 있으며, 신규 조회 로직은 `influencer_channel_categories`, `influencer_video_categories` join table을 우선 사용한다. 기존 `category_id`는 호환 fallback으로 유지한다.
+
+급상승 키워드는 전체 count 상위 태그만 뽑지 않고 카테고리별 Top 3~5개를 먼저 계산한 뒤 균형 있게 섞는다. 검색 관심도 데이터가 있으면 카테고리별 키워드 boost로 낮은 가중치만 더한다.
+
+결합 점수는 keyword 단위로 다음 값을 정규화해 계산한다.
 
 ```text
 combinedScore = normalizedYoutubeTagCount * 0.4
@@ -302,11 +329,12 @@ combinedScore = normalizedYoutubeTagCount * 0.4
   + normalizedNaverRatio * 0.3
 ```
 
-`/api/trends/popular-videos`는 `influencer_videos` 데이터를 조회한다. 운영 중 빈 DB, category join 누락, nullable `view_count`, 누락된 thumbnail/published_at 때문에 500이 나면 안 된다. 현재 구현은 Supabase 쿼리 실패를 서버 로그에 남기고 빈 배열을 반환하며, row별 매핑은 다음 fallback을 사용한다.
+`/api/trends/popular-videos`는 `influencer_video_categories`와 `influencer_videos` 데이터를 조회해 카테고리별 조회수 1등 영상을 반환한다. 운영 중 빈 DB, category join 누락, nullable `view_count`, 누락된 thumbnail/published_at 때문에 500이 나면 안 된다. 현재 구현은 Supabase 쿼리 실패를 서버 로그에 남기고 빈 배열을 반환하며, row별 매핑은 다음 fallback을 사용한다.
 
 - 배포 DB와 코드의 컬럼명이 다를 수 있어 `youtube_video_id`, `video_id`, `thumbnail_url`, `thumbnails`, `category_name`, `category` 조합으로 select를 재시도
 - endpoint 컨트롤러까지 예외가 올라와도 화면이 깨지지 않도록 `{ "videos": [] }` fallback 반환
 - category join 실패: `category_name`, `category`, `"기타"` 순서로 fallback
+- 다중 카테고리 join table 누락: legacy `influencer_videos.category_id` fallback
 - `view_count`, `like_count`, `comment_count` null: `0`
 - thumbnail json 누락: `thumbnailUrl: null`
 - `published_at` 누락: `publishedAt: null`
@@ -413,7 +441,7 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/user/channel-settings" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 ```
 
-찜/캘린더/성장 리포트 확인:
+즐겨찾기/캘린더/성장 리포트 확인:
 
 ```bash
 curl "$NEXT_PUBLIC_API_BASE_URL/api/favorites" \
@@ -421,6 +449,14 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/favorites" \
 
 curl "$NEXT_PUBLIC_API_BASE_URL/api/calendar/events?start=2026-05-01&end=2026-05-31" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+
+curl "$NEXT_PUBLIC_API_BASE_URL/api/production-items" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/production-items" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"촬영할 콘텐츠 아이디어","hashtags":["#촬영"],"storyboard":[{"scene":1,"description":"오프닝"}],"shootStartDate":"2026-05-10","shootEndDate":"2026-05-12"}'
 
 curl "$NEXT_PUBLIC_API_BASE_URL/api/growth-report" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
@@ -436,10 +472,12 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/sections"
 
 curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?limit=8"
 
-curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?equipmentCategory=%EC%B9%B4%EB%A9%94%EB%9D%BC&limit=8&refresh=true"
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/products?equipmentCategory=%EC%B9%B4%EB%A9%94%EB%9D%BC&limit=8&sort=price_asc"
+
+curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/sets"
 ```
 
-404가 아니고 섹션별 상품, cache, fallback 중 하나가 나오면 path 연결은 정상이다. Naver 인증 오류가 있어도 `/shop` 화면은 “실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다.” 안내와 fallback 상품을 표시해야 한다. 실제 401 `errorCode: 024`, query, env 존재 여부는 backend logger에만 남긴다.
+404가 아니고 섹션별 상품, cache, fallback 중 하나가 나오면 path 연결은 정상이다. Naver 인증 오류가 있어도 `/shop` 상품 조회 API는 외부 API를 즉시 호출하지 않으며, 화면은 cache 또는 기본 추천 장비를 표시해야 한다. 실제 401 `errorCode: 024`, query, env 존재 여부는 collector/admin test backend logger에만 남긴다.
 
 ## Cron
 
@@ -449,6 +487,7 @@ Daily YouTube collection과 Daily Naver trends collection은 Render Backend API�
 DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
 DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-products
+DAILY_GROWTH_REPORT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-growth-report
 CRON_SECRET=your-cron-secret
 ```
 
@@ -466,6 +505,7 @@ GitHub Actions repository secrets:
 DAILY_COLLECT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
 DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-products
+DAILY_GROWTH_REPORT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-growth-report
 CRON_SECRET=your-cron-secret
 ```
 
@@ -475,6 +515,8 @@ CRON_SECRET=your-cron-secret
 - 따옴표, 백슬래시(`\`), trailing slash 뒤의 공백, 줄바꿈을 넣지 않는다.
 - 예: `https://api.be-celeb.org/api/cron/collect-shop-products`
 - Vercel frontend URL이 아니라 Render Backend API URL을 넣는다.
+
+`curl: (28) Operation timed out after 60002 milliseconds with 0 bytes received`는 URL validation 이후 backend collector가 60초 안에 응답을 시작하지 못했다는 뜻이다. Daily YouTube collector는 active influencer channel별로 YouTube API와 Supabase upsert를 수행하므로 60초를 넘을 수 있다. GitHub Actions는 YouTube collector를 최대 600초까지 기다리며, backend는 최대 4개 채널씩 제한 병렬 처리한다. POST 수집 endpoint는 timeout 재시도 시 중복 실행될 수 있으므로 retry 옵션을 사용하지 않는다.
 
 수동 Naver 수집 확인:
 
@@ -508,9 +550,30 @@ order by collected_at desc
 limit 20;
 ```
 
+수동 Growth report 수집 확인:
+
+```bash
+curl --fail-with-body -X POST "$NEXT_PUBLIC_API_BASE_URL/api/cron/collect-growth-report" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+저장 확인:
+
+```sql
+select user_id, youtube_channel_id, subscriber_count, view_count, video_count, collected_at
+from public.channel_growth_snapshots
+order by collected_at desc
+limit 20;
+
+select user_id, youtube_video_id, view_count, like_count, comment_count, collected_at
+from public.video_growth_snapshots
+order by collected_at desc
+limit 20;
+```
+
 ## 정리된 코드
 
-- `/profile`에서 추천 사용량과 구독 상태 UI 및 `user_plans` 조회를 제거했다.
+- `/profile`에서 추천 사용량과 서비스 이용 상태 UI 조회를 제거했다.
 - 사용되지 않던 `apps/web/src/lib/config/dev-auth-store.ts`, `apps/web/src/lib/config/auth-provider.ts`, `apps/web/src/components/common/ProductCard.tsx`를 삭제했다.
 - `/shop`의 mock 상품 목록과 Naver Shopping 직접 링크 생성 로직을 제거하고 Render Backend API 호출로 교체했다.
 - 클라이언트의 `fetch("/api/...")` 잔여 호출을 제거했다. 비밀번호 재설정 메일은 Supabase Auth browser client를 사용한다.

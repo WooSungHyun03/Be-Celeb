@@ -175,7 +175,7 @@ Epic 예시:
 
 Frontend:
 
-- 랜딩, 로그인, 회원가입, 온보딩, 대시보드, 트렌드, 추천, 저장, 가격제 UI
+- 랜딩, 로그인, 회원가입, 온보딩, 대시보드, 트렌드, 추천, 저장 UI
 - Header, Sidebar/Navbar, Footer, Button, Card, Input, Badge
 - Loading, Empty, Error 상태 UI
 - 추천 생성/저장/복사 버튼 UI
@@ -281,7 +281,7 @@ DB 변경은 `supabase/migrations/`의 versioned migration으로 관리합니다
 
 ## 매일 YouTube 인플루언서 영상 수집
 
-카테고리별 인플루언서 채널은 Supabase `influencer_channels.channel_url`에 입력합니다. `POST /api/cron/collect-daily-videos`가 매일 KST 06:00(UTC 21:00)에 최근 24시간 업로드 영상을 YouTube API로 조회해 `influencer_videos`에 upsert합니다.
+카테고리별 인플루언서 채널은 Supabase `influencer_channels.channel_url`에 입력합니다. 한 채널/영상은 `influencer_channel_categories`, `influencer_video_categories` join table로 여러 카테고리에 연결할 수 있습니다. `POST /api/cron/collect-daily-videos`가 매일 KST 06:00(UTC 21:00)에 최근 24시간 업로드 영상을 YouTube API로 조회해 `influencer_videos`에 upsert하고, 채널의 다중 카테고리를 영상에도 반영합니다.
 
 자동 실행은 Render Cron Job 또는 `.github/workflows/collect-daily-videos.yml`로 설정합니다. 자세한 입력 SQL, 환경 변수, 수동 테스트 방법은 `docs/daily-collection.md`를 확인합니다.
 

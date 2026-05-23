@@ -141,7 +141,7 @@ export default function FavoritesPage() {
       } catch (error) {
         if (active && !controller.signal.aborted) {
           setStatus("error");
-          setMessage(error instanceof Error ? error.message : "찜 목록을 불러오지 못했습니다.");
+          setMessage(error instanceof Error ? error.message : "즐겨찾기를 불러오지 못했습니다.");
         }
       }
     }
@@ -170,7 +170,7 @@ export default function FavoritesPage() {
       await deleteFavorite(favoriteId);
       setItems((current) => current.filter((item) => item.id !== favoriteId));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "찜 삭제에 실패했습니다.");
+      setMessage(error instanceof Error ? error.message : "즐겨찾기 삭제에 실패했습니다.");
     } finally {
       setDeletingId(null);
     }
@@ -235,7 +235,7 @@ export default function FavoritesPage() {
   }
 
   if (status === "loading") {
-    return <Loading label="찜 목록을 불러오는 중입니다." />;
+    return <Loading label="즐겨찾기를 불러오는 중입니다." />;
   }
 
   if (status === "unauthorized") {
@@ -246,14 +246,14 @@ export default function FavoritesPage() {
             <Button>로그인하기</Button>
           </Link>
         }
-        description="찜한 추천 콘텐츠는 로그인 후 확인할 수 있습니다."
+        description="즐겨찾기한 추천 콘텐츠는 로그인 후 확인할 수 있습니다."
         title="로그인이 필요합니다"
       />
     );
   }
 
   if (status === "error") {
-    return <EmptyState title="찜 목록을 불러오지 못했습니다" description={message || "잠시 후 다시 시도해 주세요."} />;
+    return <EmptyState title="즐겨찾기를 불러오지 못했습니다" description={message || "잠시 후 다시 시도해 주세요."} />;
   }
 
   return (
@@ -270,7 +270,7 @@ export default function FavoritesPage() {
           </div>
         }
         description="추천 결과에서 저장한 콘텐츠 아이디어를 모아보고 업로드 일정이나 제작 보드로 바로 연결할 수 있습니다."
-        title="찜 목록"
+        title="즐겨찾기"
       />
 
       {toast || message ? (
@@ -287,8 +287,8 @@ export default function FavoritesPage() {
               <Button>추천 생성하기</Button>
             </Link>
           }
-          description="대시보드에서 추천 결과를 만든 뒤 결과 페이지에서 찜하기를 눌러보세요."
-          title="찜한 추천 콘텐츠가 없습니다"
+          description="대시보드에서 추천 결과를 만든 뒤 결과 페이지에서 즐겨찾기 추가를 눌러보세요."
+          title="즐겨찾기한 추천 콘텐츠가 없습니다"
         />
       ) : (
         <>
@@ -323,7 +323,7 @@ export default function FavoritesPage() {
           </section>
 
           {filteredItems.length === 0 ? (
-            <EmptyState title="조건에 맞는 찜이 없습니다" description="검색어와 카테고리 필터를 조정해 보세요." />
+            <EmptyState title="조건에 맞는 즐겨찾기가 없습니다" description="검색어와 카테고리 필터를 조정해 보세요." />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {filteredItems.map((item) => {

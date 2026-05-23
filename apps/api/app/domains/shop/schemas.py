@@ -16,6 +16,8 @@ class ShopProduct(BaseModel):
     maker: str | None = None
     equipmentCategory: str
     searchKeyword: str
+    popularityScore: float = 0
+    recommendedLevel: str | None = None
     collectedAt: str | None = None
 
 
@@ -33,6 +35,18 @@ class ShopSection(BaseModel):
 
 class ShopSectionsResponse(BaseModel):
     sections: list[ShopSection] = Field(default_factory=list)
+
+
+class ShopSet(BaseModel):
+    level: str
+    title: str
+    description: str | None = None
+    items: list[str] = Field(default_factory=list)
+    products: list[ShopProduct] = Field(default_factory=list)
+
+
+class ShopSetsResponse(BaseModel):
+    sets: list[ShopSet] = Field(default_factory=list)
 
 
 class ShopCollectionSummary(BaseModel):

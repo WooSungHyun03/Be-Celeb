@@ -55,6 +55,10 @@ def _headers(prefer: str | None = None) -> dict[str, str]:
     return headers
 
 
+def _in_filter(values: list[str]) -> str:
+    return f"in.({','.join(values)})"
+
+
 async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.get(
@@ -125,6 +129,37 @@ def _video_from_row(row: dict[str, Any]) -> YouTubeVideoAnalysis:
 
 async def fetch_category_videos(category_name: CreatorCategoryName) -> list[YouTubeVideoAnalysis]:
     category_id = await _get_category_id(category_name)
+    video_id_rows: list[dict[str, Any]] = []
+    try:
+        linked_rows = await _get(
+            "influencer_video_categories",
+            {
+                "select": "influencer_video_id",
+                "category_id": f"eq.{category_id}",
+                "limit": "80",
+            },
+        )
+        video_ids = [
+            row["influencer_video_id"]
+            for row in linked_rows
+            if isinstance(row, dict) and isinstance(row.get("influencer_video_id"), str)
+        ] if isinstance(linked_rows, list) else []
+        if video_ids:
+            video_id_rows = await _get(
+                "influencer_videos",
+                {
+                    "select": "youtube_video_id,youtube_channel_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
+                    "id": _in_filter(video_ids),
+                    "order": "published_at.desc",
+                    "limit": "40",
+                },
+            )
+    except Exception:
+        video_id_rows = []
+
+    if isinstance(video_id_rows, list) and video_id_rows:
+        return [_video_from_row(row) for row in video_id_rows if isinstance(row, dict)]
+
     rows = await _get(
         "influencer_videos",
         {

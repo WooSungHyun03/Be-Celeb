@@ -104,7 +104,7 @@ async def create_favorite(user_id: str, payload: FavoritePayload) -> dict[str, A
     if not target_id:
         raise BackendApiError("targetId or recommendationId is required.", 400, "VALIDATION_ERROR")
 
-    title = payload.title or "찜한 콘텐츠"
+    title = payload.title or "즐겨찾기한 콘텐츠"
     reason = payload.reason
     hashtags = payload.hashtags or []
     storyboard = payload.storyboard or []

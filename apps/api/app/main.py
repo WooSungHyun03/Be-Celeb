@@ -9,7 +9,7 @@ from app.domains.admin.router import router as admin_router
 from app.domains.calendar.router import router as calendar_router
 from app.domains.collection.router import router as collection_router
 from app.domains.growth.router import router as growth_router
-from app.domains.production_board.router import router as production_board_router
+from app.domains.production_board.router import production_items_router, router as production_board_router
 from app.domains.recommendations.router import router as recommendation_router
 from app.domains.shop.router import router as shop_router
 from app.domains.trends.router import router as trend_router
@@ -35,5 +35,6 @@ app.include_router(calendar_router)
 app.include_router(growth_router)
 app.include_router(shop_router)
 app.include_router(production_board_router)
+app.include_router(production_items_router)
 app.include_router(collection_router)
 app.include_router(main, prefix="/api/v1")

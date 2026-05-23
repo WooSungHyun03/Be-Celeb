@@ -266,15 +266,22 @@ export default function GrowthReportPage() {
               <div className="divide-y divide-violet-100">
                 {latest.recentVideoStats.map((video) => (
                   <Link
-                    className="grid gap-3 py-4 transition hover:bg-violet-50/60 md:grid-cols-[minmax(0,1fr)_auto]"
+                    className="grid gap-3 py-4 transition hover:bg-violet-50/60 sm:grid-cols-[96px_minmax(0,1fr)] md:grid-cols-[96px_minmax(0,1fr)_auto]"
                     href={`${ROUTES.growthReport}/videos/${encodeURIComponent(video.youtubeVideoId)}`}
                     key={video.youtubeVideoId}
                   >
+                    <div className="aspect-video overflow-hidden rounded-md bg-slate-100">
+                      {video.thumbnailUrl ? (
+                        <img alt="" className="h-full w-full object-cover" src={video.thumbnailUrl} />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-xs font-bold text-slate-400">No image</div>
+                      )}
+                    </div>
                     <div>
                       <h3 className="font-bold leading-6 text-ink">{video.title}</h3>
                       <p className="mt-1 text-xs text-slate-500">{formatDate(video.publishedAt)} · 상세 추이 보기</p>
                     </div>
-                    <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-600 md:justify-end">
+                    <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-600 sm:col-start-2 md:col-start-auto md:justify-end">
                       <span className="rounded-md bg-violet-50 px-2 py-1 text-violet-700">조회 {formatInteger(video.viewCount)}</span>
                       <span className="rounded-md bg-slate-100 px-2 py-1">좋아요 {formatInteger(video.likeCount)}</span>
                       <span className="rounded-md bg-slate-100 px-2 py-1">댓글 {formatInteger(video.commentCount)}</span>

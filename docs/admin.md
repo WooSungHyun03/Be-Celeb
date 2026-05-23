@@ -50,8 +50,10 @@ ALLOWED_ORIGINS=https://be-celeb.org,https://be-celeb.vercel.app,http://localhos
 ## Admin에서 관리하는 데이터
 
 - `creator_categories`: 카테고리 목록 추가/수정/삭제
-- `influencer_channels`: 카테고리별 YouTube 채널 추가/수정/활성화/동기화/삭제
-- `influencer_videos`: 수집 영상 조회/태그 정규화/삭제
+- `influencer_channels`: YouTube 채널 추가/수정/활성화/동기화/삭제. 기존 `category_id`는 호환용으로 유지하고 실제 다중 카테고리는 `influencer_channel_categories`에서 관리한다.
+- `influencer_videos`: 수집 영상 조회/태그 정규화/삭제. 기존 `category_id`는 호환용으로 유지하고 실제 다중 카테고리는 `influencer_video_categories`에서 관리한다.
+- `influencer_channel_categories`: 한 인플루언서 채널을 여러 Be-Celeb 카테고리에 연결하는 join table
+- `influencer_video_categories`: 한 영상을 여러 Be-Celeb 카테고리에 연결하는 join table
 - `collection_logs`: 수집 이력 조회/정리
 - `user_channel_analyses`: 사용자 채널 분석 이력 조회
 - `llm_prompt_templates`: 콘텐츠 추천에 사용할 active prompt 관리
@@ -66,10 +68,12 @@ ALLOWED_ORIGINS=https://be-celeb.org,https://be-celeb.vercel.app,http://localhos
 
 1. `/admin` 접속 후 passcode 입력
 2. `인플루언서 채널` 섹션 이동
-3. 카테고리 선택
+3. 카테고리 1개 이상 선택
 4. YouTube 채널 URL 입력
 5. `채널 추가`
 6. `Sync` 버튼으로 YouTube API 기반 채널 제목, ID, 썸네일, 설명 동기화
+
+채널에 여러 카테고리를 지정하면 daily collector가 새로 수집하는 영상에도 같은 카테고리 묶음을 반영한다. 기존 단일 `category_id` 데이터는 migration에서 join table로 이관되며, legacy API 호환을 위해 첫 번째 카테고리는 `influencer_channels.category_id`, `influencer_videos.category_id`에도 계속 저장한다.
 
 ## 수동 수집 방법
 
@@ -94,10 +98,17 @@ GitHub Actions 또는 Render Cron은 기존 `CRON_SECRET` 기반 수집 endpoint
 
 - `POST /api/cron/collect-naver-trends`
 - `POST /api/cron/collect-shop-products`
+- `POST /api/cron/collect-growth-report`
 
 `creator_shop_keywords` 관리 UI는 아직 admin에 붙이지 않았다. 운영자가 keyword를 자주 바꾸는 단계가 되면 장비 섹션 기준 `/api/admin/shop-keywords` CRUD와 admin 섹션을 추가한다.
 
-`/shop` 상품 카드는 Naver DataLab 검색어트렌드가 아니라 Naver 검색 API의 쇼핑 검색 endpoint를 사용한다. DataLab 검색어트렌드가 정상이어도 쇼핑 검색 권한이 없으면 `/shop`은 “실시간 상품 정보를 불러오지 못해 기본 추천 장비를 표시합니다.” fallback을 보여준다. 쇼핑 검색 권한이 있는 별도 앱 키가 있으면 Render Backend에 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 설정한다. 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 사용한다.
+Growth report collector는 `user_channel_settings`의 모든 회원 채널을 기준으로 `channel_growth_snapshots`, `video_growth_snapshots`를 저장한다. 회원이 YouTube 채널 URL을 다른 채널로 변경하면 기존 growth snapshot은 삭제되고 새 채널 기준으로 다시 시작한다.
+
+Trends의 급상승 키워드는 전체 태그 count만 정렬하지 않고 카테고리별 Top 키워드를 먼저 뽑은 뒤 균형 있게 섞어 표시한다. 검색 관심도 데이터가 있으면 해당 카테고리 키워드에 낮은 가중치로 함께 반영한다. 현재 인기 영상은 `influencer_video_categories` 기준으로 카테고리별 조회수 1등 영상을 고르며, join table 데이터가 없으면 기존 `influencer_videos.category_id`로 fallback한다. DB가 비어 있거나 카테고리 연결 데이터가 없으면 500 대신 빈 배열/empty state를 반환한다.
+
+Production board는 직접 콘텐츠 생성과 즐겨찾기/추천 전환을 모두 지원한다. 촬영 시작일이 있는 production item은 backend에서 `calendar_events`에 자동 upsert된다. Calendar에서 production-linked event의 날짜를 바꾸면 production item의 촬영일도 갱신된다. 충돌 방지를 위해 production item 제목/콘티/메모는 production-board가 원본이고, calendar는 날짜/색상/상태만 편집한다.
+
+`/shop` 상품 카드는 Naver DataLab 검색어트렌드가 아니라 Naver 검색 API의 쇼핑 검색 endpoint로 daily collector가 수집한 cache를 사용한다. 일반 상품 조회는 Naver API를 즉시 호출하지 않는다. DataLab 검색어트렌드가 정상이어도 쇼핑 검색 권한이 없으면 daily shop collector가 실패할 수 있지만, `/shop`은 기존 cache 또는 기본 추천 장비 fallback을 보여준다. 쇼핑 검색 권한이 있는 별도 앱 키가 있으면 Render Backend에 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 설정한다. 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 사용한다.
 
 Admin의 `시스템` 섹션에서 `Naver Shopping API 테스트`를 실행하면 secret 값을 노출하지 않고 status code, errorCode, credential source를 확인할 수 있다.
 
@@ -105,7 +116,7 @@ Admin의 `시스템` 섹션에서 `Naver Shopping API 테스트`를 실행하면
 
 `위험 작업 구역`에서 다음 작업을 실행할 수 있다.
 
-- 전체 또는 특정 카테고리의 `influencer_videos` 삭제
+- 전체 또는 특정 카테고리의 `influencer_videos` 삭제. 다중 카테고리 연결이 있는 영상도 해당 카테고리 위험 삭제 대상에 포함된다.
 - inactive `influencer_channels` 일괄 삭제
 - 전체 `collection_logs` 삭제
 

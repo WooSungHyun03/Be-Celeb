@@ -34,7 +34,7 @@ export function RecommendationFavoriteButton({ result }: RecommendationFavoriteB
           return;
         }
         setStatus("error");
-        setMessage(error instanceof Error ? error.message : "찜 상태를 불러오지 못했습니다.");
+        setMessage(error instanceof Error ? error.message : "즐겨찾기 상태를 불러오지 못했습니다.");
       });
 
     return () => {
@@ -73,14 +73,14 @@ export function RecommendationFavoriteButton({ result }: RecommendationFavoriteB
       setStatus("idle");
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "찜 처리에 실패했습니다.");
+      setMessage(error instanceof Error ? error.message : "즐겨찾기 처리에 실패했습니다.");
     }
   }
 
   return (
     <div className="flex flex-col items-start gap-2 sm:items-end">
       <Button disabled={status === "checking" || status === "saving"} onClick={handleToggle} variant={isFavorited ? "secondary" : "primary"}>
-        {status === "checking" ? "찜 상태 확인 중" : status === "saving" ? "저장 중" : isFavorited ? "찜 해제" : "찜하기"}
+        {status === "checking" ? "즐겨찾기 상태 확인 중" : status === "saving" ? "저장 중" : isFavorited ? "즐겨찾기 해제" : "즐겨찾기 추가"}
       </Button>
       {message ? <p className="text-xs font-semibold text-rose-600">{message}</p> : null}
     </div>

@@ -16,7 +16,6 @@ export const ROUTES = {
   productionBoard: "/production-board",
   calendar: "/calendar",
   growthReport: "/growth-report",
-  pricing: "/pricing",
   profile: "/profile",
   admin: "/admin",
 } as const;
