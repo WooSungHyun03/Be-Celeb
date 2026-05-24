@@ -374,7 +374,15 @@ export default function CalendarPage() {
                 <div className="flex items-start justify-between gap-1">
                   <span
                     className={`inline-flex size-7 items-center justify-center rounded-full text-xs font-bold ${
-                      dateKey === today ? "bg-violet-600 text-white" : isCurrentMonth ? (isHoliday || isSunday ? "bg-red-100 text-red-700 font-extrabold" : "text-ink") : "text-slate-400"
+                      dateKey === today
+                        ? "bg-violet-600 text-white"
+                        : isHoliday
+                        ? "bg-red-100 text-red-700 font-extrabold"
+                        : isCurrentMonth
+                        ? isSunday
+                          ? "text-red-600"
+                          : "text-ink"
+                        : "text-slate-400"
                     }`}
                   >
                     {date.getDate()}
