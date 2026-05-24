@@ -863,7 +863,8 @@ async def _collect_daily_channel(
             video_analysis_errors: list[dict[str, Any]] = []
             inserted_videos = [item for item in inserted_rows if isinstance(item, dict)] if isinstance(inserted_rows, list) else []
             analysis_limit = max(0, get_settings().video_analysis_max_per_collection)
-            video_analysis_skipped = max(0, len(inserted_videos) - analysis_limit)
+            video_analysis_skipped_by_limit = max(0, len(inserted_videos) - analysis_limit)
+            video_analysis_skipped_by_youtube = 0
             for inserted_video in inserted_videos[:analysis_limit]:
                 youtube_video_id = inserted_video.get("youtube_video_id")
                 if not isinstance(youtube_video_id, str) or not youtube_video_id:
@@ -879,7 +880,7 @@ async def _collect_daily_channel(
                 except Exception as error:
                     if _is_video_analysis_skip_error(error):
                         logger.info("Video transcript analysis skipped for youtubeVideoId=%s: %s", youtube_video_id, error)
-                        video_analysis_skipped += 1
+                        video_analysis_skipped_by_youtube += 1
                         continue
                     logger.warning("Video transcript analysis failed for youtubeVideoId=%s: %s", youtube_video_id, error)
                     video_analysis_errors.append(
@@ -903,7 +904,9 @@ async def _collect_daily_channel(
                 "videosFound": len(last_day_videos),
                 "videosUpserted": len(upsert_rows),
                 "videosAnalyzed": videos_analyzed,
-                "videosAnalysisSkipped": video_analysis_skipped,
+                "videosAnalysisSkipped": video_analysis_skipped_by_limit + video_analysis_skipped_by_youtube,
+                "videosAnalysisSkippedByLimit": video_analysis_skipped_by_limit,
+                "videosAnalysisSkippedByYoutube": video_analysis_skipped_by_youtube,
                 "videoAnalysisErrors": video_analysis_errors,
                 "error": None,
             }
@@ -914,6 +917,8 @@ async def _collect_daily_channel(
                 "videosUpserted": 0,
                 "videosAnalyzed": 0,
                 "videosAnalysisSkipped": 0,
+                "videosAnalysisSkippedByLimit": 0,
+                "videosAnalysisSkippedByYoutube": 0,
                 "videoAnalysisErrors": [],
                 "error": {
                     "category": category_names.get(row.get("category_id")),
@@ -925,7 +930,11 @@ async def _collect_daily_channel(
             }
 
 
-def _video_analysis_warning(video_analysis_errors: list[dict[str, Any]], skipped: int) -> str | None:
+def _video_analysis_warning(
+    video_analysis_errors: list[dict[str, Any]],
+    skipped_by_limit: int,
+    skipped_by_youtube: int,
+) -> str | None:
     parts: list[str] = []
     if video_analysis_errors:
         messages = [
@@ -936,8 +945,10 @@ def _video_analysis_warning(video_analysis_errors: list[dict[str, Any]], skipped
         top_messages = Counter(messages).most_common(3)
         detail = "; ".join(f"{count}x {message[:140]}" for message, count in top_messages)
         parts.append(f"{len(video_analysis_errors)} video analysis item(s) failed: {detail}")
-    if skipped:
-        parts.append(f"{skipped} video analysis item(s) skipped due to collection limits or YouTube cookie requirements.")
+    if skipped_by_limit:
+        parts.append(f"{skipped_by_limit} video analysis item(s) skipped by per-run analysis limit.")
+    if skipped_by_youtube:
+        parts.append(f"{skipped_by_youtube} video analysis item(s) skipped because YouTube subtitles/audio were unavailable.")
     return " ".join(parts) if parts else None
 
 
@@ -985,6 +996,8 @@ async def collect_admin_now() -> AdminCollectionSummary:
     videos_upserted = 0
     videos_analyzed = 0
     videos_analysis_skipped = 0
+    videos_analysis_skipped_by_limit = 0
+    videos_analysis_skipped_by_youtube = 0
 
     try:
         logger.info("Daily YouTube collection started: channels=%s concurrency=%s", len(channels), DAILY_COLLECTION_CONCURRENCY)
@@ -1008,6 +1021,8 @@ async def collect_admin_now() -> AdminCollectionSummary:
             videos_upserted += int(result.get("videosUpserted") or 0)
             videos_analyzed += int(result.get("videosAnalyzed") or 0)
             videos_analysis_skipped += int(result.get("videosAnalysisSkipped") or 0)
+            videos_analysis_skipped_by_limit += int(result.get("videosAnalysisSkippedByLimit") or 0)
+            videos_analysis_skipped_by_youtube += int(result.get("videosAnalysisSkippedByYoutube") or 0)
             result_video_analysis_errors = result.get("videoAnalysisErrors")
             if isinstance(result_video_analysis_errors, list):
                 video_analysis_errors.extend(error for error in result_video_analysis_errors if isinstance(error, dict))
@@ -1024,10 +1039,16 @@ async def collect_admin_now() -> AdminCollectionSummary:
             videosUpserted=videos_upserted,
             videosAnalyzed=videos_analyzed,
             videosAnalysisSkipped=videos_analysis_skipped,
+            videosAnalysisSkippedByLimit=videos_analysis_skipped_by_limit,
+            videosAnalysisSkippedByYoutube=videos_analysis_skipped_by_youtube,
             videoAnalysisErrors=video_analysis_errors,
             errors=errors,
         )
-        video_analysis_warning = _video_analysis_warning(video_analysis_errors, videos_analysis_skipped)
+        video_analysis_warning = _video_analysis_warning(
+            video_analysis_errors,
+            videos_analysis_skipped_by_limit,
+            videos_analysis_skipped_by_youtube,
+        )
         await _finish_collection_log(
             log_id,
             "partial_success" if errors or video_analysis_errors else "success",
