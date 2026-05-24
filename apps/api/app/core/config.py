@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.4-mini"
     openai_transcription_model: str = "whisper-1"
     video_analysis_max_bytes: int = 25 * 1024 * 1024
-    video_analysis_max_per_collection: int = 10
+    video_analysis_max_per_collection: int = 100
     youtube_cookies_file: str | None = None
     resend_api_key: str | None = None
     resend_from_email: str = "no-reply@be-celeb.org"
