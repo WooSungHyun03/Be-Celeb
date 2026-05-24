@@ -4,6 +4,7 @@ import asyncio
 import re
 import json
 import mimetypes
+import shutil
 import tempfile
 from html import unescape
 from pathlib import Path
@@ -415,24 +416,23 @@ async def _extract_youtube_subtitles(youtube_video_id: str) -> tuple[str, list[T
     except ImportError:
         return None
 
-    settings = get_settings()
     video_url = f"https://www.youtube.com/watch?v={youtube_video_id}"
-    options: dict[str, Any] = {
-        "quiet": True,
-        "skip_download": True,
-        "noplaylist": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": list(YOUTUBE_SUBTITLE_LANGUAGES),
-        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
-    }
-    if settings.youtube_cookies_file:
-        options["cookiefile"] = settings.youtube_cookies_file
-    try:
-        with YoutubeDL(options) as downloader:
-            info = await _run_ytdlp_info(downloader, video_url)
-    except Exception as error:
-        _raise_youtube_extraction_error(error)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        options: dict[str, Any] = {
+            "quiet": True,
+            "skip_download": True,
+            "noplaylist": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": list(YOUTUBE_SUBTITLE_LANGUAGES),
+            "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+        }
+        _set_ytdlp_cookiefile_option(options, temp_dir)
+        try:
+            with YoutubeDL(options) as downloader:
+                info = await _run_ytdlp_info(downloader, video_url)
+        except Exception as error:
+            _raise_youtube_extraction_error(error)
 
     subtitle_entry = _select_subtitle_entry(info)
     if not subtitle_entry:
@@ -564,8 +564,7 @@ async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, st
             "max_filesize": settings.video_analysis_max_bytes,
             "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
         }
-        if settings.youtube_cookies_file:
-            options["cookiefile"] = settings.youtube_cookies_file
+        _set_ytdlp_cookiefile_option(options, temp_dir)
         try:
             with YoutubeDL(options) as downloader:
                 info = await _run_ytdlp_extract(downloader, video_url)
@@ -590,6 +589,19 @@ async def _run_ytdlp_extract(downloader: Any, video_url: str) -> dict[str, Any]:
 
 async def _run_ytdlp_info(downloader: Any, video_url: str) -> dict[str, Any]:
     return await asyncio.to_thread(downloader.extract_info, video_url, False)
+
+
+def _set_ytdlp_cookiefile_option(options: dict[str, Any], temp_dir: str) -> None:
+    cookie_file = get_settings().youtube_cookies_file
+    if not cookie_file:
+        return
+    source = Path(cookie_file)
+    if not source.is_file():
+        options["cookiefile"] = cookie_file
+        return
+    cookie_copy = Path(temp_dir) / "youtube-cookies.txt"
+    shutil.copyfile(source, cookie_copy)
+    options["cookiefile"] = str(cookie_copy)
 
 
 def _raise_youtube_extraction_error(error: Exception) -> None:
