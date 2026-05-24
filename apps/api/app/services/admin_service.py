@@ -25,6 +25,7 @@ ONE_DAY = timedelta(days=1)
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
 DAILY_COLLECTION_CONCURRENCY = 4
+COLLECTION_PROGRESS_UPDATE_SECONDS = 5
 logger = get_logger(__name__)
 VIDEO_ANALYSIS_SKIP_CODES = {"YOUTUBE_REQUIRES_COOKIES", "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS"}
 
@@ -761,6 +762,56 @@ async def _finish_collection_log(log_id: str | None, status: str, summary: dict[
         return
 
 
+async def _update_collection_progress(log_id: str | None, progress: dict[str, Any]) -> None:
+    if not log_id:
+        return
+    try:
+        await _patch(
+            "collection_logs",
+            {"summary": {"progress": progress}},
+            {"id": f"eq.{log_id}"},
+            prefer="return=minimal",
+        )
+    except Exception:
+        return
+
+
+def _collection_progress_summary(
+    *,
+    started_at: str,
+    channels_total: int,
+    channels_done: int,
+    videos_found: int,
+    videos_upserted: int,
+    videos_analyzed: int,
+    videos_skipped: int,
+    errors_count: int,
+) -> dict[str, Any]:
+    percent = 100 if channels_total == 0 else min(95, int((channels_done / channels_total) * 95))
+    stage = "channel_collection"
+    message = "채널과 최근 영상 데이터를 수집하는 중입니다."
+    if channels_done == 0:
+        stage = "preparing"
+        message = "수집할 채널 목록을 준비하는 중입니다."
+    elif channels_done >= channels_total:
+        stage = "finalizing"
+        message = "수집 결과를 정리하는 중입니다."
+    return {
+        "stage": stage,
+        "message": message,
+        "startedAt": started_at,
+        "channelsTotal": channels_total,
+        "channelsDone": channels_done,
+        "videosFound": videos_found,
+        "videosUpserted": videos_upserted,
+        "videosAnalyzed": videos_analyzed,
+        "videosSkipped": videos_skipped,
+        "errors": errors_count,
+        "percent": percent,
+        "updatedAt": _iso(_now()),
+    }
+
+
 def _category_ids_for_channel_row(row: dict[str, Any], category_ids_by_channel: dict[str, list[str]]) -> list[str]:
     channel_id = row.get("id")
     category_ids = category_ids_by_channel.get(channel_id, []) if isinstance(channel_id, str) else []
@@ -843,7 +894,18 @@ async def _collect_daily_channel(
             ]
             if not last_day_videos:
                 logger.info("Daily YouTube collection finished for channel=%s videosFound=0", channel.youtubeChannelId)
-                return {"videosFound": 0, "videosUpserted": 0, "error": None}
+                return {
+                    "videosFound": 0,
+                    "videosUpserted": 0,
+                    "videosAnalyzed": 0,
+                    "videosAnalysisSkipped": 0,
+                    "videosAnalysisSkippedByLimit": 0,
+                    "videosAnalysisSkippedByYoutube": 0,
+                    "videoAnalysisSkipReasons": {},
+                    "videoAnalysisSkips": [],
+                    "videoAnalysisErrors": [],
+                    "error": None,
+                }
 
             upsert_rows = [
                 {
@@ -1023,8 +1085,22 @@ async def collect_admin_now() -> AdminCollectionSummary:
     try:
         logger.info("Daily YouTube collection started: channels=%s concurrency=%s", len(channels), DAILY_COLLECTION_CONCURRENCY)
         semaphore = asyncio.Semaphore(DAILY_COLLECTION_CONCURRENCY)
-        results = await asyncio.gather(
-            *[
+        await _update_collection_progress(
+            log_id,
+            _collection_progress_summary(
+                started_at=started_at,
+                channels_total=len(channels),
+                channels_done=0,
+                videos_found=0,
+                videos_upserted=0,
+                videos_analyzed=0,
+                videos_skipped=0,
+                errors_count=0,
+            ),
+        )
+        last_progress_update = _now()
+        channel_tasks = [
+            asyncio.create_task(
                 _collect_daily_channel(
                     row,
                     category_names=category_names,
@@ -1033,11 +1109,14 @@ async def collect_admin_now() -> AdminCollectionSummary:
                     started_at=started_at,
                     semaphore=semaphore,
                 )
-                for row in channels
-            ]
-        )
+            )
+            for row in channels
+        ]
 
-        for result in results:
+        channels_done = 0
+        for task in asyncio.as_completed(channel_tasks):
+            result = await task
+            channels_done += 1
             videos_found += int(result.get("videosFound") or 0)
             videos_upserted += int(result.get("videosUpserted") or 0)
             videos_analyzed += int(result.get("videosAnalyzed") or 0)
@@ -1061,6 +1140,22 @@ async def collect_admin_now() -> AdminCollectionSummary:
                 video_analysis_errors.extend(error for error in result_video_analysis_errors if isinstance(error, dict))
             if result.get("error"):
                 errors.append(result["error"])
+            now = _now()
+            if channels_done == len(channels) or (now - last_progress_update).total_seconds() >= COLLECTION_PROGRESS_UPDATE_SECONDS:
+                await _update_collection_progress(
+                    log_id,
+                    _collection_progress_summary(
+                        started_at=started_at,
+                        channels_total=len(channels),
+                        channels_done=channels_done,
+                        videos_found=videos_found,
+                        videos_upserted=videos_upserted,
+                        videos_analyzed=videos_analyzed,
+                        videos_skipped=videos_analysis_skipped,
+                        errors_count=len(errors) + len(video_analysis_errors),
+                    ),
+                )
+                last_progress_update = now
 
         summary = AdminCollectionSummary(
             collectedAt=started_at,

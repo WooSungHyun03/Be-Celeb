@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { collectNow } from "@/lib/api/admin";
+import { collectNow, listCollectionLogs } from "@/lib/api/admin";
 import type { AdminCollectionLog, AdminCollectionSummary } from "@/types/admin";
 
 type CollectionManagerProps = {
@@ -13,27 +13,91 @@ type CollectionManagerProps = {
   onError: (message: string) => void;
 };
 
+type CollectionProgress = {
+  stage: string;
+  message: string;
+  channelsTotal: number;
+  channelsDone: number;
+  videosFound: number;
+  videosUpserted: number;
+  videosAnalyzed: number;
+  videosSkipped: number;
+  errors: number;
+  percent: number;
+  updatedAt: string;
+};
+
 const collectionSteps = [
-  { title: "채널 목록 확인", description: "활성화된 YouTube 채널과 카테고리를 불러오는 중입니다." },
-  { title: "최근 영상 수집", description: "최근 24시간 내 업로드된 영상 데이터를 YouTube API로 확인합니다." },
-  { title: "영상 데이터 저장", description: "조회수, 좋아요, 댓글, 썸네일 정보를 데이터베이스에 반영합니다." },
-  { title: "자막/음성 분석", description: "공개 자막을 우선 확인하고, 필요하면 Whisper 분석을 시도합니다." },
-  { title: "수집 결과 정리", description: "분석 성공, 스킵, 오류 사유를 수집 로그에 정리합니다." },
+  { title: "채널 목록 확인", stage: "preparing" },
+  { title: "최근 영상 수집", stage: "channel_collection" },
+  { title: "영상 데이터 저장", stage: "channel_collection" },
+  { title: "자막/음성 분석", stage: "channel_collection" },
+  { title: "수집 결과 정리", stage: "finalizing" },
 ];
+
+function numberFrom(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stringFrom(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function readProgress(summary: Record<string, unknown> | null | undefined): CollectionProgress | null {
+  const progress = summary?.progress;
+  if (!progress || typeof progress !== "object" || Array.isArray(progress)) {
+    return null;
+  }
+  const value = progress as Record<string, unknown>;
+  return {
+    stage: stringFrom(value.stage),
+    message: stringFrom(value.message),
+    channelsTotal: numberFrom(value.channelsTotal),
+    channelsDone: numberFrom(value.channelsDone),
+    videosFound: numberFrom(value.videosFound),
+    videosUpserted: numberFrom(value.videosUpserted),
+    videosAnalyzed: numberFrom(value.videosAnalyzed),
+    videosSkipped: numberFrom(value.videosSkipped),
+    errors: numberFrom(value.errors),
+    percent: Math.max(0, Math.min(100, numberFrom(value.percent))),
+    updatedAt: stringFrom(value.updatedAt),
+  };
+}
 
 export function CollectionManager({ logs, onChanged, onError }: CollectionManagerProps) {
   const [result, setResult] = useState<AdminCollectionSummary | null>(null);
   const [isCollecting, setIsCollecting] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+  const [liveProgress, setLiveProgress] = useState<CollectionProgress | null>(null);
+
   const progress = useMemo(() => {
     if (result) {
       return 100;
+    }
+    if (liveProgress) {
+      return liveProgress.percent;
     }
     if (!isCollecting) {
       return 0;
     }
     return Math.min(92, Math.round(((activeStep + 1) / collectionSteps.length) * 100));
-  }, [activeStep, isCollecting, result]);
+  }, [activeStep, isCollecting, liveProgress, result]);
+
+  const displayStepIndex = useMemo(() => {
+    if (result) {
+      return collectionSteps.length - 1;
+    }
+    if (liveProgress?.stage === "preparing") {
+      return 0;
+    }
+    if (liveProgress?.stage === "finalizing") {
+      return collectionSteps.length - 1;
+    }
+    if (liveProgress) {
+      return Math.min(collectionSteps.length - 2, Math.max(1, Math.floor((liveProgress.percent / 100) * collectionSteps.length)));
+    }
+    return activeStep;
+  }, [activeStep, liveProgress, result]);
 
   useEffect(() => {
     if (!isCollecting) {
@@ -46,9 +110,35 @@ export function CollectionManager({ logs, onChanged, onError }: CollectionManage
     return () => window.clearInterval(timer);
   }, [isCollecting]);
 
+  useEffect(() => {
+    if (!isCollecting) {
+      return;
+    }
+    let cancelled = false;
+    async function pollProgress() {
+      try {
+        const data = await listCollectionLogs({ limit: 1 });
+        const latest = data.logs[0];
+        const progressValue = readProgress(latest?.summary);
+        if (!cancelled && latest?.status === "running" && progressValue) {
+          setLiveProgress(progressValue);
+        }
+      } catch {
+        // Progress polling is best-effort. The main collect request still owns the final result.
+      }
+    }
+    void pollProgress();
+    const timer = window.setInterval(pollProgress, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [isCollecting]);
+
   async function handleCollectNow() {
     setIsCollecting(true);
     setResult(null);
+    setLiveProgress(null);
     try {
       const data = await collectNow();
       setResult(data);
@@ -60,6 +150,9 @@ export function CollectionManager({ logs, onChanged, onError }: CollectionManage
       setIsCollecting(false);
     }
   }
+
+  const progressTitle = result ? "수집 완료" : collectionSteps[displayStepIndex].title;
+  const progressMessage = result ? "최신 수집 결과가 반영되었습니다." : liveProgress?.message ?? "수집 작업을 실행하고 있습니다.";
 
   return (
     <div className="space-y-5">
@@ -80,20 +173,27 @@ export function CollectionManager({ logs, onChanged, onError }: CollectionManage
           <div className="mt-5 rounded-lg border border-violet-100 bg-violet-50/60 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-bold text-violet-950">{result ? "수집 완료" : collectionSteps[activeStep].title}</p>
-                <p className="mt-1 text-sm text-violet-700">
-                  {result ? "최신 수집 결과가 반영되었습니다." : collectionSteps[activeStep].description}
-                </p>
+                <p className="text-sm font-bold text-violet-950">{progressTitle}</p>
+                <p className="mt-1 text-sm text-violet-700">{progressMessage}</p>
               </div>
               <Badge tone={result ? "brand" : "info"}>{progress}%</Badge>
             </div>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
               <div className="h-full rounded-full bg-violet-600 transition-all duration-700" style={{ width: `${progress}%` }} />
             </div>
+            {liveProgress ? (
+              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-5">
+                <span className="rounded-md bg-white px-3 py-2 text-violet-900">채널 {liveProgress.channelsDone}/{liveProgress.channelsTotal}</span>
+                <span className="rounded-md bg-white px-3 py-2 text-violet-900">발견 {liveProgress.videosFound}</span>
+                <span className="rounded-md bg-white px-3 py-2 text-violet-900">저장 {liveProgress.videosUpserted}</span>
+                <span className="rounded-md bg-white px-3 py-2 text-violet-900">분석 {liveProgress.videosAnalyzed}</span>
+                <span className="rounded-md bg-white px-3 py-2 text-violet-900">스킵 {liveProgress.videosSkipped}</span>
+              </div>
+            ) : null}
             <div className="mt-4 grid gap-2 sm:grid-cols-5">
               {collectionSteps.map((step, index) => {
-                const isDone = result || index < activeStep;
-                const isActive = !result && index === activeStep;
+                const isDone = result || index < displayStepIndex;
+                const isActive = !result && index === displayStepIndex;
                 return (
                   <div
                     key={step.title}
