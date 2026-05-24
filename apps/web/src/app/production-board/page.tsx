@@ -104,10 +104,6 @@ function getCategoryLabel(item: ProductionBoardItem) {
   return item.category?.trim() || "미분류";
 }
 
-function memoPreview(memo: string | null) {
-  return memo?.trim().split(/\r?\n/).filter(Boolean).join(" ") ?? "";
-}
-
 function itemMatchesSearch(item: ProductionBoardItem, normalizedQuery: string) {
   if (!normalizedQuery) {
     return true;
@@ -236,16 +232,6 @@ function formFromProductionItem(item: ProductionBoardItem): ProductionItemForm {
   };
 }
 
-function shootDateLabel(item: ProductionBoardItem) {
-  if (!item.shootStartDate) {
-    return null;
-  }
-  if (!item.shootEndDate || item.shootEndDate === item.shootStartDate) {
-    return item.shootStartDate;
-  }
-  return `${item.shootStartDate} - ${item.shootEndDate}`;
-}
-
 type ToastState = {
   message: string;
   tone: "success" | "error" | "info";
@@ -265,16 +251,8 @@ function ProductionBoardCard({ item, isMoving, isActiveDragItem, onOpenDetail, o
     data: { status: item.status },
     disabled: isMoving,
   });
-  const label = PRODUCTION_BOARD_STATUS_LABELS[item.status];
   const nextStatus = NEXT_STATUS_MAP[item.status];
   const nextLabel = nextStatus ? PRODUCTION_BOARD_STATUS_LABELS[nextStatus] : null;
-  const visibleTags = item.hashtags.slice(0, 3);
-  const hiddenTagCount = Math.max(item.hashtags.length - visibleTags.length, 0);
-  const memoText = memoPreview(item.memo);
-  const shootingDates = shootDateLabel(item);
-  const checklistTotal = item.checklistTotal ?? 0;
-  const checklistDone = item.checklistDone ?? 0;
-  const checklistProgress = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0;
   const dragging = isDragging || isActiveDragItem;
   const style: CSSProperties = {
     transform: CSS.Translate.toString(transform),
@@ -293,43 +271,14 @@ function ProductionBoardCard({ item, isMoving, isActiveDragItem, onOpenDetail, o
       {...attributes}
     >
       <Card className="cursor-grab p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={statusTone[item.status]}>{label}</Badge>
-            {item.category ? <Badge>{item.category}</Badge> : null}
-            {item.calendarEventId ? <Badge tone="info">캘린더 반영됨</Badge> : null}
-          </div>
-          {item.status === "uploaded" ? <Badge tone="signal">완료됨</Badge> : null}
-        </div>
-        <h2 className="mt-3 line-clamp-2 text-base font-bold leading-6 text-ink">{item.title}</h2>
-        {item.hook ? <p className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-slate-600">{item.hook}</p> : null}
-        {item.description ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{item.description}</p> : null}
-        {shootingDates ? <p className="mt-2 text-xs font-bold text-violet-700">촬영일 {shootingDates}</p> : null}
-        {visibleTags.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {visibleTags.map((tag) => (
-              <span className="max-w-[7.5rem] truncate rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600" key={tag}>
-                {normalizeHashtag(tag)}
-              </span>
-            ))}
-            {hiddenTagCount > 0 ? (
-              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500">+{hiddenTagCount}</span>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-500">
-            <span>{memoText ? "메모 있음" : "메모 없음"}</span>
-            <span className="text-slate-300">·</span>
-            <span>{checklistTotal > 0 ? `체크리스트 ${checklistDone}/${checklistTotal} 완료` : "체크리스트 없음"}</span>
-          </div>
-          {checklistTotal > 0 ? (
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${checklistProgress}%` }} />
-            </div>
-          ) : null}
-        </div>
+        <button
+          className="block w-full text-left"
+          onClick={() => onOpenDetail(item)}
+          onPointerDown={(event) => event.stopPropagation()}
+          type="button"
+        >
+          <h2 className="line-clamp-2 text-base font-bold leading-6 text-ink">{item.title}</h2>
+        </button>
 
         <div className="mt-4 grid gap-2">
           <Button
