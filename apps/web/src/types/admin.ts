@@ -82,6 +82,13 @@ export type AdminCollectionSummary = {
   channelsChecked: number;
   videosFoundLast24h: number;
   videosUpserted: number;
+  videosAnalyzed: number;
+  videosAnalysisSkipped: number;
+  videosAnalysisSkippedByLimit: number;
+  videosAnalysisSkippedByYoutube: number;
+  videoAnalysisSkipReasons: Record<string, number>;
+  videoAnalysisSkips: Array<Record<string, unknown>>;
+  videoAnalysisErrors: Array<Record<string, unknown>>;
   errors: Array<Record<string, unknown>>;
 };
 
