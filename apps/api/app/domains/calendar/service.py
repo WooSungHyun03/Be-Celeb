@@ -8,6 +8,7 @@ import httpx
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestException, BackendApiError, missing_env
 from app.domains.calendar.schemas import CalendarEventPayload, CalendarEventUpdatePayload
+from app.services.holiday_service import KOREAN_HOLIDAYS
 
 CALENDAR_EVENT_SELECT = (
     "id,user_id,favorite_id,production_item_id,title,description,scheduled_date,start_date,end_date,"
@@ -340,7 +341,7 @@ async def get_holidays(
     }
     
     if start_date and end_date:
-        params["date"] = f"gte.{start_date}&date.lte.{end_date}"
+        params["and"] = f"(date.gte.{start_date},date.lte.{end_date})"
     elif start_date:
         params["date"] = f"gte.{start_date}"
     elif end_date:
@@ -351,7 +352,23 @@ async def get_holidays(
     
     try:
         holidays = await _request("GET", "holidays", params=params)
-        return holidays if isinstance(holidays, list) else []
+        if isinstance(holidays, list) and holidays:
+            return holidays
     except Exception:
         # Return empty list on error instead of raising
-        return []
+        pass
+
+    # Fallback to hard-coded Korean holidays when the holidays table is empty or unreachable.
+    def within_range(holiday_date: str) -> bool:
+        if start_date and holiday_date < start_date:
+            return False
+        if end_date and holiday_date > end_date:
+            return False
+        return True
+
+    filtered = [
+        holiday
+        for holiday in KOREAN_HOLIDAYS
+        if within_range(holiday["date"]) and (category is None or holiday["category"] == category)
+    ]
+    return filtered
