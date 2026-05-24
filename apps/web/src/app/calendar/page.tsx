@@ -60,6 +60,19 @@ function formatDate(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+function normalizeDateKey(value: string | null | undefined) {
+  const text = value?.trim() ?? "";
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  const compactMatch = /^(\d{4})(\d{2})(\d{2})$/.exec(text);
+  if (compactMatch) {
+    return `${compactMatch[1]}-${compactMatch[2]}-${compactMatch[3]}`;
+  }
+  return null;
+}
+
 function monthTitle(date: Date) {
   return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
 }
@@ -129,6 +142,7 @@ export default function CalendarPage() {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [holidayMessage, setHolidayMessage] = useState<string | null>(null);
   const [form, setForm] = useState<EventForm | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -145,8 +159,16 @@ export default function CalendarPage() {
   }, [events]);
 
   const holidaysByDate = useMemo(() => {
-    return holidays.reduce<Record<string, Holiday>>((acc, holiday) => {
-      acc[holiday.date] = holiday;
+    return holidays.reduce<Record<string, Holiday[]>>((acc, holiday) => {
+      const dateKey = normalizeDateKey(holiday.date);
+      if (!dateKey) {
+        return acc;
+      }
+      const current = acc[dateKey] ?? [];
+      if (current.some((item) => item.name === holiday.name)) {
+        return acc;
+      }
+      acc[dateKey] = [...current, { ...holiday, date: dateKey }];
       return acc;
     }, {});
   }, [holidays]);
@@ -168,15 +190,23 @@ export default function CalendarPage() {
           return;
         }
 
-        const [loadedEvents, loadedFavorites, loadedHolidays] = await Promise.all([
+        const [loadedEvents, loadedFavorites] = await Promise.all([
           getCalendarEvents(range, controller.signal),
           getFavorites({ type: "recommendation" }, controller.signal),
-          getHolidays(range, controller.signal),
         ]);
+        const loadedHolidays = await getHolidays(range, controller.signal).catch(() => {
+          if (active) {
+            setHolidayMessage("공휴일 정보를 불러오지 못했습니다. 일정 기능은 정상적으로 사용할 수 있습니다.");
+          }
+          return [];
+        });
         if (active) {
           setEvents(loadedEvents);
           setFavorites(loadedFavorites);
           setHolidays(loadedHolidays);
+          if (loadedHolidays.length > 0) {
+            setHolidayMessage(null);
+          }
           setStatus("ready");
         }
       } catch (error) {
@@ -319,6 +349,11 @@ export default function CalendarPage() {
       />
 
       {message ? <p className="rounded-xl border border-violet-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700">{message}</p> : null}
+      {holidayMessage ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          {holidayMessage}
+        </p>
+      ) : null}
 
       <Card>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -351,8 +386,8 @@ export default function CalendarPage() {
             const dateKey = formatDate(date);
             const isCurrentMonth = date.getMonth() === monthDate.getMonth();
             const dailyEvents = eventsByDate[dateKey] ?? [];
-            const holiday = holidaysByDate[dateKey];
-            const isHoliday = Boolean(holiday);
+            const dailyHolidays = holidaysByDate[dateKey] ?? [];
+            const isHoliday = dailyHolidays.length > 0;
             const isSunday = date.getDay() === 0;
             
             return (
@@ -387,13 +422,19 @@ export default function CalendarPage() {
                   >
                     {date.getDate()}
                   </span>
-                  {isHoliday && (
-                    <div title={holiday.name} className="text-right">
-                      <span className="inline-block bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-xs font-bold" title={holiday.description || ""}>
-                        {holiday.name}
-                      </span>
+                  {isHoliday ? (
+                    <div className="grid max-w-[8rem] gap-1 text-right">
+                      {dailyHolidays.slice(0, 2).map((holiday) => (
+                        <span
+                          className="truncate rounded bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-700"
+                          key={`${holiday.date}-${holiday.name}`}
+                          title={`${holiday.date} ${holiday.name}${holiday.description ? ` - ${holiday.description}` : ""}`}
+                        >
+                          {holiday.name}
+                        </span>
+                      ))}
                     </div>
-                  )}
+                  ) : null}
                 </div>
                 <div className="mt-2 grid gap-1">
                   {dailyEvents.slice(0, 4).map((event) => {

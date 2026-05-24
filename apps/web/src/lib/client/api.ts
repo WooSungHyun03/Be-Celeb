@@ -37,6 +37,13 @@ export type RecommendContentPayload = {
   videoAnalysisId?: string | null;
 };
 
+export type RecommendationQueueStatus = {
+  state: "idle" | "queued" | "processing" | string;
+  position: number | null;
+  pendingCount: number;
+  isProcessing: boolean;
+};
+
 export type VideoAnalysisSegment = {
   start?: number | null;
   end?: number | null;
@@ -361,11 +368,20 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(getApiUrl(path), {
-    ...options,
-    credentials: options.credentials ?? "include",
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(getApiUrl(path), {
+      ...options,
+      credentials: options.credentials ?? "include",
+      headers,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw new ApiClientError("Backend API에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.", undefined, "NETWORK_ERROR");
+  }
+
   const payload = await parseJsonResponse(response);
 
   if (!response.ok || isFailurePayload(payload)) {
@@ -380,6 +396,15 @@ export async function recommendContent(payload: RecommendContentPayload, signal?
   const response = await apiFetch<ApiSuccess<SingleRecommendContentResponse>>("/api/recommend-content", {
     method: "POST",
     body: JSON.stringify(payload),
+    headers: await getAuthorizationHeaders(),
+    signal,
+  });
+
+  return response.data;
+}
+
+export async function getRecommendationQueueStatus(signal?: AbortSignal) {
+  const response = await apiFetch<ApiSuccess<RecommendationQueueStatus>>("/api/recommend-content/queue-status", {
     headers: await getAuthorizationHeaders(),
     signal,
   });

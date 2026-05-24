@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import re
 from datetime import date
+from time import monotonic
 from typing import Any
 
 import httpx
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestException, BackendApiError, missing_env
+from app.core.logging import get_logger
+from app.common.text import strip_html_tags
 from app.domains.calendar.schemas import CalendarEventPayload, CalendarEventUpdatePayload
 from app.services.holiday_service import KOREAN_HOLIDAYS
+
+logger = get_logger(__name__)
 
 CALENDAR_EVENT_SELECT = (
     "id,user_id,favorite_id,production_item_id,title,description,scheduled_date,start_date,end_date,"
@@ -18,6 +24,26 @@ CALENDAR_EVENT_LEGACY_SELECT = (
     "id,user_id,favorite_id,title,description,scheduled_date,start_time,end_time,status,platform,metadata,created_at,updated_at"
 )
 CALENDAR_EVENT_NEW_COLUMNS = {"production_item_id", "start_date", "end_date", "color"}
+NAVER_HOLIDAY_CACHE_TTL_SECONDS = 60 * 60 * 12
+_naver_holiday_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
+_HOLIDAY_CORE_KEYWORDS = (
+    "신년",
+    "설날",
+    "삼일절",
+    "어린이날",
+    "부처님오신날",
+    "현충일",
+    "광복절",
+    "추석",
+    "개천절",
+    "한글날",
+    "크리스마스",
+    "기독탄신일",
+    "대체공휴일",
+    "임시공휴일",
+    "근로자의날",
+    "전국동시지방선거",
+)
 
 
 def _supabase_url() -> str:
@@ -91,6 +117,188 @@ def _date_or_none(value: Any) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _normalize_date_key(value: Any) -> str | None:
+    if isinstance(value, date):
+        return value.isoformat()
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return text
+    if re.fullmatch(r"\d{8}", text):
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    match = re.match(r"^(20\d{2})[-./년]\s*(\d{1,2})[-./월]\s*(\d{1,2})", text)
+    if match:
+        return f"{int(match.group(1)):04d}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+    return None
+
+
+def _holiday_core(name: str) -> str | None:
+    compact = re.sub(r"\s+", "", name)
+    if "석가탄신일" in compact:
+        return "부처님오신날"
+    if "성탄" in compact or "크리스마스" in compact:
+        return "크리스마스"
+    for keyword in _HOLIDAY_CORE_KEYWORDS:
+        if re.sub(r"\s+", "", keyword) in compact:
+            return keyword
+    return None
+
+
+def _holiday_in_range(holiday_date: str, start_date: str | None, end_date: str | None) -> bool:
+    if start_date and holiday_date < start_date:
+        return False
+    if end_date and holiday_date > end_date:
+        return False
+    return True
+
+
+def _normalize_holiday_row(row: dict[str, Any], source: str) -> dict[str, Any] | None:
+    holiday_date = _normalize_date_key(row.get("date"))
+    name = str(row.get("name") or "").strip()
+    if not holiday_date or not name:
+        return None
+    category = row.get("category") if isinstance(row.get("category"), str) else "public_holiday"
+    description = row.get("description") if isinstance(row.get("description"), str) else None
+    return {
+        "id": str(row.get("id") or f"{source}:{holiday_date}:{name}"),
+        "date": holiday_date,
+        "name": name,
+        "category": category,
+        "description": description,
+        "is_active": True,
+        "source": source,
+    }
+
+
+def _curated_holidays(start_date: str | None, end_date: str | None, category: str | None) -> list[dict[str, Any]]:
+    return [
+        normalized
+        for holiday in KOREAN_HOLIDAYS
+        if (normalized := _normalize_holiday_row(holiday, "curated"))
+        and _holiday_in_range(normalized["date"], start_date, end_date)
+        and (category is None or normalized["category"] == category)
+    ]
+
+
+def _curated_core_dates(holidays: list[dict[str, Any]]) -> dict[tuple[str, str], set[str]]:
+    core_dates: dict[tuple[str, str], set[str]] = {}
+    for holiday in holidays:
+        core = _holiday_core(holiday["name"])
+        if not core:
+            continue
+        year = holiday["date"][:4]
+        core_dates.setdefault((year, core), set()).add(holiday["date"])
+    return core_dates
+
+
+def _drop_stale_known_holidays(
+    holidays: list[dict[str, Any]],
+    curated_core_dates: dict[tuple[str, str], set[str]],
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for holiday in holidays:
+        core = _holiday_core(holiday["name"])
+        if core:
+            known_dates = curated_core_dates.get((holiday["date"][:4], core))
+            if known_dates and holiday["date"] not in known_dates:
+                continue
+        filtered.append(holiday)
+    return filtered
+
+
+def _dedupe_holidays(holidays: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    deduped: list[dict[str, Any]] = []
+    for holiday in sorted(holidays, key=lambda item: (item["date"], item["name"])):
+        key = (holiday["date"], holiday["name"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(holiday)
+    return deduped
+
+
+def _years_for_range(start_date: str | None, end_date: str | None) -> list[int]:
+    start_year = int((start_date or date.today().isoformat())[:4])
+    end_year = int((end_date or start_date or date.today().isoformat())[:4])
+    return list(range(start_year, end_year + 1))
+
+
+def _holiday_name_from_text(text: str) -> str | None:
+    compact = re.sub(r"\s+", "", text)
+    for keyword in ("설날", "추석", "부처님오신날", "석가탄신일", "삼일절", "어린이날", "현충일", "광복절", "개천절", "한글날", "크리스마스", "기독탄신일"):
+        if keyword in compact:
+            return "부처님오신날" if keyword == "석가탄신일" else ("크리스마스" if keyword == "기독탄신일" else keyword)
+    return None
+
+
+async def _fetch_naver_holidays_for_year(year: int) -> list[dict[str, Any]]:
+    cached = _naver_holiday_cache.get(year)
+    now = monotonic()
+    if cached and now - cached[0] < NAVER_HOLIDAY_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    settings = get_settings()
+    if not settings.naver_client_id or not settings.naver_client_secret:
+        return []
+
+    headers = {
+        "X-Naver-Client-Id": settings.naver_client_id,
+        "X-Naver-Client-Secret": settings.naver_client_secret,
+    }
+    params = {
+        "query": f"{year}년 대한민국 공휴일",
+        "display": 5,
+        "start": 1,
+        "sort": "sim",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.get("https://openapi.naver.com/v1/search/webkr.json", headers=headers, params=params)
+    except httpx.HTTPError as error:
+        logger.warning("Naver holiday search request failed: %s", error.__class__.__name__)
+        return []
+
+    if response.status_code >= 400:
+        logger.warning(
+            "Naver holiday search failed: status=%s clientIdExists=%s clientSecretExists=%s",
+            response.status_code,
+            bool(settings.naver_client_id),
+            bool(settings.naver_client_secret),
+        )
+        return []
+
+    payload = response.json() if response.content else {}
+    items = payload.get("items") if isinstance(payload, dict) else []
+    holidays: list[dict[str, Any]] = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        text = strip_html_tags(f"{item.get('title') or ''} {item.get('description') or ''}")
+        name = _holiday_name_from_text(text)
+        if not name:
+            continue
+        for match in re.finditer(rf"({year})[-./년]\s*(\d{{1,2}})[-./월]\s*(\d{{1,2}})", text):
+            holiday_date = f"{year:04d}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+            holidays.append(
+                {
+                    "id": f"naver:{holiday_date}:{name}",
+                    "date": holiday_date,
+                    "name": name,
+                    "category": "public_holiday",
+                    "description": "Naver Search API에서 확인한 공휴일 후보입니다.",
+                    "is_active": True,
+                    "source": "naver_search",
+                }
+            )
+
+    deduped = _dedupe_holidays(holidays)
+    _naver_holiday_cache[year] = (now, deduped)
+    return deduped
 
 
 def _validate_date_range(start_date: str, end_date: str | None) -> tuple[str, str | None]:
@@ -334,6 +542,13 @@ async def get_holidays(
     Returns:
         List of holiday dictionaries
     """
+    if start_date:
+        start_date = _validate_date(start_date, "start")
+    if end_date:
+        end_date = _validate_date(end_date, "end")
+
+    curated = _curated_holidays(start_date, end_date, category)
+    trusted_core_dates = _curated_core_dates(curated)
     params: dict[str, Any] = {
         "select": "id,date,name,category,description",
         "is_active": "eq.true",
@@ -350,25 +565,30 @@ async def get_holidays(
     if category:
         params["category"] = f"eq.{category}"
     
+    db_holidays: list[dict[str, Any]] = []
     try:
-        holidays = await _request("GET", "holidays", params=params)
-        if isinstance(holidays, list) and holidays:
-            return holidays
-    except Exception:
-        # Return empty list on error instead of raising
-        pass
+        rows = await _request("GET", "holidays", params=params)
+        db_holidays = [
+            normalized
+            for row in (rows if isinstance(rows, list) else [])
+            if isinstance(row, dict)
+            if (normalized := _normalize_holiday_row(row, "database"))
+        ]
+    except Exception as error:
+        logger.warning("Holiday DB lookup failed; using external/fallback data: %s", error.__class__.__name__)
 
-    # Fallback to hard-coded Korean holidays when the holidays table is empty or unreachable.
-    def within_range(holiday_date: str) -> bool:
-        if start_date and holiday_date < start_date:
-            return False
-        if end_date and holiday_date > end_date:
-            return False
-        return True
-
-    filtered = [
+    naver_holidays: list[dict[str, Any]] = []
+    for year in _years_for_range(start_date, end_date):
+        naver_holidays.extend(await _fetch_naver_holidays_for_year(year))
+    naver_holidays = [
         holiday
-        for holiday in KOREAN_HOLIDAYS
-        if within_range(holiday["date"]) and (category is None or holiday["category"] == category)
+        for holiday in naver_holidays
+        if _holiday_in_range(holiday["date"], start_date, end_date) and (category is None or holiday["category"] == category)
     ]
-    return filtered
+
+    merged = [
+        *curated,
+        *_drop_stale_known_holidays(db_holidays, trusted_core_dates),
+        *_drop_stale_known_holidays(naver_holidays, trusted_core_dates),
+    ]
+    return _dedupe_holidays(merged)

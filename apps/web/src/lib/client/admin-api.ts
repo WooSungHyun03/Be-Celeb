@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/client/api";
+import { ApiClientError, apiFetch } from "@/lib/client/api";
 import type {
   AdminAnalysis,
   AdminCategory,
@@ -103,10 +103,17 @@ export async function adminApiFetch<T>(path: string, options: RequestInit = {}) 
   const headers = new Headers(options.headers);
   headers.set("Authorization", `Bearer ${secret}`);
 
-  return apiFetch<T>(path, {
-    ...options,
-    headers,
-  });
+  try {
+    return await apiFetch<T>(path, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      clearAdminSecret();
+    }
+    throw error;
+  }
 }
 
 async function adminData<T>(path: string, options?: RequestInit) {

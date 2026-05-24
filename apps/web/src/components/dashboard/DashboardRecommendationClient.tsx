@@ -11,7 +11,7 @@ import { ChannelAnalysisCard } from "@/components/dashboard/ChannelAnalysisCard"
 import { ErrorState } from "@/components/dashboard/ErrorState";
 import { LoadingSteps } from "@/components/dashboard/LoadingSteps";
 import { ROUTES } from "@/constants/routes";
-import { recommendContent } from "@/lib/api/recommendations";
+import { getRecommendationQueueStatus, recommendContent } from "@/lib/api/recommendations";
 import { getUserChannelSettings } from "@/lib/api/users";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 import type { RecommendationFieldOptions } from "@/types/content-recommendation";
@@ -35,6 +35,7 @@ export function DashboardRecommendationClient() {
   const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queueMessage, setQueueMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -88,9 +89,60 @@ export function DashboardRecommendationClient() {
     return () => window.clearInterval(timer);
   }, [isLoading]);
 
+  useEffect(() => {
+    if (!isLoading) {
+      setQueueMessage(null);
+      return;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+
+    async function refreshQueueStatus() {
+      try {
+        const status = await getRecommendationQueueStatus(controller.signal);
+        if (!active) {
+          return;
+        }
+        if (status.state === "queued" && status.position && status.position > 0) {
+          setQueueMessage(`요청 대기 중입니다. 현재 대기 순번은 ${status.position}번째입니다.`);
+          return;
+        }
+        if (status.state === "processing") {
+          setQueueMessage("추천 요청을 처리 중입니다. 곧 결과 화면으로 이동합니다.");
+          return;
+        }
+        if (status.isProcessing || status.pendingCount > 0) {
+          setQueueMessage("앞선 추천 요청이 끝나면 순서대로 처리됩니다.");
+          return;
+        }
+        setQueueMessage(null);
+      } catch {
+        if (active) {
+          setQueueMessage(null);
+        }
+      }
+    }
+
+    void refreshQueueStatus();
+    const timer = window.setInterval(() => {
+      void refreshQueueStatus();
+    }, 2500);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [isLoading]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isLoading) {
+      return;
+    }
     setError(null);
+    setQueueMessage("추천 요청을 등록하는 중입니다.");
     setStageIndex(0);
     setIsLoading(true);
 
@@ -135,9 +187,9 @@ export function DashboardRecommendationClient() {
 
       {isLoading ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800 shadow-sm shadow-amber-100">
-          <p className="font-bold">분석에 시간이 걸릴 수 있습니다.</p>
+          <p className="font-bold">{queueMessage || "분석에 시간이 걸릴 수 있습니다."}</p>
           <p className="mt-1">
-            채널 정보와 트렌드 데이터를 함께 분석하는 중입니다. 보통 수십 초 정도 걸릴 수 있으니 창을 닫지 말고 잠시만 기다려 주세요.
+            local LLM 과부하를 막기 위해 추천 생성은 순서대로 처리됩니다. 창을 닫지 말고 잠시만 기다려 주세요.
           </p>
         </div>
       ) : null}

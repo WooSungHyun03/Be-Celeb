@@ -1,10 +1,18 @@
 from fastapi import APIRouter
 
-from app.domains.recommendations.controller import analyze_channel, content_plan, recommendation_detail, recommendation_options, recommend_content
+from app.domains.recommendations.controller import (
+    analyze_channel,
+    content_plan,
+    recommendation_detail,
+    recommendation_options,
+    recommendation_queue_status,
+    recommend_content,
+)
 
 router = APIRouter(prefix="/api", tags=["recommendations"])
 
 router.add_api_route("/recommend-content", recommend_content, methods=["POST"], response_model=None)
+router.add_api_route("/recommend-content/queue-status", recommendation_queue_status, methods=["GET"], response_model=None)
 router.add_api_route("/recommendations/{recommendation_id}", recommendation_detail, methods=["GET"], response_model=None)
 router.add_api_route("/analyze-channel", analyze_channel, methods=["POST"], response_model=None)
 

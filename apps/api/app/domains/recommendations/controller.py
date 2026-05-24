@@ -21,6 +21,7 @@ from app.schemas.youtube_content import (
 )
 from app.services.auth_service import access_token_from_authorization, get_user_from_access_token
 from app.services.database_service import fetch_content_recommendation_detail
+from app.services.llm_queue import get_llm_queue_status
 from app.services.recommendation_service import create_content_plan, create_recommendation_options, create_single_content_recommendation
 from app.services.youtube_content_service import analyze_channel_for_recommendation, get_keyword_trends, get_popular_videos_by_category
 
@@ -33,6 +34,17 @@ async def recommend_content(
         user = await get_user_from_access_token(access_token_from_authorization(authorization))
         result = await create_single_content_recommendation(request.channel_url, request.category, user.get("id") if user else None, request.options, request.videoAnalysisId)
         return ApiResponse(success=True, data=result)
+    except Exception as error:
+        return error_response(error)
+
+
+async def recommendation_queue_status(
+    authorization: str | None = Header(default=None),
+) -> ApiResponse[dict[str, object]] | JSONResponse:
+    try:
+        user = await get_user_from_access_token(access_token_from_authorization(authorization))
+        status = await get_llm_queue_status(user.get("id") if user else None)
+        return ApiResponse(success=True, data=status)
     except Exception as error:
         return error_response(error)
 

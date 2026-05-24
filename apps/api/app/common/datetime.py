@@ -17,5 +17,5 @@ def kst_now() -> datetime:
 
 def is_within_last_24h(value: datetime, now: datetime | None = None) -> bool:
     reference = now or utc_now()
-    normalized = value.astimezone(UTC)
+    normalized = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
     return reference - timedelta(hours=24) <= normalized <= reference

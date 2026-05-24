@@ -4,7 +4,9 @@ import asyncio
 import re
 import json
 import mimetypes
+import os
 import shutil
+import stat
 import tempfile
 from html import unescape
 from pathlib import Path
@@ -15,9 +17,12 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.errors import BackendApiError, ForbiddenException, missing_env
+from app.core.logging import get_logger
 from app.domains.video_analysis.schemas import TranscriptSegment, VideoAnalysisRecord
 from app.services.llm_service import call_local_llm, parse_llm_json_with_fallback
 from app.services.text_sanitizer import KOREAN_ONLY_OUTPUT_INSTRUCTION, sanitize_user_facing_text
+
+logger = get_logger(__name__)
 
 MEDIA_CONTENT_TYPES = {
     "audio/mpeg",
@@ -33,16 +38,28 @@ MEDIA_CONTENT_TYPES = {
 }
 
 YOUTUBE_COOKIE_REQUIRED_MARKERS = (
-    "Sign in to confirm",
+    "sign in to confirm",
+    "confirm you're not a bot",
+    "confirm you’re not a bot",
     "not a bot",
-    "Use --cookies-from-browser or --cookies",
+    "use --cookies-from-browser or --cookies",
+    "cookies are no longer valid",
+    "cookies file",
 )
 YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS = (
-    "This live event will begin",
-    "Premieres in",
+    "this live event will begin",
+    "premieres in",
     "not made this video available in your country",
+    "private video",
+    "video unavailable",
+    "this video is unavailable",
+    "has been removed",
+    "copyright",
+    "members-only",
+    "requires payment",
 )
 YOUTUBE_SUBTITLE_LANGUAGES = ("ko", "ko-KR", "en", "en-US")
+YTDLP_TIMEOUT_SECONDS = 120
 
 SELECT_COLUMNS = (
     "id,user_id,influencer_video_id,youtube_video_id,title,video_url,transcript,"
@@ -426,6 +443,11 @@ async def _extract_youtube_subtitles(youtube_video_id: str) -> tuple[str, list[T
             "writeautomaticsub": True,
             "subtitleslangs": list(YOUTUBE_SUBTITLE_LANGUAGES),
             "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+            "cachedir": str(Path(temp_dir) / "yt-dlp-cache"),
+            "paths": {"home": temp_dir, "temp": temp_dir},
+            "socket_timeout": 30,
+            "retries": 2,
+            "fragment_retries": 2,
         }
         _set_ytdlp_cookiefile_option(options, temp_dir)
         try:
@@ -563,6 +585,11 @@ async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, st
             "noplaylist": True,
             "max_filesize": settings.video_analysis_max_bytes,
             "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+            "cachedir": str(Path(temp_dir) / "yt-dlp-cache"),
+            "paths": {"home": temp_dir, "temp": temp_dir},
+            "socket_timeout": 30,
+            "retries": 2,
+            "fragment_retries": 2,
         }
         _set_ytdlp_cookiefile_option(options, temp_dir)
         try:
@@ -584,50 +611,146 @@ async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, st
 
 
 async def _run_ytdlp_extract(downloader: Any, video_url: str) -> dict[str, Any]:
-    return await asyncio.to_thread(downloader.extract_info, video_url, True)
+    return await asyncio.wait_for(
+        asyncio.to_thread(downloader.extract_info, video_url, True),
+        timeout=YTDLP_TIMEOUT_SECONDS,
+    )
 
 
 async def _run_ytdlp_info(downloader: Any, video_url: str) -> dict[str, Any]:
-    return await asyncio.to_thread(downloader.extract_info, video_url, False)
+    return await asyncio.wait_for(
+        asyncio.to_thread(downloader.extract_info, video_url, False),
+        timeout=YTDLP_TIMEOUT_SECONDS,
+    )
 
 
 def _set_ytdlp_cookiefile_option(options: dict[str, Any], temp_dir: str) -> None:
-    cookie_file = get_settings().youtube_cookies_file
+    runtime_cookie_file = _prepare_runtime_cookie_file(temp_dir)
+    if not runtime_cookie_file:
+        return
+    options["cookiefile"] = runtime_cookie_file
+
+
+def _prepare_runtime_cookie_file(temp_dir: str) -> str | None:
+    settings = get_settings()
+    cookie_file = settings.youtube_cookies_file
     if not cookie_file:
-        return
+        return None
+
     source = Path(cookie_file)
-    if not source.is_file():
-        options["cookiefile"] = cookie_file
-        return
-    cookie_copy = Path(temp_dir) / "youtube-cookies.txt"
-    shutil.copyfile(source, cookie_copy)
-    options["cookiefile"] = str(cookie_copy)
+    source_label = _masked_path(source)
+    try:
+        if not source.is_file():
+            logger.warning("YouTube cookies source is configured but not readable as a file: %s", source_label)
+            return None
+
+        runtime_path = _runtime_cookie_path(temp_dir, settings.youtube_cookies_runtime_file)
+        runtime_path.parent.mkdir(parents=True, exist_ok=True)
+        with source.open("rb") as source_handle:
+            fd = os.open(str(runtime_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb") as runtime_handle:
+                shutil.copyfileobj(source_handle, runtime_handle)
+        try:
+            runtime_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            logger.debug("Could not chmod YouTube runtime cookies file; continuing with platform defaults.")
+        logger.debug(
+            "Prepared YouTube runtime cookies file sourceReadable=%s runtimeWritable=%s",
+            True,
+            _is_writable_file(runtime_path),
+        )
+        return str(runtime_path)
+    except OSError as error:
+        logger.warning(
+            "Failed to prepare writable YouTube runtime cookies file source=%s reason=%s",
+            source_label,
+            error.__class__.__name__,
+        )
+        return None
+
+
+def _runtime_cookie_path(temp_dir: str, configured_runtime_path: str | None) -> Path:
+    if not configured_runtime_path:
+        return Path(temp_dir) / "youtube-cookies.txt"
+
+    configured = Path(configured_runtime_path)
+    configured_text = str(configured)
+    if configured_text.endswith(("/", "\\")) or configured.suffix == "":
+        runtime_dir = configured
+        filename = "youtube-cookies.txt"
+    else:
+        runtime_dir = configured.parent
+        filename = configured.name
+    stem = Path(filename).stem or "youtube-cookies"
+    suffix = Path(filename).suffix or ".txt"
+    return runtime_dir / f"{stem}-{uuid4().hex}{suffix}"
+
+
+def _is_writable_file(path: Path) -> bool:
+    return path.is_file() and os.access(path, os.W_OK)
+
+
+def _masked_path(path: Path) -> str:
+    name = path.name or "configured-file"
+    parent = path.parent.name
+    return f".../{parent}/{name}" if parent else f".../{name}"
 
 
 def _raise_youtube_extraction_error(error: Exception) -> None:
     error_message = str(error)
-    if any(marker in error_message for marker in YOUTUBE_COOKIE_REQUIRED_MARKERS):
+    normalized_message = error_message.lower()
+    if isinstance(error, asyncio.TimeoutError):
+        raise BackendApiError(
+            "YouTube analysis timed out while fetching subtitles or audio.",
+            504,
+            "YOUTUBE_ANALYSIS_TIMEOUT",
+        ) from error
+    if _looks_like_cookie_file_runtime_error(normalized_message):
+        raise BackendApiError(
+            f"YouTube cookies could not be prepared for analysis. {_youtube_cookie_status_message()}",
+            409,
+            "YOUTUBE_COOKIE_FILE_UNAVAILABLE",
+        ) from error
+    if any(marker in normalized_message for marker in YOUTUBE_COOKIE_REQUIRED_MARKERS):
         raise BackendApiError(
             f"YouTube requires a signed-in cookies file for this video. {_youtube_cookie_status_message()}",
             409,
             "YOUTUBE_REQUIRES_COOKIES",
         ) from error
-    if any(marker in error_message for marker in YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS):
+    if any(marker in normalized_message for marker in YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS):
         raise BackendApiError(
             "This YouTube video is not currently available for transcript analysis.",
             409,
             "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
         ) from error
-    raise BackendApiError(f"YouTube audio extraction failed: {error}", 502, "YOUTUBE_AUDIO_EXTRACTION_FAILED") from error
+    raise BackendApiError(
+        f"YouTube audio extraction failed: {_safe_ytdlp_error_message(error_message)}",
+        502,
+        "YOUTUBE_AUDIO_EXTRACTION_FAILED",
+    ) from error
+
+
+def _looks_like_cookie_file_runtime_error(error_message: str) -> bool:
+    if "read-only file system" in error_message or "[errno 30]" in error_message:
+        return "cookie" in error_message or "cookies" in error_message or "/etc/secrets" in error_message
+    if "permission denied" in error_message:
+        return "cookie" in error_message or "cookies" in error_message
+    return False
+
+
+def _safe_ytdlp_error_message(error_message: str) -> str:
+    sanitized = re.sub(r"(/[A-Za-z0-9._-]+)+/youtube-cookies\.txt", ".../youtube-cookies.txt", error_message)
+    sanitized = re.sub(r"([A-Za-z]:\\(?:[^\\/:*?\"<>|\r\n]+\\)*youtube-cookies\.txt)", r"...\\youtube-cookies.txt", sanitized)
+    return sanitized[:500]
 
 
 def _youtube_cookie_status_message() -> str:
     cookie_file = get_settings().youtube_cookies_file
     if not cookie_file:
-        return "YOUTUBE_COOKIES_FILE is not configured."
+        return "YOUTUBE_COOKIES_FILE/YOUTUBE_COOKIES_PATH is not configured."
     if Path(cookie_file).is_file():
-        return f"YOUTUBE_COOKIES_FILE is configured and readable: {cookie_file}."
-    return f"YOUTUBE_COOKIES_FILE is configured but the file was not found: {cookie_file}."
+        return "A cookies source is configured and readable; a writable runtime copy will be used."
+    return "A cookies source is configured but the file is not readable in the backend runtime."
 
 
 async def generate_storyboard_from_analysis(

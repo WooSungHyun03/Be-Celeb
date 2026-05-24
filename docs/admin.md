@@ -36,6 +36,9 @@ Render Backend:
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 YOUTUBE_API_KEY=
+YOUTUBE_COOKIES_FILE=/etc/secrets/youtube-cookies.txt
+# 선택: 기본값은 요청별 temp directory. 지정 시 반드시 /tmp 같은 writable 경로를 사용
+YOUTUBE_COOKIES_RUNTIME_PATH=/tmp/youtube-cookies.txt
 NAVER_CLIENT_ID=
 NAVER_CLIENT_SECRET=
 NAVER_SHOPPING_CLIENT_ID=
@@ -111,6 +114,17 @@ Production board는 직접 콘텐츠 생성과 즐겨찾기/추천 전환을 모
 `/shop` 상품 카드는 Naver DataLab 검색어트렌드가 아니라 Naver 검색 API의 쇼핑 검색 endpoint로 daily collector가 수집한 cache를 사용한다. 일반 상품 조회는 Naver API를 즉시 호출하지 않는다. DataLab 검색어트렌드가 정상이어도 쇼핑 검색 권한이 없으면 daily shop collector가 실패할 수 있지만, `/shop`은 기존 cache 또는 기본 추천 장비 fallback을 보여준다. 쇼핑 검색 권한이 있는 별도 앱 키가 있으면 Render Backend에 `NAVER_SHOPPING_CLIENT_ID`, `NAVER_SHOPPING_CLIENT_SECRET`으로 설정한다. 값이 없으면 기존 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`을 사용한다.
 
 Admin의 `시스템` 섹션에서 `Naver Shopping API 테스트`를 실행하면 secret 값을 노출하지 않고 status code, errorCode, credential source를 확인할 수 있다.
+
+## YouTube 영상 분석 cookie 운영
+
+YouTube 영상 분석은 공개 자막을 먼저 조회하고, 없으면 `yt-dlp`로 오디오를 추출한 뒤 Whisper 전사를 시도한다. 일부 영상은 로그인 cookie가 필요할 수 있다.
+
+- `YOUTUBE_COOKIES_FILE` 또는 `YOUTUBE_COOKIES_PATH`: Render secret file 등 원본 cookie 경로. 이 파일은 읽기 전용 source로만 사용한다.
+- `YOUTUBE_COOKIES_RUNTIME_PATH`: 선택 값. 지정하지 않으면 요청별 temp directory에 writable copy를 만든다. 지정한다면 `/tmp` 같은 writable 경로만 사용한다.
+- `/etc/secrets/youtube-cookies.txt` 같은 secret mount 경로는 read-only일 수 있으므로 `yt-dlp`에 직접 전달하지 않는다.
+- cookie 내용과 전체 경로는 로그에 남기지 않는다.
+
+분석 skip 원인은 `YOUTUBE_REQUIRES_COOKIES`, `YOUTUBE_COOKIE_FILE_UNAVAILABLE`, `YOUTUBE_UNAVAILABLE_FOR_ANALYSIS`처럼 코드별로 집계된다. `video_analysis_max_per_collection` 초과로 인한 limit skip은 cookie/unavailable skip과 별도로 집계된다.
 
 ## 위험 작업
 

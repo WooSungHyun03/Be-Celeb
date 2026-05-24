@@ -27,7 +27,11 @@ MAX_LIMIT = 100
 DAILY_COLLECTION_CONCURRENCY = 4
 COLLECTION_PROGRESS_UPDATE_SECONDS = 5
 logger = get_logger(__name__)
-VIDEO_ANALYSIS_SKIP_CODES = {"YOUTUBE_REQUIRES_COOKIES", "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS"}
+VIDEO_ANALYSIS_SKIP_CODES = {
+    "YOUTUBE_REQUIRES_COOKIES",
+    "YOUTUBE_COOKIE_FILE_UNAVAILABLE",
+    "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
+}
 
 
 def _now() -> datetime:
@@ -1027,9 +1031,30 @@ def _video_analysis_warning(
     if skipped_by_limit:
         parts.append(f"{skipped_by_limit} video analysis item(s) skipped by per-run analysis limit.")
     if skipped_by_youtube:
-        reason_detail = ", ".join(f"{code}: {count}" for code, count in sorted(skip_reasons.items()))
-        suffix = f" ({reason_detail})" if reason_detail else ""
-        parts.append(f"{skipped_by_youtube} video analysis item(s) skipped because YouTube subtitles/audio were unavailable{suffix}.")
+        cookie_codes = {"YOUTUBE_REQUIRES_COOKIES", "YOUTUBE_COOKIE_FILE_UNAVAILABLE"}
+        cookie_skips = {
+            code: count
+            for code, count in skip_reasons.items()
+            if code in cookie_codes and count > 0
+        }
+        unavailable_skips = {
+            code: count
+            for code, count in skip_reasons.items()
+            if code not in cookie_codes and count > 0
+        }
+        cookie_total = sum(cookie_skips.values())
+        unavailable_total = max(0, skipped_by_youtube - cookie_total)
+        if cookie_total:
+            reason_detail = ", ".join(f"{code}: {count}" for code, count in sorted(cookie_skips.items()))
+            parts.append(
+                f"{cookie_total} video analysis item(s) skipped because YouTube cookies were required or unavailable ({reason_detail})."
+            )
+        if unavailable_total:
+            reason_detail = ", ".join(f"{code}: {count}" for code, count in sorted(unavailable_skips.items()))
+            suffix = f" ({reason_detail})" if reason_detail else ""
+            parts.append(
+                f"{unavailable_total} video analysis item(s) skipped because YouTube subtitles/audio were unavailable{suffix}."
+            )
     return " ".join(parts) if parts else None
 
 

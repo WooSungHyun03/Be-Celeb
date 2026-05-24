@@ -592,6 +592,8 @@ async def create_single_content_recommendation(
         rendered_prompt,
         system_prompt=f"{prompt_template['systemPrompt']}\n{KOREAN_ONLY_OUTPUT_INSTRUCTION}",
         max_tokens=_max_tokens_for_options(selected_options),
+        queue_owner_id=user_id,
+        queue_purpose="recommend_content",
     )
     raw_json, parse_error = parse_llm_json_with_fallback(raw_text, {"recommendation": fallback.model_dump()})
     recommendation = _filter_recommendation_options(_normalize_single_recommendation(raw_json, fallback), selected_options)
@@ -658,7 +660,7 @@ async def create_recommendation_options(channel_url: str, category: str | None) 
     filtered_videos, _duplicate_count = remove_duplicate_like_videos(recent_videos, influencer_videos)
     fallback = _fallback_options(selected_category, filtered_videos)
     prompt = build_options_prompt(selected_category, channel, recent_videos, filtered_videos)
-    raw_text = await call_local_llm(prompt)
+    raw_text = await call_local_llm(prompt, queue_purpose="recommendation_options")
     raw_json, _parse_error = parse_llm_json_with_fallback(raw_text, {"options": [item.model_dump() for item in fallback]})
     options = _normalize_options(raw_json, fallback)
     analysis_id = await save_channel_analysis(
@@ -715,7 +717,7 @@ async def create_content_plan(
                 "Use this transcript to include a stronger first 3-second hook, scene-by-scene composition, tone analysis, caption style suggestions, hashtag recommendations, and a concise flow summary.",
             ]
         )
-    raw_text = await call_local_llm(prompt)
+    raw_text = await call_local_llm(prompt, queue_owner_id=user_id, queue_purpose="content_plan")
     raw_json, _parse_error = parse_llm_json_with_fallback(raw_text, {"plan": fallback.model_dump()})
     plan = _normalize_plan(raw_json, fallback)
     await save_content_plan(
