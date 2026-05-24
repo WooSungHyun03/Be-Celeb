@@ -388,7 +388,16 @@ async def create_video_analysis_from_youtube_video(
             content_type="text/plain",
         )
 
-    media, filename, content_type = await _download_youtube_audio(youtube_video_id)
+    try:
+        media, filename, content_type = await _download_youtube_audio(youtube_video_id)
+    except BackendApiError as error:
+        if error.code in {"YOUTUBE_REQUIRES_COOKIES", "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS"}:
+            raise BackendApiError(
+                f"No public or automatic YouTube subtitles were found before audio fallback. {error}",
+                error.status_code,
+                error.code,
+            ) from error
+        raise
     return await create_video_analysis(
         media=media,
         filename=filename,
@@ -587,7 +596,7 @@ def _raise_youtube_extraction_error(error: Exception) -> None:
     error_message = str(error)
     if any(marker in error_message for marker in YOUTUBE_COOKIE_REQUIRED_MARKERS):
         raise BackendApiError(
-            "YouTube requires a signed-in cookies file for this video.",
+            f"YouTube requires a signed-in cookies file for this video. {_youtube_cookie_status_message()}",
             409,
             "YOUTUBE_REQUIRES_COOKIES",
         ) from error
@@ -598,6 +607,15 @@ def _raise_youtube_extraction_error(error: Exception) -> None:
             "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
         ) from error
     raise BackendApiError(f"YouTube audio extraction failed: {error}", 502, "YOUTUBE_AUDIO_EXTRACTION_FAILED") from error
+
+
+def _youtube_cookie_status_message() -> str:
+    cookie_file = get_settings().youtube_cookies_file
+    if not cookie_file:
+        return "YOUTUBE_COOKIES_FILE is not configured."
+    if Path(cookie_file).is_file():
+        return f"YOUTUBE_COOKIES_FILE is configured and readable: {cookie_file}."
+    return f"YOUTUBE_COOKIES_FILE is configured but the file was not found: {cookie_file}."
 
 
 async def generate_storyboard_from_analysis(

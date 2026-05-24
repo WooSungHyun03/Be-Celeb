@@ -41,6 +41,16 @@ def _is_video_analysis_skip_error(error: Exception) -> bool:
     return isinstance(error, BackendApiError) and error.code in VIDEO_ANALYSIS_SKIP_CODES
 
 
+def _video_analysis_skip_detail(error: Exception, video: dict[str, Any]) -> dict[str, Any]:
+    code = error.code if isinstance(error, BackendApiError) else "UNKNOWN_SKIP_REASON"
+    return {
+        "youtubeVideoId": video.get("youtube_video_id"),
+        "title": video.get("title"),
+        "code": code,
+        "message": str(error),
+    }
+
+
 def _normalize_supabase_url() -> str:
     settings = get_settings()
     if not settings.supabase_url:
@@ -861,6 +871,7 @@ async def _collect_daily_channel(
             )
             videos_analyzed = 0
             video_analysis_errors: list[dict[str, Any]] = []
+            video_analysis_skips: list[dict[str, Any]] = []
             inserted_videos = [item for item in inserted_rows if isinstance(item, dict)] if isinstance(inserted_rows, list) else []
             analysis_limit = max(0, get_settings().video_analysis_max_per_collection)
             video_analysis_skipped_by_limit = max(0, len(inserted_videos) - analysis_limit)
@@ -881,6 +892,7 @@ async def _collect_daily_channel(
                     if _is_video_analysis_skip_error(error):
                         logger.info("Video transcript analysis skipped for youtubeVideoId=%s: %s", youtube_video_id, error)
                         video_analysis_skipped_by_youtube += 1
+                        video_analysis_skips.append(_video_analysis_skip_detail(error, inserted_video))
                         continue
                     logger.warning("Video transcript analysis failed for youtubeVideoId=%s: %s", youtube_video_id, error)
                     video_analysis_errors.append(
@@ -907,6 +919,8 @@ async def _collect_daily_channel(
                 "videosAnalysisSkipped": video_analysis_skipped_by_limit + video_analysis_skipped_by_youtube,
                 "videosAnalysisSkippedByLimit": video_analysis_skipped_by_limit,
                 "videosAnalysisSkippedByYoutube": video_analysis_skipped_by_youtube,
+                "videoAnalysisSkipReasons": dict(Counter(str(item.get("code") or "UNKNOWN_SKIP_REASON") for item in video_analysis_skips)),
+                "videoAnalysisSkips": video_analysis_skips,
                 "videoAnalysisErrors": video_analysis_errors,
                 "error": None,
             }
@@ -919,6 +933,8 @@ async def _collect_daily_channel(
                 "videosAnalysisSkipped": 0,
                 "videosAnalysisSkippedByLimit": 0,
                 "videosAnalysisSkippedByYoutube": 0,
+                "videoAnalysisSkipReasons": {},
+                "videoAnalysisSkips": [],
                 "videoAnalysisErrors": [],
                 "error": {
                     "category": category_names.get(row.get("category_id")),
@@ -934,6 +950,7 @@ def _video_analysis_warning(
     video_analysis_errors: list[dict[str, Any]],
     skipped_by_limit: int,
     skipped_by_youtube: int,
+    skip_reasons: dict[str, int],
 ) -> str | None:
     parts: list[str] = []
     if video_analysis_errors:
@@ -948,7 +965,9 @@ def _video_analysis_warning(
     if skipped_by_limit:
         parts.append(f"{skipped_by_limit} video analysis item(s) skipped by per-run analysis limit.")
     if skipped_by_youtube:
-        parts.append(f"{skipped_by_youtube} video analysis item(s) skipped because YouTube subtitles/audio were unavailable.")
+        reason_detail = ", ".join(f"{code}: {count}" for code, count in sorted(skip_reasons.items()))
+        suffix = f" ({reason_detail})" if reason_detail else ""
+        parts.append(f"{skipped_by_youtube} video analysis item(s) skipped because YouTube subtitles/audio were unavailable{suffix}.")
     return " ".join(parts) if parts else None
 
 
@@ -992,6 +1011,8 @@ async def collect_admin_now() -> AdminCollectionSummary:
     )
     errors: list[dict[str, Any]] = []
     video_analysis_errors: list[dict[str, Any]] = []
+    video_analysis_skips: list[dict[str, Any]] = []
+    video_analysis_skip_reasons: Counter[str] = Counter()
     videos_found = 0
     videos_upserted = 0
     videos_analyzed = 0
@@ -1023,6 +1044,18 @@ async def collect_admin_now() -> AdminCollectionSummary:
             videos_analysis_skipped += int(result.get("videosAnalysisSkipped") or 0)
             videos_analysis_skipped_by_limit += int(result.get("videosAnalysisSkippedByLimit") or 0)
             videos_analysis_skipped_by_youtube += int(result.get("videosAnalysisSkippedByYoutube") or 0)
+            result_video_analysis_skips = result.get("videoAnalysisSkips")
+            if isinstance(result_video_analysis_skips, list):
+                video_analysis_skips.extend(skip for skip in result_video_analysis_skips if isinstance(skip, dict))
+            result_skip_reasons = result.get("videoAnalysisSkipReasons")
+            if isinstance(result_skip_reasons, dict):
+                video_analysis_skip_reasons.update(
+                    {
+                        str(reason): int(count)
+                        for reason, count in result_skip_reasons.items()
+                        if isinstance(count, int)
+                    }
+                )
             result_video_analysis_errors = result.get("videoAnalysisErrors")
             if isinstance(result_video_analysis_errors, list):
                 video_analysis_errors.extend(error for error in result_video_analysis_errors if isinstance(error, dict))
@@ -1041,6 +1074,8 @@ async def collect_admin_now() -> AdminCollectionSummary:
             videosAnalysisSkipped=videos_analysis_skipped,
             videosAnalysisSkippedByLimit=videos_analysis_skipped_by_limit,
             videosAnalysisSkippedByYoutube=videos_analysis_skipped_by_youtube,
+            videoAnalysisSkipReasons=dict(video_analysis_skip_reasons),
+            videoAnalysisSkips=video_analysis_skips,
             videoAnalysisErrors=video_analysis_errors,
             errors=errors,
         )
@@ -1048,6 +1083,7 @@ async def collect_admin_now() -> AdminCollectionSummary:
             video_analysis_errors,
             videos_analysis_skipped_by_limit,
             videos_analysis_skipped_by_youtube,
+            dict(video_analysis_skip_reasons),
         )
         await _finish_collection_log(
             log_id,

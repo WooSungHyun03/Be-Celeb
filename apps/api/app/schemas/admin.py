@@ -96,6 +96,8 @@ class AdminCollectionSummary(BaseModel):
     videosAnalysisSkipped: int = 0
     videosAnalysisSkippedByLimit: int = 0
     videosAnalysisSkippedByYoutube: int = 0
+    videoAnalysisSkipReasons: dict[str, int] = Field(default_factory=dict)
+    videoAnalysisSkips: list[dict[str, Any]] = Field(default_factory=list)
     videoAnalysisErrors: list[dict[str, Any]] = Field(default_factory=list)
     errors: list[dict[str, Any]] = Field(default_factory=list)
 
