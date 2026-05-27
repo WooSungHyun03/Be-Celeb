@@ -105,9 +105,9 @@ GitHub Actions 또는 Render Cron은 기존 `CRON_SECRET` 기반 수집 endpoint
 
 `creator_shop_keywords` 관리 UI는 아직 admin에 붙이지 않았다. 운영자가 keyword를 자주 바꾸는 단계가 되면 장비 섹션 기준 `/api/admin/shop-keywords` CRUD와 admin 섹션을 추가한다.
 
-Growth report collector는 `user_channel_settings`의 모든 회원 채널을 기준으로 `channel_growth_snapshots`, `video_growth_snapshots`를 저장한다. 회원이 YouTube 채널 URL을 다른 채널로 변경하면 기존 growth snapshot은 삭제되고 새 채널 기준으로 다시 시작한다.
+Growth report collector는 `user_channel_settings`의 모든 회원 채널을 기준으로 매일 06:00 KST(`0 21 * * *` UTC)에 `channel_growth_snapshots`, `video_growth_snapshots`를 저장한다. 같은 KST 날짜에 이미 저장된 채널은 중복 갱신하지 않는다. 회원이 YouTube 채널 URL을 다른 채널로 변경하면 기존 growth snapshot은 삭제되고 새 채널 기준으로 다시 시작한다.
 
-Trends의 급상승 키워드는 전체 태그 count만 정렬하지 않고 카테고리별 Top 키워드를 먼저 뽑은 뒤 균형 있게 섞어 표시한다. 검색 관심도 데이터가 있으면 해당 카테고리 키워드에 낮은 가중치로 함께 반영한다. 현재 인기 영상은 `influencer_video_categories` 기준으로 카테고리별 조회수 1등 영상을 고르며, join table 데이터가 없으면 기존 `influencer_videos.category_id`로 fallback한다. DB가 비어 있거나 카테고리 연결 데이터가 없으면 500 대신 빈 배열/empty state를 반환한다.
+Trends의 급상승 키워드는 전체 태그 count만 정렬하지 않고 카테고리별 Top 키워드를 먼저 뽑은 뒤 균형 있게 섞어 표시한다. 검색 관심도 데이터가 있으면 해당 카테고리 키워드에 낮은 가중치로 함께 반영한다. 현재 인기 영상은 `influencer_video_categories` 기준으로 최근 7일 이내 업로드된 영상 중 카테고리별 조회수 TOP 3을 고르며, join table 데이터가 없으면 기존 `influencer_videos.category_id`로 fallback한다. DB가 비어 있거나 카테고리 연결 데이터가 없으면 500 대신 빈 배열/empty state를 반환한다.
 
 Production board는 직접 콘텐츠 생성과 즐겨찾기/추천 전환을 모두 지원한다. 촬영 시작일이 있는 production item은 backend에서 `calendar_events`에 자동 upsert된다. Calendar에서 production-linked event의 날짜를 바꾸면 production item의 촬영일도 갱신된다. 충돌 방지를 위해 production item 제목/콘티/메모는 production-board가 원본이고, calendar는 날짜/색상/상태만 편집한다.
 
@@ -117,14 +117,14 @@ Admin의 `시스템` 섹션에서 `Naver Shopping API 테스트`를 실행하면
 
 ## YouTube 영상 분석 cookie 운영
 
-YouTube 영상 분석은 공개 자막을 먼저 조회하고, 없으면 `yt-dlp`로 오디오를 추출한 뒤 Whisper 전사를 시도한다. 일부 영상은 로그인 cookie가 필요할 수 있다.
+YouTube 영상 분석은 공개 자막 또는 자동 자막만 조회한다. Render 메모리 사용량을 줄이기 위해 YouTube 오디오 다운로드, 변환, Whisper 전사는 비활성화되어 있다. 일부 자막 조회는 로그인 cookie가 필요할 수 있다.
 
 - `YOUTUBE_COOKIES_FILE` 또는 `YOUTUBE_COOKIES_PATH`: Render secret file 등 원본 cookie 경로. 이 파일은 읽기 전용 source로만 사용한다.
 - `YOUTUBE_COOKIES_RUNTIME_PATH`: 선택 값. 지정하지 않으면 요청별 temp directory에 writable copy를 만든다. 지정한다면 `/tmp` 같은 writable 경로만 사용한다.
 - `/etc/secrets/youtube-cookies.txt` 같은 secret mount 경로는 read-only일 수 있으므로 `yt-dlp`에 직접 전달하지 않는다.
 - cookie 내용과 전체 경로는 로그에 남기지 않는다.
 
-분석 skip 원인은 `YOUTUBE_REQUIRES_COOKIES`, `YOUTUBE_COOKIE_FILE_UNAVAILABLE`, `YOUTUBE_UNAVAILABLE_FOR_ANALYSIS`처럼 코드별로 집계된다. `video_analysis_max_per_collection` 초과로 인한 limit skip은 cookie/unavailable skip과 별도로 집계된다.
+분석 skip 원인은 `YOUTUBE_REQUIRES_COOKIES`, `YOUTUBE_COOKIE_FILE_UNAVAILABLE`, `YOUTUBE_UNAVAILABLE_FOR_ANALYSIS`, `YOUTUBE_AUDIO_ANALYSIS_DISABLED`처럼 코드별로 집계된다. `video_analysis_max_per_collection` 초과로 인한 limit skip은 cookie/unavailable skip과 별도로 집계된다.
 
 ## 위험 작업
 

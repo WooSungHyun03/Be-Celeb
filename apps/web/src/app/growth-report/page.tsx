@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { Loading } from "@/components/common/Loading";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ROUTES } from "@/constants/routes";
-import { getGrowthReport, refreshGrowthReport, type GrowthReportResponse, type GrowthSnapshot } from "@/lib/api/growth";
+import { getGrowthReport, type GrowthReportResponse, type GrowthSnapshot } from "@/lib/api/growth";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
 import { compactNumber, formatInteger } from "@/lib/common/format";
 
@@ -40,7 +40,6 @@ export default function GrowthReportPage() {
   const [report, setReport] = useState<GrowthReportResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
   const [message, setMessage] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
 
   const chartData = useMemo(() => {
     return (report?.trend ?? []).map((snapshot) => ({
@@ -88,21 +87,6 @@ export default function GrowthReportPage() {
     };
   }, []);
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    setMessage("");
-    try {
-      const data = await refreshGrowthReport();
-      setReport(data);
-      setStatus("ready");
-      setMessage(data.latest ? "최신 YouTube 지표를 저장했습니다." : "저장된 채널 설정이 없어 갱신하지 않았습니다.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "성장 리포트 갱신에 실패했습니다.");
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
   if (status === "loading") {
     return <Loading label="성장 리포트를 불러오는 중입니다." />;
   }
@@ -127,14 +111,16 @@ export default function GrowthReportPage() {
 
   const latest = report?.latest ?? null;
   const deltas = report?.deltas ?? { subscriberCount: 0, viewCount: 0, videoCount: 0 };
+  const lastRefreshedAt = report?.lastRefreshedAt ?? latest?.collectedAt ?? null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         action={
-          <Button disabled={refreshing} onClick={() => void handleRefresh()}>
-            {refreshing ? "갱신 중..." : "지금 갱신"}
-          </Button>
+          <div className="rounded-lg border border-violet-100 bg-white px-4 py-3 text-right text-xs font-bold leading-5 text-slate-600">
+            <p className="text-violet-700">{report?.refreshSchedule ?? "Every day 06:00 KST"}</p>
+            <p>마지막 갱신 {formatDate(lastRefreshedAt)}</p>
+          </div>
         }
         description="저장된 YouTube 채널 URL을 기준으로 구독자, 조회수, 영상 수와 최근 영상 성과를 추적합니다."
         eyebrow={<Badge tone="brand">YouTube Growth</Badge>}
@@ -157,12 +143,7 @@ export default function GrowthReportPage() {
 
       {report?.hasChannelSettings && !latest ? (
         <EmptyState
-          action={
-            <Button disabled={refreshing} onClick={() => void handleRefresh()}>
-              {refreshing ? "갱신 중..." : "첫 스냅샷 저장"}
-            </Button>
-          }
-          description="아직 저장된 성장 스냅샷이 없습니다. 지금 갱신을 눌러 현재 YouTube 지표를 저장하세요."
+          description="아직 저장된 성장 스냅샷이 없습니다. 매일 06:00 KST 자동 갱신이 완료된 뒤 최신 리포트가 표시됩니다."
           title="성장 데이터가 없습니다"
         />
       ) : null}
@@ -197,10 +178,10 @@ export default function GrowthReportPage() {
               <p>
                 <span className="font-bold text-ink">최근 수집</span>
                 <br />
-                {formatDate(latest.collectedAt)}
+                {formatDate(lastRefreshedAt)}
               </p>
               {latest.channelUrl ? (
-                <a className="font-semibold text-violet-700 hover:underline md:col-span-2" href={latest.channelUrl} rel="noreferrer" target="_blank">
+                <a className="font-semibold text-violet-700 hover:underline md:col-span-2" href={latest.channelUrl} rel="noopener noreferrer" target="_blank">
                   {latest.channelUrl}
                 </a>
               ) : null}
@@ -255,7 +236,7 @@ export default function GrowthReportPage() {
               </div>
             ) : (
               <EmptyState
-                description="성장 추이를 그래프로 보려면 최소 2개 이상의 스냅샷이 필요합니다. 하루 뒤 다시 갱신하거나 운영 일정을 확인하세요."
+                description="성장 추이를 그래프로 보려면 최소 2개 이상의 자동 스냅샷이 필요합니다. 다음 일일 갱신 이후 다시 확인하세요."
                 title="추이 데이터가 더 필요합니다"
               />
             )}

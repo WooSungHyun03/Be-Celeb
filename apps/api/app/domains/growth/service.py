@@ -13,6 +13,9 @@ from app.services.youtube_service import get_channel_info, get_recent_videos
 
 logger = get_logger(__name__)
 RECENT_VIDEO_LIMIT = 8
+KST = timezone(timedelta(hours=9))
+GROWTH_REPORT_SCHEDULE_TEXT = "Every day 06:00 KST"
+GROWTH_REPORT_SCHEDULE_CRON = "0 21 * * *"
 
 
 def _supabase_url() -> str:
@@ -151,9 +154,7 @@ async def _snapshots(user_id: str, limit: int = 12, youtube_channel_id: str | No
 
 
 async def _today_snapshot_id(user_id: str, youtube_channel_id: str) -> str | None:
-    now = datetime.now(timezone.utc)
-    start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-    end = start + timedelta(days=1)
+    start, end = _current_kst_day_window_utc()
     rows = await _request(
         "GET",
         "channel_growth_snapshots",
@@ -172,9 +173,7 @@ async def _today_snapshot_id(user_id: str, youtube_channel_id: str) -> str | Non
 
 
 async def _today_video_snapshot_id(user_id: str, youtube_video_id: str) -> str | None:
-    now = datetime.now(timezone.utc)
-    start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-    end = start + timedelta(days=1)
+    start, end = _current_kst_day_window_utc()
     rows = await _request(
         "GET",
         "video_growth_snapshots",
@@ -190,6 +189,13 @@ async def _today_video_snapshot_id(user_id: str, youtube_video_id: str) -> str |
     row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     snapshot_id = row.get("id") if row else None
     return snapshot_id if isinstance(snapshot_id, str) else None
+
+
+def _current_kst_day_window_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
+    current = (now or datetime.now(timezone.utc)).astimezone(KST)
+    start_kst = datetime(current.year, current.month, current.day, tzinfo=KST)
+    end_kst = start_kst + timedelta(days=1)
+    return start_kst.astimezone(timezone.utc), end_kst.astimezone(timezone.utc)
 
 
 async def _save_video_snapshot(row: dict[str, Any]) -> None:
@@ -215,7 +221,15 @@ async def _save_video_snapshots(rows: list[dict[str, Any]]) -> int:
 
 
 async def _refresh_settings_snapshot(user_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+    existing_channel_id = settings.get("youtubeChannelId")
+    if isinstance(existing_channel_id, str) and existing_channel_id and await _today_snapshot_id(user_id, existing_channel_id):
+        return {"skipped": True, "reason": "already_refreshed_today", "youtubeChannelId": existing_channel_id}
+
     channel = await get_channel_info(str(settings["channelUrl"]))
+    if await _today_snapshot_id(user_id, channel.youtubeChannelId):
+        await save_user_channel_settings_metadata(user_id, str(settings["channelUrl"]), str(settings.get("category") or "일상"), channel)
+        return {"skipped": True, "reason": "already_refreshed_today", "youtubeChannelId": channel.youtubeChannelId}
+
     recent_videos = await get_recent_videos(channel)
     collected_at = datetime.now(timezone.utc).isoformat()
     recent_stats = [
@@ -256,22 +270,12 @@ async def _refresh_settings_snapshot(user_id: str, settings: dict[str, Any]) -> 
         "recent_video_stats": recent_stats,
         "collected_at": collected_at,
     }
-    snapshot_id = await _today_snapshot_id(user_id, channel.youtubeChannelId)
-    if snapshot_id:
-        rows = await _request(
-            "PATCH",
-            "channel_growth_snapshots",
-            params={"id": f"eq.{snapshot_id}"},
-            payload=payload,
-            prefer="return=representation",
-        )
-    else:
-        rows = await _request(
-            "POST",
-            "channel_growth_snapshots",
-            payload=payload,
-            prefer="return=representation",
-        )
+    rows = await _request(
+        "POST",
+        "channel_growth_snapshots",
+        payload=payload,
+        prefer="return=representation",
+    )
     if not isinstance(rows, list) or not rows:
         raise BackendApiError("Growth snapshot upsert did not return a row.", 502, "SUPABASE_ERROR")
     await _save_video_snapshots(video_snapshot_rows)
@@ -293,6 +297,9 @@ async def get_growth_report(user_id: str) -> dict[str, Any]:
         "previous": previous,
         "deltas": _deltas(latest, previous),
         "trend": list(reversed(snapshots)),
+        "lastRefreshedAt": latest.get("collectedAt") if latest else None,
+        "refreshSchedule": GROWTH_REPORT_SCHEDULE_TEXT,
+        "refreshCron": GROWTH_REPORT_SCHEDULE_CRON,
     }
 
 
@@ -341,6 +348,9 @@ async def refresh_growth_report(user_id: str) -> dict[str, Any]:
             "previous": None,
             "deltas": {"subscriberCount": 0, "viewCount": 0, "videoCount": 0},
             "trend": [],
+            "lastRefreshedAt": None,
+            "refreshSchedule": GROWTH_REPORT_SCHEDULE_TEXT,
+            "refreshCron": GROWTH_REPORT_SCHEDULE_CRON,
         }
 
     await _refresh_settings_snapshot(user_id, settings)
@@ -352,12 +362,13 @@ async def refresh_all_growth_reports() -> dict[str, Any]:
         "GET",
         "user_channel_settings",
         params={
-            "select": "user_id,channel_url,category",
+            "select": "user_id,channel_url,category,youtube_channel_id",
             "channel_url": "not.is.null",
         },
     )
     settings_rows = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     refreshed = 0
+    skipped_today = 0
     failed: list[dict[str, str]] = []
     for row in settings_rows:
         user_id = row.get("user_id")
@@ -365,14 +376,28 @@ async def refresh_all_growth_reports() -> dict[str, Any]:
         if not isinstance(user_id, str) or not isinstance(channel_url, str) or not channel_url.strip():
             continue
         try:
-            await _refresh_settings_snapshot(
+            result = await _refresh_settings_snapshot(
                 user_id,
                 {
                     "channelUrl": channel_url,
                     "category": row.get("category") if isinstance(row.get("category"), str) else "일상",
+                    "youtubeChannelId": row.get("youtube_channel_id") if isinstance(row.get("youtube_channel_id"), str) else None,
                 },
             )
-            refreshed += 1
+            if result.get("skipped"):
+                skipped_today += 1
+            else:
+                refreshed += 1
         except Exception as error:
+            logger.warning("Growth report daily refresh failed for user_id=%s: %s", user_id, error)
             failed.append({"userId": user_id, "message": str(error)})
-    return {"ok": not failed, "total": len(settings_rows), "refreshed": refreshed, "errors": failed, "failed": failed}
+    return {
+        "ok": not failed,
+        "scheduledTime": GROWTH_REPORT_SCHEDULE_TEXT,
+        "scheduleCron": GROWTH_REPORT_SCHEDULE_CRON,
+        "total": len(settings_rows),
+        "refreshed": refreshed,
+        "skippedToday": skipped_today,
+        "errors": failed,
+        "failed": failed,
+    }

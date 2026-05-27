@@ -213,6 +213,9 @@ export type GrowthReportResponse = {
     videoCount: number;
   };
   trend: GrowthSnapshot[];
+  lastRefreshedAt?: string | null;
+  refreshSchedule?: string | null;
+  refreshCron?: string | null;
 };
 
 export type GrowthVideoTrendPoint = GrowthVideoStat & {
@@ -742,15 +745,6 @@ export async function getHolidays(params: { start?: string; end?: string; catego
 
 export async function getGrowthReport(signal?: AbortSignal) {
   const response = await apiFetch<ApiSuccess<GrowthReportResponse>>("/api/growth-report", {
-    headers: await getAuthorizationHeaders(),
-    signal,
-  });
-  return response.data;
-}
-
-export async function refreshGrowthReport(signal?: AbortSignal) {
-  const response = await apiFetch<ApiSuccess<GrowthReportResponse>>("/api/growth-report/refresh", {
-    method: "POST",
     headers: await getAuthorizationHeaders(),
     signal,
   });

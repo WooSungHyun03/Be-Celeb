@@ -189,7 +189,7 @@ export function DashboardRecommendationClient() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800 shadow-sm shadow-amber-100">
           <p className="font-bold">{queueMessage || "분석에 시간이 걸릴 수 있습니다."}</p>
           <p className="mt-1">
-            local LLM 과부하를 막기 위해 추천 생성은 순서대로 처리됩니다. 창을 닫지 말고 잠시만 기다려 주세요.
+            추천 생성은 최대 10분까지 걸릴 수 있습니다. 창을 닫지 말고 잠시만 기다려 주세요.
           </p>
         </div>
       ) : null}

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import re
 import json
-import mimetypes
 import os
 import shutil
 import stat
@@ -23,19 +22,6 @@ from app.services.llm_service import call_local_llm, parse_llm_json_with_fallbac
 from app.services.text_sanitizer import KOREAN_ONLY_OUTPUT_INSTRUCTION, sanitize_user_facing_text
 
 logger = get_logger(__name__)
-
-MEDIA_CONTENT_TYPES = {
-    "audio/mpeg",
-    "audio/mp3",
-    "audio/mp4",
-    "audio/m4a",
-    "audio/wav",
-    "audio/webm",
-    "video/mp4",
-    "video/mpeg",
-    "video/webm",
-    "video/quicktime",
-}
 
 YOUTUBE_COOKIE_REQUIRED_MARKERS = (
     "sign in to confirm",
@@ -60,6 +46,9 @@ YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS = (
 )
 YOUTUBE_SUBTITLE_LANGUAGES = ("ko", "ko-KR", "en", "en-US")
 YTDLP_TIMEOUT_SECONDS = 120
+AUDIO_ANALYSIS_DISABLED_MESSAGE = (
+    "Audio analysis is disabled in this deployment. Only public YouTube subtitles are used for video analysis."
+)
 
 SELECT_COLUMNS = (
     "id,user_id,influencer_video_id,youtube_video_id,title,video_url,transcript,"
@@ -147,13 +136,6 @@ def _record_from_row(row: dict[str, Any]) -> VideoAnalysisRecord:
     )
 
 
-def _media_filename(filename: str | None, content_type: str | None) -> str:
-    suffix = Path(filename or "").suffix
-    if not suffix:
-        suffix = mimetypes.guess_extension(content_type or "") or ".mp4"
-    return f"video-analysis-{uuid4().hex}{suffix}"
-
-
 def _compact_segments(segments: list[TranscriptSegment], limit: int = 18) -> list[dict[str, Any]]:
     return [segment.model_dump(mode="json") for segment in segments[:limit]]
 
@@ -170,96 +152,6 @@ def _build_scene_summary(segments: list[TranscriptSegment], transcript: str) -> 
                 time_label = f"{int(segment.start)}-{int(segment.end)}s"
         summaries.append(f"{index}. {time_label} {segment.text}".strip())
     return "\n".join(summaries)
-
-
-async def _download_media(video_url: str) -> tuple[bytes, str, str]:
-    settings = get_settings()
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-        response = await client.get(video_url)
-    if response.status_code >= 400:
-        raise BackendApiError("Video file could not be downloaded from the URL.", 400, "VIDEO_DOWNLOAD_FAILED")
-    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
-    if content_type and content_type not in MEDIA_CONTENT_TYPES:
-        raise BackendApiError(
-            "Only directly downloadable audio/video file URLs are supported by this endpoint.",
-            400,
-            "UNSUPPORTED_VIDEO_URL",
-        )
-    if len(response.content) > settings.video_analysis_max_bytes:
-        raise BackendApiError("Video analysis file is too large.", 413, "VIDEO_TOO_LARGE")
-    return response.content, _media_filename(None, content_type), content_type or "video/mp4"
-
-
-async def transcribe_media(media: bytes, filename: str, content_type: str | None) -> tuple[str, list[TranscriptSegment], dict[str, Any]]:
-    settings = get_settings()
-    if not settings.openai_api_key:
-        raise missing_env("OPENAI_API_KEY")
-    if len(media) > settings.video_analysis_max_bytes:
-        raise BackendApiError("Video analysis file is too large.", 413, "VIDEO_TOO_LARGE")
-
-    headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-    data = {
-        "model": settings.openai_transcription_model,
-        "response_format": "verbose_json",
-        "timestamp_granularities[]": "segment",
-    }
-    files = {"file": (filename, media, content_type or "application/octet-stream")}
-    async with httpx.AsyncClient(timeout=120) as client:
-        response = await client.post("https://api.openai.com/v1/audio/transcriptions", headers=headers, data=data, files=files)
-    if response.status_code >= 400:
-        raise BackendApiError(response.text or "Whisper transcription failed.", 502, "WHISPER_API_ERROR")
-
-    payload = response.json()
-    transcript = sanitize_user_facing_text(payload.get("text")) if isinstance(payload.get("text"), str) else ""
-    segments = [
-        segment
-        for value in payload.get("segments", [])
-        if (segment := _segment_from_value(value)) is not None
-    ] if isinstance(payload.get("segments"), list) else []
-    if not transcript:
-        transcript = sanitize_user_facing_text(" ".join(segment.text for segment in segments))
-    if not transcript:
-        raise BackendApiError("Whisper did not return transcript text.", 502, "EMPTY_TRANSCRIPT")
-    return transcript, segments, payload
-
-
-async def create_video_analysis_from_url(video_url: str, user_id: str | None = None) -> VideoAnalysisRecord:
-    if not video_url.strip():
-        raise BackendApiError("videoUrl is required.", 400, "VALIDATION_ERROR")
-    media, filename, content_type = await _download_media(video_url.strip())
-    return await create_video_analysis(
-        media=media,
-        filename=filename,
-        content_type=content_type,
-        user_id=user_id,
-        video_url=video_url.strip(),
-    )
-
-
-async def create_video_analysis(
-    media: bytes,
-    filename: str | None,
-    content_type: str | None,
-    user_id: str | None = None,
-    video_url: str | None = None,
-    youtube_video_id: str | None = None,
-    influencer_video_id: str | None = None,
-    title: str | None = None,
-) -> VideoAnalysisRecord:
-    transcript, segments, raw = await transcribe_media(media, _media_filename(filename, content_type), content_type)
-    return await _insert_video_analysis(
-        transcript=transcript,
-        segments=segments,
-        raw=raw,
-        source="whisper",
-        user_id=user_id,
-        video_url=video_url,
-        youtube_video_id=youtube_video_id,
-        influencer_video_id=influencer_video_id,
-        title=title,
-        source_filename=filename,
-        content_type=content_type,
-    )
 
 
 async def _insert_video_analysis(
@@ -406,24 +298,10 @@ async def create_video_analysis_from_youtube_video(
             content_type="text/plain",
         )
 
-    try:
-        media, filename, content_type = await _download_youtube_audio(youtube_video_id)
-    except BackendApiError as error:
-        if error.code in {"YOUTUBE_REQUIRES_COOKIES", "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS"}:
-            raise BackendApiError(
-                f"No public or automatic YouTube subtitles were found before audio fallback. {error}",
-                error.status_code,
-                error.code,
-            ) from error
-        raise
-    return await create_video_analysis(
-        media=media,
-        filename=filename,
-        content_type=content_type,
-        video_url=video_url,
-        youtube_video_id=youtube_video_id,
-        influencer_video_id=influencer_video_id,
-        title=title,
+    raise BackendApiError(
+        AUDIO_ANALYSIS_DISABLED_MESSAGE,
+        409,
+        "YOUTUBE_AUDIO_ANALYSIS_DISABLED",
     )
 
 
@@ -568,55 +446,6 @@ def _strip_subtitle_markup(value: str) -> str:
     return unescape(without_tags).strip()
 
 
-async def _download_youtube_audio(youtube_video_id: str) -> tuple[bytes, str, str]:
-    try:
-        from yt_dlp import YoutubeDL
-    except ImportError as error:
-        raise BackendApiError("yt-dlp dependency is required for YouTube audio extraction.", 500, "YTDLP_NOT_INSTALLED") from error
-
-    settings = get_settings()
-    video_url = f"https://www.youtube.com/watch?v={youtube_video_id}"
-    with tempfile.TemporaryDirectory() as temp_dir:
-        outtmpl = str(Path(temp_dir) / "%(id)s.%(ext)s")
-        options = {
-            "format": "worstaudio[filesize<24M]/worstaudio[filesize_approx<24M]/worstaudio/worst",
-            "outtmpl": outtmpl,
-            "quiet": True,
-            "noplaylist": True,
-            "max_filesize": settings.video_analysis_max_bytes,
-            "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
-            "cachedir": str(Path(temp_dir) / "yt-dlp-cache"),
-            "paths": {"home": temp_dir, "temp": temp_dir},
-            "socket_timeout": 30,
-            "retries": 2,
-            "fragment_retries": 2,
-        }
-        _set_ytdlp_cookiefile_option(options, temp_dir)
-        try:
-            with YoutubeDL(options) as downloader:
-                info = await _run_ytdlp_extract(downloader, video_url)
-                downloaded = Path(downloader.prepare_filename(info))
-        except Exception as error:
-            _raise_youtube_extraction_error(error)
-        if not downloaded.exists():
-            candidates = list(Path(temp_dir).glob(f"{youtube_video_id}.*"))
-            downloaded = candidates[0] if candidates else downloaded
-        if not downloaded.exists():
-            raise BackendApiError("Downloaded YouTube audio file was not found.", 502, "YOUTUBE_AUDIO_NOT_FOUND")
-        media = downloaded.read_bytes()
-        if len(media) > settings.video_analysis_max_bytes:
-            raise BackendApiError("Video analysis file is too large.", 413, "VIDEO_TOO_LARGE")
-        content_type = mimetypes.guess_type(downloaded.name)[0] or "audio/webm"
-        return media, downloaded.name, content_type
-
-
-async def _run_ytdlp_extract(downloader: Any, video_url: str) -> dict[str, Any]:
-    return await asyncio.wait_for(
-        asyncio.to_thread(downloader.extract_info, video_url, True),
-        timeout=YTDLP_TIMEOUT_SECONDS,
-    )
-
-
 async def _run_ytdlp_info(downloader: Any, video_url: str) -> dict[str, Any]:
     return await asyncio.wait_for(
         asyncio.to_thread(downloader.extract_info, video_url, False),
@@ -701,7 +530,7 @@ def _raise_youtube_extraction_error(error: Exception) -> None:
     normalized_message = error_message.lower()
     if isinstance(error, asyncio.TimeoutError):
         raise BackendApiError(
-            "YouTube analysis timed out while fetching subtitles or audio.",
+            "YouTube analysis timed out while fetching subtitles.",
             504,
             "YOUTUBE_ANALYSIS_TIMEOUT",
         ) from error
@@ -724,9 +553,9 @@ def _raise_youtube_extraction_error(error: Exception) -> None:
             "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
         ) from error
     raise BackendApiError(
-        f"YouTube audio extraction failed: {_safe_ytdlp_error_message(error_message)}",
+        f"YouTube subtitle extraction failed: {_safe_ytdlp_error_message(error_message)}",
         502,
-        "YOUTUBE_AUDIO_EXTRACTION_FAILED",
+        "YOUTUBE_SUBTITLE_EXTRACTION_FAILED",
     ) from error
 
 

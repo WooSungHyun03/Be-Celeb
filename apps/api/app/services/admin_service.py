@@ -31,6 +31,7 @@ VIDEO_ANALYSIS_SKIP_CODES = {
     "YOUTUBE_REQUIRES_COOKIES",
     "YOUTUBE_COOKIE_FILE_UNAVAILABLE",
     "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
+    "YOUTUBE_AUDIO_ANALYSIS_DISABLED",
 }
 
 
@@ -1040,10 +1041,11 @@ def _video_analysis_warning(
         unavailable_skips = {
             code: count
             for code, count in skip_reasons.items()
-            if code not in cookie_codes and count > 0
+            if code not in cookie_codes and code != "YOUTUBE_AUDIO_ANALYSIS_DISABLED" and count > 0
         }
         cookie_total = sum(cookie_skips.values())
-        unavailable_total = max(0, skipped_by_youtube - cookie_total)
+        audio_disabled_total = int(skip_reasons.get("YOUTUBE_AUDIO_ANALYSIS_DISABLED") or 0)
+        unavailable_total = max(0, skipped_by_youtube - cookie_total - audio_disabled_total)
         if cookie_total:
             reason_detail = ", ".join(f"{code}: {count}" for code, count in sorted(cookie_skips.items()))
             parts.append(
@@ -1053,7 +1055,11 @@ def _video_analysis_warning(
             reason_detail = ", ".join(f"{code}: {count}" for code, count in sorted(unavailable_skips.items()))
             suffix = f" ({reason_detail})" if reason_detail else ""
             parts.append(
-                f"{unavailable_total} video analysis item(s) skipped because YouTube subtitles/audio were unavailable{suffix}."
+                f"{unavailable_total} video analysis item(s) skipped because YouTube subtitles were unavailable{suffix}."
+            )
+        if audio_disabled_total:
+            parts.append(
+                f"{audio_disabled_total} video analysis item(s) skipped because audio analysis is disabled and public subtitles were unavailable."
             )
     return " ".join(parts) if parts else None
 

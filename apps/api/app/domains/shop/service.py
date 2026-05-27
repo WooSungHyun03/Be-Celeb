@@ -57,7 +57,7 @@ SHOP_SET_CONFIG: list[dict[str, Any]] = [
         "level": "beginner",
         "title": "입문용 세트",
         "description": "스마트폰이나 기본 카메라로 바로 촬영을 시작할 때 필요한 기본 구성입니다.",
-        "items": ["기본 마이크", "링라이트", "스마트폰 삼각대"],
+        "items": ["USB 마이크", "링라이트", "스마트폰 삼각대"],
     },
     {
         "level": "intermediate",
@@ -69,7 +69,7 @@ SHOP_SET_CONFIG: list[dict[str, Any]] = [
         "level": "advanced",
         "title": "고급자용 세트",
         "description": "라이브, 리뷰, 스튜디오 촬영까지 확장할 수 있는 고급 제작 장비 구성입니다.",
-        "items": ["고급 카메라", "오디오 인터페이스", "캡처보드", "스트림덱", "고성능 조명"],
+        "items": ["액션캠", "캡처보드", "스트림덱", "고성능 조명"],
     },
 ]
 
@@ -302,6 +302,40 @@ def _dedupe_products(products: list[ShopProduct], limit: int) -> list[ShopProduc
     return deduped
 
 
+def _as_str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item.strip()]
+
+
+def _keyword_equipment_category(keyword: str) -> str | None:
+    normalized_keyword = keyword.strip().lower().replace(" ", "")
+    for equipment_category, keywords in {**EQUIPMENT_KEYWORDS, **FALLBACK_PRODUCTS}.items():
+        for candidate in keywords:
+            normalized_candidate = candidate.strip().lower().replace(" ", "")
+            if normalized_candidate == normalized_keyword:
+                return equipment_category
+    if "마이크" in normalized_keyword:
+        return "마이크"
+    if "조명" in normalized_keyword or "라이트" in normalized_keyword:
+        return "조명"
+    if "삼각대" in normalized_keyword or "거치대" in normalized_keyword:
+        return "삼각대/거치대"
+    if "ssd" in normalized_keyword or "카드" in normalized_keyword:
+        return "저장장치"
+    if "캡처보드" in normalized_keyword or "스트림덱" in normalized_keyword or "웹캠" in normalized_keyword:
+        return "라이브/스트리밍 장비"
+    if "카메라" in normalized_keyword or "액션캠" in normalized_keyword:
+        return "카메라"
+    return None
+
+
+def _keyword_matches_product(keyword: str, product: ShopProduct) -> bool:
+    normalized_keyword = keyword.strip().lower().replace(" ", "")
+    searchable = " ".join([product.title, product.searchKeyword, product.equipmentCategory]).lower().replace(" ", "")
+    return normalized_keyword in searchable
+
+
 async def _active_keywords(equipment_category: str | None = None) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
         "select": "id,equipment_category,keyword,source,is_active",
@@ -367,6 +401,60 @@ async def _cached_products(
     )
     products = [_product_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     return _dedupe_products(products, limit)
+
+
+async def _cached_products_by_ids(product_ids: list[str]) -> list[ShopProduct]:
+    if not product_ids:
+        return []
+    rows = await _get(
+        "creator_shop_products",
+        {
+            "select": (
+                "id,source,source_product_id,title,image_url,price,mall_name,product_url,brand,maker,"
+                "equipment_category,search_keyword,popularity_score,recommended_level,collected_at"
+            ),
+            "id": f"in.({','.join(product_ids)})",
+        },
+    )
+    products = [_product_from_row(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    by_id = {product.id: product for product in products if product.id}
+    return [product for product_id in product_ids if (product := by_id.get(product_id))]
+
+
+async def _set_products_for_config(level: str, config: dict[str, Any], product_ids: list[str]) -> list[ShopProduct]:
+    if product_ids:
+        products = await _cached_products_by_ids(product_ids)
+        if products:
+            return products
+
+    selected: list[ShopProduct] = []
+    selected_keys: set[str] = set()
+    for keyword in _as_str_list(config.get("items")):
+        equipment_category = _keyword_equipment_category(keyword)
+        if not equipment_category:
+            continue
+        candidates = await _cached_products(equipment_category, 8, DEFAULT_SORT, level)
+        if not candidates:
+            candidates = await _cached_products(equipment_category, 8, DEFAULT_SORT, None)
+        candidates = sorted(candidates, key=lambda product: (not _keyword_matches_product(keyword, product), -product.popularityScore))
+        for product in candidates:
+            key = product.id or product.sourceProductId or product.productUrl
+            if not key or key in selected_keys:
+                continue
+            selected.append(product)
+            selected_keys.add(key)
+            break
+
+    if selected:
+        return selected
+
+    fallback_sections = [
+        section
+        for section in [await _section_products(category, 2, DEFAULT_SORT, level) for category in EQUIPMENT_KEYWORDS]
+        if not section.isFallback
+    ]
+    products = [product for section in fallback_sections for product in section.items]
+    return _dedupe_products(products, 4)
 
 
 async def _fetch_naver_shop(keyword: str, display: int) -> list[dict[str, Any]]:
@@ -583,12 +671,19 @@ async def list_shop_sets() -> ShopSetsResponse:
     for row in source_rows:
         level = str(row.get("level") or "")
         config = _configured_set(level) or row
+        product_ids = _as_str_list(row.get("product_ids"))
+        try:
+            products = await _set_products_for_config(level, config, product_ids)
+        except Exception as error:
+            logger.warning("Failed to load creator shop set products for level=%s: %s", level, error)
+            products = []
         sets.append(
             ShopSet(
                 level=level,
                 title=str(row.get("title") or config.get("title") or level),
                 description=row.get("description") if isinstance(row.get("description"), str) else config.get("description"),
                 items=list(config.get("items") or []),
+                products=products,
             )
         )
     return ShopSetsResponse(sets=sets)

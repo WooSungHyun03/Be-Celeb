@@ -42,10 +42,6 @@ class Settings(BaseSettings):
     local_llm_model: str = "local-model"
     admin_secret: str | None = None
     cron_secret: str | None = None
-    openai_api_key: str | None = None
-    openai_model: str = "gpt-5.4-mini"
-    openai_transcription_model: str = "whisper-1"
-    video_analysis_max_bytes: int = 25 * 1024 * 1024
     video_analysis_max_per_collection: int = 100
     youtube_cookies_file: str | None = Field(
         default=None,

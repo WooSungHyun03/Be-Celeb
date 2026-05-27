@@ -119,7 +119,7 @@ function VideoCard({ video }: { video: PopularTrendVideo }) {
 
   return (
     <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md">
-      <a href={video.youtubeUrl} rel="noreferrer" target="_blank">
+      <a href={video.youtubeUrl} rel="noopener noreferrer" target="_blank">
         <div className="aspect-video bg-slate-100">
           {video.thumbnailUrl ? (
             <img
@@ -140,7 +140,7 @@ function VideoCard({ video }: { video: PopularTrendVideo }) {
           <span className="text-xs font-semibold text-slate-500">{formatDate(video.publishedAt)}</span>
         </div>
         <div>
-          <a className="line-clamp-2 text-base font-bold leading-6 text-ink hover:text-violet-700" href={video.youtubeUrl} rel="noreferrer" target="_blank">
+          <a className="line-clamp-2 text-base font-bold leading-6 text-ink hover:text-violet-700" href={video.youtubeUrl} rel="noopener noreferrer" target="_blank">
             {video.title}
           </a>
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{video.description || "영상 설명 없음"}</p>
@@ -214,19 +214,46 @@ function PopularVideosSection({
   onRetry: () => void;
 }) {
   const categories = useMemo(() => {
-    return Array.from(new Set((state.data?.videos ?? []).map((video) => video.category))).sort((left, right) => left.localeCompare(right));
+    const fromData = (state.data?.videos ?? []).map((video) => video.category).filter(Boolean);
+    return Array.from(new Set([...beCelebCategories, ...fromData])).sort((left, right) => left.localeCompare(right, "ko-KR"));
   }, [state.data?.videos]);
-  const videos = useMemo(() => {
+  const groupedVideos = useMemo(() => {
     const source = state.data?.videos ?? [];
-    return selectedCategory === "all" ? source : source.filter((video) => video.category === selectedCategory);
+    const grouped = new Map<string, PopularTrendVideo[]>();
+    for (const video of source) {
+      const key = video.category || "기타";
+      const current = grouped.get(key) ?? [];
+      current.push(video);
+      grouped.set(key, current);
+    }
+    for (const [category, videos] of grouped) {
+      grouped.set(
+        category,
+        [...videos]
+          .sort((left, right) => {
+            const viewDelta = Number(right.viewCount ?? 0) - Number(left.viewCount ?? 0);
+            if (viewDelta !== 0) {
+              return viewDelta;
+            }
+            return String(right.publishedAt ?? "").localeCompare(String(left.publishedAt ?? ""));
+          })
+          .slice(0, 3),
+      );
+    }
+    if (selectedCategory === "all") {
+      return Array.from(grouped.entries()).sort(([left], [right]) => left.localeCompare(right, "ko-KR"));
+    }
+    return [[selectedCategory, grouped.get(selectedCategory) ?? []]] as Array<[string, PopularTrendVideo[]]>;
   }, [selectedCategory, state.data?.videos]);
+  const hasAnyVideos = groupedVideos.some(([, videos]) => videos.length > 0);
 
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-ink">현재 인기 영상</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">카테고리별 조회수 1등 인플루언서 영상을 조회수 순으로 정렬합니다.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">최근 7일 이내 업로드된 영상 중 카테고리별 조회수 TOP 3를 표시합니다.</p>
+          <p className="mt-1 text-xs font-bold text-violet-700">최근 7일 기준</p>
         </div>
         {categories.length > 0 ? (
           <label className="text-sm font-semibold text-slate-700">
@@ -249,17 +276,34 @@ function PopularVideosSection({
 
       {state.status === "loading" || state.status === "idle" ? <VideoSkeletonGrid /> : null}
       {state.status === "error" ? <ErrorState message={state.error ?? "인기 영상 데이터를 불러오지 못했습니다."} onRetry={onRetry} /> : null}
-      {state.status === "success" && videos.length === 0 ? (
+      {state.status === "success" && !hasAnyVideos ? (
         <EmptyState
-          title="표시할 인기 영상이 없습니다."
-          description="수집된 influencer_videos 데이터가 아직 없거나 카테고리 연결 정보가 없습니다. 수동 수집 또는 daily collector를 확인하세요."
+          title={selectedCategory === "all" ? "최근 7일 인기 영상이 없습니다." : `${selectedCategory} 최근 7일 인기 영상이 없습니다.`}
+          description="최근 7일 이내 업로드된 influencer_videos 데이터가 없거나 카테고리 연결 정보가 없습니다. daily collector를 확인하세요."
         />
       ) : null}
-      {state.status === "success" && videos.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {videos.map((video) => (
-            <VideoCard key={`${video.category}-${video.youtubeVideoId}`} video={video} />
-          ))}
+      {state.status === "success" && hasAnyVideos ? (
+        <div className="space-y-6">
+          {groupedVideos
+            .filter(([, videos]) => videos.length > 0)
+            .map(([category, videos]) => (
+              <div className="space-y-3" key={category}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-black text-ink">{category}</h3>
+                  <span className="text-xs font-bold text-slate-500">TOP {videos.length}</span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {videos.map((video, index) => (
+                    <div className="relative" key={`${video.category}-${video.youtubeVideoId}`}>
+                      <span className="absolute left-3 top-3 z-10 rounded-md bg-white/95 px-2 py-1 text-xs font-black text-violet-700 shadow-sm">
+                        #{index + 1}
+                      </span>
+                      <VideoCard video={video} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
         </div>
       ) : null}
     </section>

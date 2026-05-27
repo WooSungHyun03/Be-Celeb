@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from app.core.errors import BackendApiError
 from app.core.responses import ApiResponse, error_response
 from app.domains.video_analysis.schemas import GenerateStoryboardRequest, GenerateStoryboardResponse, TranscribeRequest, TranscribeResponse
-from app.domains.video_analysis.service import create_video_analysis_from_url, create_video_analysis_from_youtube_video, generate_storyboard_from_analysis, get_video_analysis
+from app.domains.video_analysis.service import AUDIO_ANALYSIS_DISABLED_MESSAGE, create_video_analysis_from_youtube_video, generate_storyboard_from_analysis, get_video_analysis
 from app.services.auth_service import access_token_from_authorization, get_user_from_access_token
 
 
@@ -24,7 +24,7 @@ async def transcribe_video(
             if analysis is None:
                 raise BackendApiError("Video analysis already exists for this YouTube video.", 409, "VIDEO_ANALYSIS_EXISTS")
         elif request.videoUrl:
-            analysis = await create_video_analysis_from_url(request.videoUrl, user_id=user_id)
+            raise BackendApiError(AUDIO_ANALYSIS_DISABLED_MESSAGE, 409, "AUDIO_ANALYSIS_DISABLED")
         else:
             raise BackendApiError("videoUrl or youtubeVideoId is required.", 400, "VALIDATION_ERROR")
         return ApiResponse(success=True, data=TranscribeResponse(analysis=analysis))

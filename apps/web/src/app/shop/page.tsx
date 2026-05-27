@@ -47,7 +47,7 @@ function ProductCard({ product }: { product: ShopProduct }) {
 
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-200/70 transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md hover:shadow-violet-100">
-      <a className="block aspect-[4/3] bg-slate-100" href={product.productUrl} rel="noreferrer" target="_blank">
+      <a className="block aspect-[4/3] bg-slate-100" href={product.productUrl} rel="noopener noreferrer" target="_blank">
         {product.imageUrl ? (
           <img alt={title} className="h-full w-full object-cover" src={product.imageUrl} />
         ) : (
@@ -77,7 +77,7 @@ function ProductCard({ product }: { product: ShopProduct }) {
           <a
             className="inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-violet-200 transition hover:bg-violet-700"
             href={product.productUrl}
-            rel="noreferrer"
+            rel="noopener noreferrer"
             target="_blank"
           >
             상품 보러가기
@@ -88,28 +88,116 @@ function ProductCard({ product }: { product: ShopProduct }) {
   );
 }
 
-function SetCard({ set }: { set: ShopSet }) {
+function SetCard({
+  set,
+  isSelected,
+  onSelect,
+}: {
+  set: ShopSet;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const products = set.products ?? [];
+
   return (
-    <Card className="h-full">
-      <div className="flex h-full flex-col">
+    <button
+      aria-expanded={isSelected}
+      className={`h-full w-full rounded-xl text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 ${
+        isSelected ? "ring-2 ring-violet-400 ring-offset-2" : "hover:-translate-y-0.5"
+      }`}
+      onClick={onSelect}
+      type="button"
+    >
+      <Card className="h-full">
+        <div className="flex h-full flex-col">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <Badge tone="info">{LEVEL_LABELS[set.level] ?? set.level}</Badge>
+              <h2 className="mt-3 text-lg font-black text-ink">{set.title}</h2>
+            </div>
+            <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-black text-violet-700">{products.length}개</span>
+          </div>
+          {set.description ? <p className="mt-3 text-sm leading-6 text-slate-500">{set.description}</p> : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {set.items.map((item) => (
+              <span
+                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600"
+                key={`${set.level}-${item}`}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+          <p className="mt-auto pt-4 text-xs font-bold text-violet-700">{isSelected ? "구성품 접기" : "구성품 보기"}</p>
+        </div>
+      </Card>
+    </button>
+  );
+}
+
+function SetProductRow({ product }: { product: ShopProduct }) {
+  const title = stripHtmlTags(product.title);
+
+  return (
+    <article className="grid gap-3 rounded-lg border border-slate-100 bg-white p-3 sm:grid-cols-[96px_minmax(0,1fr)_auto]">
+      <a className="aspect-[4/3] overflow-hidden rounded-md bg-slate-100" href={product.productUrl} rel="noopener noreferrer" target="_blank">
+        {product.imageUrl ? (
+          <img alt={title} className="h-full w-full object-cover" src={product.imageUrl} />
+        ) : (
+          <div className="flex h-full items-center justify-center px-2 text-center text-xs font-bold text-slate-400">No image</div>
+        )}
+      </a>
+      <div className="min-w-0">
+        <div className="flex flex-wrap gap-2">
+          <Badge tone="brand">{product.equipmentCategory}</Badge>
+          {product.recommendedLevel ? <Badge tone="info">{LEVEL_LABELS[product.recommendedLevel] ?? product.recommendedLevel}</Badge> : null}
+        </div>
+        <a className="mt-2 line-clamp-2 block font-bold leading-6 text-ink hover:text-violet-700" href={product.productUrl} rel="noopener noreferrer" target="_blank">
+          {title}
+        </a>
+        <p className="mt-1 text-sm font-semibold text-slate-500">{product.mallName || "판매처 정보 없음"}</p>
+      </div>
+      <div className="flex items-end justify-between gap-3 sm:flex-col sm:items-end">
+        <p className="text-sm font-black text-ink">{formatKrw(product.price)}</p>
+        <a
+          className="inline-flex min-h-9 items-center justify-center rounded-lg border border-violet-200 px-3 py-1.5 text-xs font-black text-violet-700 transition hover:bg-violet-50"
+          href={product.productUrl}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          구매 페이지
+        </a>
+      </div>
+    </article>
+  );
+}
+
+function SetDetail({ set }: { set: ShopSet }) {
+  const products = set.products ?? [];
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-start justify-between gap-3">
           <div>
             <Badge tone="info">{LEVEL_LABELS[set.level] ?? set.level}</Badge>
-            <h2 className="mt-3 text-lg font-black text-ink">{set.title}</h2>
+            <h3 className="mt-3 text-lg font-black text-ink">{set.title} 구성품</h3>
           </div>
         </div>
-        {set.description ? <p className="mt-3 text-sm leading-6 text-slate-500">{set.description}</p> : null}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {set.items.map((item) => (
-            <span
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600"
-              key={`${set.level}-${item}`}
-            >
-              {item}
-            </span>
+        <p className="text-sm font-bold text-slate-500">실제 수집 상품 {products.length}개</p>
+      </div>
+      {products.length === 0 ? (
+        <EmptyState
+          description="이 세트에 연결된 실제 판매 상품 캐시가 없습니다. daily shop collector 실행 후 다시 확인하세요."
+          title="세트 구성품이 없습니다"
+        />
+      ) : (
+        <div className="mt-4 grid gap-3">
+          {products.map((product, index) => (
+            <SetProductRow key={`${set.level}-${product.source}-${product.sourceProductId ?? product.productUrl}-${index}`} product={product} />
           ))}
         </div>
-      </div>
+      )}
     </Card>
   );
 }
@@ -122,9 +210,12 @@ export default function ShopPage() {
   const [selectedCategory, setSelectedCategory] = useState("전체");
   const [sort, setSort] = useState("popular");
   const [retryKey, setRetryKey] = useState(0);
+  const [selectedSetLevel, setSelectedSetLevel] = useState<string | null>(null);
+  const [setsError, setSetsError] = useState("");
 
   const sections = response?.sections ?? [];
   const sets = setsResponse?.sets ?? [];
+  const selectedSet = selectedSetLevel ? sets.find((set) => set.level === selectedSetLevel) ?? null : null;
   const fallbackMessage = useMemo(() => {
     const errors = sections.map((section) => section.error).filter((item): item is string => Boolean(item));
     return errors[0] ?? null;
@@ -136,14 +227,21 @@ export default function ShopPage() {
 
     setStatus("loading");
     setMessage("");
+    setSetsError("");
 
     Promise.all([
       getShopProducts({ equipmentCategory, limit: 8, sort }, controller.signal),
-      getShopSets(controller.signal).catch(() => ({ sets: [] })),
+      getShopSets(controller.signal).catch((error) => {
+        if (!controller.signal.aborted) {
+          setSetsError(error instanceof Error ? error.message : "추천 장비 세트를 불러오지 못했습니다.");
+        }
+        return { sets: [] };
+      }),
     ])
       .then(([products, setsData]) => {
         setResponse(products);
         setSetsResponse(setsData);
+        setSelectedSetLevel((current) => current ?? setsData.sets[0]?.level ?? null);
         setStatus("ready");
       })
       .catch((error) => {
@@ -216,10 +314,18 @@ export default function ShopPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {sets.map((set) => (
-              <SetCard key={set.level} set={set} />
+              <SetCard
+                isSelected={selectedSetLevel === set.level}
+                key={set.level}
+                onSelect={() => setSelectedSetLevel((current) => (current === set.level ? null : set.level))}
+                set={set}
+              />
             ))}
           </div>
+          {selectedSet ? <SetDetail set={selectedSet} /> : null}
         </section>
+      ) : setsError ? (
+        <EmptyState description={setsError} title="추천 장비 세트를 불러오지 못했습니다" />
       ) : null}
 
       {fallbackMessage ? (

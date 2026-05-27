@@ -108,7 +108,7 @@ POST /api/calendar/events
 PATCH /api/calendar/events/{event_id}
 DELETE /api/calendar/events/{event_id}
 GET  /api/growth-report
-POST /api/growth-report/refresh
+POST /api/cron/collect-growth-report
 GET  /api/shop/sections
 GET  /api/shop/products?equipmentCategory=카메라&limit=8&sort=popular
 GET  /api/shop/sets
@@ -171,7 +171,7 @@ Frontend 라우트:
 /growth-report/videos/[videoId]
 ```
 
-`/favorites`는 추천 결과에서 저장한 즐겨찾기를 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/production-board`는 직접 콘텐츠를 만들거나 즐겨찾기/추천 결과에서 제작 카드로 전환하며, 제목/설명/해시태그/콘티/메모/촬영일을 관리한다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. 일정은 색상과 시작일/종료일을 가질 수 있고, multi-day 일정은 범위 내 각 날짜 칸에 표시된다. `/growth-report`는 저장된 user channel settings를 기준으로 YouTube API에서 현재 채널 지표를 조회하고 스냅샷을 저장한다. 최근 영상 성과를 클릭하면 `/growth-report/videos/[videoId]`로 이동해 영상별 조회수, 좋아요, 댓글 추이 그래프를 확인한다.
+`/favorites`는 추천 결과에서 저장한 즐겨찾기를 카드로 보여주고, 날짜를 선택해 바로 `calendar_events`에 업로드 일정을 만든다. `/production-board`는 직접 콘텐츠를 만들거나 즐겨찾기/추천 결과에서 제작 카드로 전환하며, 제목/설명/해시태그/콘티/메모/촬영일을 관리한다. `/calendar`는 월간 캘린더를 기본으로 제공하며 날짜 클릭으로 일정 추가, 일정 클릭으로 수정/삭제를 지원한다. 일정은 색상과 시작일/종료일을 가질 수 있고, multi-day 일정은 범위 내 각 날짜 칸에 표시된다. `/growth-report`는 저장된 최신 성장 스냅샷을 표시하고, 매일 06:00 KST 자동 collector가 채널 지표를 저장한다. 최근 영상 성과를 클릭하면 `/growth-report/videos/[videoId]`로 이동해 영상별 조회수, 좋아요, 댓글 추이 그래프를 확인한다.
 
 Production board와 calendar 연동 정책:
 
@@ -185,10 +185,10 @@ Growth report 그래프:
 
 - snapshot이 2개 이상이면 Recharts line chart로 `subscriber_count`, `view_count`, `video_count` 추이를 표시
 - snapshot이 1개 이하이면 “추이 데이터가 더 필요합니다” 안내 표시
-- “지금 갱신” 버튼은 `POST /api/growth-report/refresh`로 최신 snapshot을 저장
+- “지금 갱신” 버튼은 제공하지 않는다. 매일 06:00 KST(`0 21 * * *` UTC) 자동 갱신 결과와 마지막 갱신 시각을 표시한다.
 - 영상 상세 그래프는 `video_growth_snapshots`의 일일 point를 사용한다. point가 1개 이하이면 “추이 데이터가 더 필요합니다” 안내를 표시한다.
 
-성장 리포트 refresh는 YouTube API quota를 사용한다. 운영에서는 refresh 버튼을 과도하게 누르지 않도록 UI/정책을 조정할 수 있다. 매일 자동 갱신은 `POST /api/cron/collect-growth-report`가 `CRON_SECRET` 검증 후 `user_channel_settings`의 모든 회원 채널을 순회해 채널/영상 스냅샷을 저장한다.
+성장 리포트 자동 갱신은 YouTube API quota를 사용한다. `POST /api/cron/collect-growth-report`가 `CRON_SECRET` 검증 후 `user_channel_settings`의 모든 회원 채널을 순회해 채널/영상 스냅샷을 저장한다. 같은 KST 날짜에 이미 스냅샷이 있으면 중복 갱신하지 않으며, 실패한 채널은 기존 리포트를 유지하고 로그/summary에 오류만 남긴다.
 
 회원이 채널 URL을 다른 YouTube 채널로 변경하면 backend는 기존 `channel_growth_snapshots`와 `video_growth_snapshots`를 삭제한다. 성장 리포트는 채널별 시계열 데이터이므로 새 채널 기준으로 그래프를 다시 시작하는 “삭제 후 초기화” 정책을 사용한다. 같은 YouTube 채널을 다른 URL 형태로 저장하는 경우에는 `youtube_channel_id`가 같으므로 기존 스냅샷을 유지한다.
 
@@ -459,9 +459,6 @@ curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/production-items" \
   -d '{"title":"촬영할 콘텐츠 아이디어","hashtags":["#촬영"],"storyboard":[{"scene":1,"description":"오프닝"}],"shootStartDate":"2026-05-10","shootEndDate":"2026-05-12"}'
 
 curl "$NEXT_PUBLIC_API_BASE_URL/api/growth-report" \
-  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
-
-curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/growth-report/refresh" \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 ```
 

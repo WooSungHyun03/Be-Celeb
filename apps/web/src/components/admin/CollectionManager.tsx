@@ -31,7 +31,7 @@ const collectionSteps = [
   { title: "채널 목록 확인", stage: "preparing" },
   { title: "최근 영상 수집", stage: "channel_collection" },
   { title: "영상 데이터 저장", stage: "channel_collection" },
-  { title: "자막/음성 분석", stage: "channel_collection" },
+  { title: "자막 분석", stage: "channel_collection" },
   { title: "수집 결과 정리", stage: "finalizing" },
 ];
 

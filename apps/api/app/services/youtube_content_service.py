@@ -39,6 +39,8 @@ DAY_SECONDS = 24 * 60 * 60
 UTC = timezone.utc
 TOP_KEYWORD_COUNT = 10
 SERIES_KEYWORD_COUNT = 5
+POPULAR_VIDEO_LOOKBACK_DAYS = 7
+POPULAR_VIDEO_LIMIT_PER_CATEGORY = 3
 
 CREATOR_CATEGORIES: list[CreatorCategoryName] = [
     "게임",
@@ -918,6 +920,7 @@ def _popular_category(row: dict[str, Any], category_map: dict[str, str]) -> str:
 def _popular_video_from_row(row: dict[str, Any], category: str) -> PopularTrendVideo:
     video_id = _popular_video_id(row)
     snippet = _raw_snippet(row)
+    uploaded_at = _popular_video_uploaded_at(row)
     return PopularTrendVideo(
         category=category or "기타",
         youtubeVideoId=video_id,
@@ -928,7 +931,7 @@ def _popular_video_from_row(row: dict[str, Any], category: str) -> PopularTrendV
         viewCount=_first_int(row, "view_count", "viewCount", "views"),
         likeCount=_first_int(row, "like_count", "likeCount", "likes"),
         commentCount=_first_int(row, "comment_count", "commentCount", "comments"),
-        publishedAt=_first_str(row, "published_at", "publishedAt", "published") or _as_str(snippet.get("publishedAt")) or None,
+        publishedAt=uploaded_at,
         youtubeUrl=_to_video_url(video_id) if video_id else "",
     )
 
@@ -937,15 +940,15 @@ async def _popular_video_rows() -> list[dict[str, Any]]:
     select_candidates = [
         (
             "canonical",
-            "id,category_id,youtube_video_id,published_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
+            "id,category_id,youtube_video_id,uploaded_at,published_at,created_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
         ),
         (
             "video_id_thumbnail_url",
-            "id,category_id,video_id,published_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
+            "id,category_id,video_id,uploaded_at,published_at,created_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
         ),
         (
             "category_name",
-            "id,category_name,category,youtube_video_id,published_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
+            "id,category_name,category,youtube_video_id,uploaded_at,published_at,created_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
         ),
         ("wildcard", "*"),
     ]
@@ -1005,6 +1008,28 @@ def _categories_for_video_row(row: dict[str, Any], category_map: dict[str, str],
     return [_popular_category(row, category_map)]
 
 
+def _popular_video_uploaded_at(row: dict[str, Any]) -> str | None:
+    snippet = _raw_snippet(row)
+    return (
+        _first_str(row, "uploaded_at", "uploadedAt", "published_at", "publishedAt", "published", "created_at", "createdAt")
+        or _as_str(snippet.get("publishedAt"))
+        or None
+    )
+
+
+def _parse_popular_video_date(row: dict[str, Any]) -> datetime | None:
+    value = _popular_video_uploaded_at(row)
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 async def get_popular_videos_by_category() -> PopularVideosResponse:
     try:
         categories = await _supabase_get("creator_categories", {"select": "id,name"})
@@ -1022,12 +1047,16 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
         [row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)]
     )
 
-    best_by_category: dict[str, PopularTrendVideo] = {}
+    cutoff = datetime.now(UTC) - timedelta(days=POPULAR_VIDEO_LOOKBACK_DAYS)
+    videos_by_category: dict[str, list[PopularTrendVideo]] = defaultdict(list)
 
     for row in rows:
         video_id = _popular_video_id(row)
         if not video_id:
             logger.warning("Skipping popular video row without a YouTube video id.")
+            continue
+        uploaded_at = _parse_popular_video_date(row)
+        if uploaded_at is None or uploaded_at < cutoff:
             continue
         for category in _categories_for_video_row(row, category_map, links_by_video):
             try:
@@ -1035,16 +1064,16 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
             except Exception as error:
                 logger.warning("Failed to normalize popular video row: %s", error)
                 continue
-            current = best_by_category.get(category)
-            normalized_score = (normalized.viewCount or 0, normalized.publishedAt or "")
-            if current is None:
-                best_by_category[category] = normalized
-                continue
-            current_score = (current.viewCount or 0, current.publishedAt or "")
-            if normalized_score > current_score:
-                best_by_category[category] = normalized
+            videos_by_category[category].append(normalized)
 
-    videos = sorted(best_by_category.values(), key=lambda video: (video.viewCount or 0, video.publishedAt or ""), reverse=True)
+    videos: list[PopularTrendVideo] = []
+    for category in sorted(videos_by_category):
+        ranked = sorted(
+            videos_by_category[category],
+            key=lambda video: (video.viewCount or 0, video.publishedAt or ""),
+            reverse=True,
+        )
+        videos.extend(ranked[:POPULAR_VIDEO_LIMIT_PER_CATEGORY])
     return PopularVideosResponse(videos=videos)
 
 

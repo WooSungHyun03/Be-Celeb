@@ -1,4 +1,4 @@
--- Stores Whisper transcript outputs and derived storyboard metadata without saving source video files.
+-- Stores subtitle transcript outputs and derived storyboard metadata without saving source video files.
 
 create table if not exists public.video_analysis (
   id uuid primary key default gen_random_uuid(),
