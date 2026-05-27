@@ -2,6 +2,11 @@
     "name":  "BE CELEB",
     "icons":  [
                   {
+                      "src":  "/icon.svg",
+                      "sizes":  "any",
+                      "type":  "image/svg+xml"
+                  },
+                  {
                       "src":  "/android-icon-36x36.png",
                       "sizes":  "36x36",
                       "type":  "image/png",

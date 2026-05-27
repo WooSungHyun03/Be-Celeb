@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BE CELEB">
+  <defs>
+    <linearGradient id="be-celeb-icon-gradient" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#6d28d9"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#be-celeb-icon-gradient)"/>
+  <path fill="#fff" d="m32 10 4.9 15.1L52 30l-15.1 4.9L32 50l-4.9-15.1L12 30l15.1-4.9L32 10Zm18 34 2.8 7.2L60 54l-7.2 2.8L50 64l-2.8-7.2L40 54l7.2-2.8L50 44Z"/>
+</svg>
