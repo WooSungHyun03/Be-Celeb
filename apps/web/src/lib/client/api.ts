@@ -804,9 +804,30 @@ export async function analyzeChannel(payload: AnalyzeChannelPayload, signal?: Ab
   return response.data;
 }
 
-export async function getPopularVideos(signal?: AbortSignal) {
-  const response = await apiFetch<ApiSuccess<PopularVideosResponse>>("/api/trends/popular-videos", {
-    signal,
+export type PopularVideosQuery = {
+  category?: string;
+  range?: TrendKeywordRange;
+};
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  return typeof value === "object" && value !== null && "aborted" in value && "addEventListener" in value;
+}
+
+export async function getPopularVideos(paramsOrSignal: PopularVideosQuery | AbortSignal = {}, signal?: AbortSignal) {
+  const params = isAbortSignal(paramsOrSignal) ? {} : paramsOrSignal;
+  const requestSignal = isAbortSignal(paramsOrSignal) ? paramsOrSignal : signal;
+  const query = new URLSearchParams();
+
+  if (params.category) {
+    query.set("category", params.category);
+  }
+  if (params.range) {
+    query.set("range", params.range);
+  }
+
+  const path = query.size > 0 ? `/api/trends/popular-videos?${query.toString()}` : "/api/trends/popular-videos";
+  const response = await apiFetch<ApiSuccess<PopularVideosResponse>>(path, {
+    signal: requestSignal,
   });
 
   return response.data;

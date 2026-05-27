@@ -1,6 +1,7 @@
 # Provides the Render API implementation consumed by the Vercel frontend.
 from __future__ import annotations
 
+import calendar
 import json
 import re
 from collections import Counter, defaultdict
@@ -39,8 +40,7 @@ DAY_SECONDS = 24 * 60 * 60
 UTC = timezone.utc
 TOP_KEYWORD_COUNT = 10
 SERIES_KEYWORD_COUNT = 5
-POPULAR_VIDEO_LOOKBACK_DAYS = 7
-POPULAR_VIDEO_LIMIT_PER_CATEGORY = 3
+POPULAR_VIDEO_TOP_LIMIT = 3
 
 CREATOR_CATEGORIES: list[CreatorCategoryName] = [
     "게임",
@@ -1030,7 +1030,49 @@ def _parse_popular_video_date(row: dict[str, Any]) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-async def get_popular_videos_by_category() -> PopularVideosResponse:
+def _normalize_popular_category_filter(category: str | None) -> str | None:
+    value = (category or "").strip()
+    if not value or value == "전체" or value.lower() == "all":
+        return None
+    return value
+
+
+def _one_month_ago(value: datetime) -> datetime:
+    month = value.month - 1
+    year = value.year
+    if month == 0:
+        month = 12
+        year -= 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
+def _popular_video_cutoff(range_value: TrendKeywordRange) -> datetime:
+    now = datetime.now(UTC)
+    if range_value == "daily":
+        return now - timedelta(hours=24)
+    if range_value == "monthly":
+        return _one_month_ago(now)
+    return now - timedelta(days=7)
+
+
+def _popular_video_sort_key(video: PopularTrendVideo) -> tuple[int, str]:
+    return (video.viewCount or 0, video.publishedAt or "")
+
+
+def _dedupe_popular_videos(videos: list[PopularTrendVideo]) -> list[PopularTrendVideo]:
+    by_video_id: dict[str, PopularTrendVideo] = {}
+    for video in videos:
+        existing = by_video_id.get(video.youtubeVideoId)
+        if existing is None or _popular_video_sort_key(video) > _popular_video_sort_key(existing):
+            by_video_id[video.youtubeVideoId] = video
+    return list(by_video_id.values())
+
+
+async def get_popular_videos_by_category(
+    category: str | None = None,
+    range_value: TrendKeywordRange = "weekly",
+) -> PopularVideosResponse:
     try:
         categories = await _supabase_get("creator_categories", {"select": "id,name"})
         category_map = {
@@ -1038,7 +1080,7 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
             for row in categories
             if isinstance(row, dict) and isinstance(row.get("id"), str) and isinstance(row.get("name"), str)
         } if isinstance(categories, list) else {}
-    except Exception as error:
+    except Exception:
         logger.exception("Failed to load creator_categories for popular videos.")
         category_map = {}
 
@@ -1047,8 +1089,10 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
         [row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)]
     )
 
-    cutoff = datetime.now(UTC) - timedelta(days=POPULAR_VIDEO_LOOKBACK_DAYS)
-    videos_by_category: dict[str, list[PopularTrendVideo]] = defaultdict(list)
+    selected_category = _normalize_popular_category_filter(category)
+    effective_range: TrendKeywordRange = "weekly" if selected_category is None else range_value
+    cutoff = _popular_video_cutoff(effective_range)
+    candidates: list[PopularTrendVideo] = []
 
     for row in rows:
         video_id = _popular_video_id(row)
@@ -1058,22 +1102,18 @@ async def get_popular_videos_by_category() -> PopularVideosResponse:
         uploaded_at = _parse_popular_video_date(row)
         if uploaded_at is None or uploaded_at < cutoff:
             continue
-        for category in _categories_for_video_row(row, category_map, links_by_video):
-            try:
-                normalized = _popular_video_from_row(row, category)
-            except Exception as error:
-                logger.warning("Failed to normalize popular video row: %s", error)
-                continue
-            videos_by_category[category].append(normalized)
+        row_categories = _categories_for_video_row(row, category_map, links_by_video)
+        if selected_category is not None and selected_category not in row_categories:
+            continue
+        display_category = selected_category or (row_categories[0] if row_categories else "기타")
+        try:
+            normalized = _popular_video_from_row(row, display_category)
+        except Exception as error:
+            logger.warning("Failed to normalize popular video row: %s", error)
+            continue
+        candidates.append(normalized)
 
-    videos: list[PopularTrendVideo] = []
-    for category in sorted(videos_by_category):
-        ranked = sorted(
-            videos_by_category[category],
-            key=lambda video: (video.viewCount or 0, video.publishedAt or ""),
-            reverse=True,
-        )
-        videos.extend(ranked[:POPULAR_VIDEO_LIMIT_PER_CATEGORY])
+    videos = sorted(_dedupe_popular_videos(candidates), key=_popular_video_sort_key, reverse=True)[:POPULAR_VIDEO_TOP_LIMIT]
     return PopularVideosResponse(videos=videos)
 
 

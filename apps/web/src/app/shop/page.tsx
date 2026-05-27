@@ -302,7 +302,7 @@ export default function ShopPage() {
           </div>
         </div>
         <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-500">
-          상품 수집은 daily collector 또는 관리자 cron에서만 실행됩니다. 가격과 재고는 판매처에서 다시 확인하세요.
+          가격과 재고는 판매처에서 다시 확인하세요.
         </div>
       </Card>
 

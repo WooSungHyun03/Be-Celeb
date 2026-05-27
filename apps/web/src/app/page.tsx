@@ -67,12 +67,6 @@ const workflow = [
   },
 ];
 
-const fallbackStats = [
-  { label: "활성 크리에이터", value: "10,000+" },
-  { label: "생성된 추천", value: "50,000+" },
-  { label: "분석된 트렌드", value: "100,000+" },
-];
-
 const fallbackKeywords = [
   { keyword: "#GRWM", score: 92, trend: "+12%" },
   { keyword: "#패션아이템", score: 88, trend: "+8%" },
@@ -85,30 +79,8 @@ const fallbackKeywords = [
 const primaryCtaClass =
   "inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-violet-600 px-8 text-base font-bold text-white shadow-lg shadow-violet-200 transition hover:-translate-y-0.5 hover:bg-violet-700";
 
-const outlineCtaClass =
-  "inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-8 text-base font-bold text-ink shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:bg-violet-50";
-
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function formatCompactValue(value: number) {
-  return new Intl.NumberFormat("ko-KR", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-}
-
-function getStats(mainData: MainPageData | null) {
-  if (!mainData) {
-    return fallbackStats;
-  }
-
-  return [
-    { label: "활성 크리에이터", value: formatCompactValue(mainData.stats.totalUsers) },
-    { label: "생성된 추천", value: formatCompactValue(mainData.stats.totalRecommendations) },
-    { label: "분석된 트렌드", value: formatCompactValue(mainData.stats.activeTrendsCount) },
-  ];
 }
 
 function getKeywords(mainData: MainPageData | null) {
@@ -172,7 +144,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   }
 
   const mainData = await getMainPageData().catch(() => null);
-  const stats = getStats(mainData);
   const keywords = getKeywords(mainData);
 
   return (
@@ -197,23 +168,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <br className="hidden sm:block" />
               다음 영상 아이디어를 제안합니다
             </p>
-            <div className="flex flex-col justify-center gap-4 sm:flex-row">
-              <Link className={primaryCtaClass} href={ROUTES.signup}>
-                무료로 시작하기
+            <div className="flex justify-center">
+              <Link className={primaryCtaClass} href={ROUTES.trends}>
+                실시간 트렌드
                 <Icon name="arrow" />
               </Link>
-              <Link className={outlineCtaClass} href={ROUTES.dashboard}>
-                대시보드 둘러보기
-              </Link>
-            </div>
-
-            <div className="mx-auto mt-16 grid max-w-2xl grid-cols-3 gap-6 sm:gap-8">
-              {stats.map((stat) => (
-                <div className="text-center" key={stat.label}>
-                  <div className="mb-1 text-2xl font-black text-violet-700 sm:text-3xl">{stat.value}</div>
-                  <div className="text-xs text-slate-500 sm:text-sm">{stat.label}</div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
@@ -305,29 +264,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
       </section>
 
-      <section className="border-t border-slate-200 py-20 sm:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Card className="overflow-hidden border-violet-200 bg-[linear-gradient(135deg,#f5f3ff_0%,#faf5ff_48%,#ffffff_100%)] p-12 text-center shadow-[0_28px_80px_rgba(88,28,135,0.14),0_8px_22px_rgba(15,23,42,0.06)] sm:p-16">
-            <div className="relative mx-auto max-w-3xl">
-              <h2 className="mb-4 text-3xl font-black sm:text-4xl">지금 바로 시작하세요</h2>
-              <p className="mb-8 text-lg leading-relaxed text-slate-600">
-                10,000명 이상의 크리에이터가 BE CELEB으로
-                <br className="hidden sm:block" />
-                데이터 기반 콘텐츠를 제작하고 있습니다
-              </p>
-              <div className="flex flex-col justify-center gap-4 sm:flex-row">
-                <Link className={primaryCtaClass} href={ROUTES.signup}>
-                  무료로 시작하기
-                  <Icon name="arrow" />
-                </Link>
-                <Link className={outlineCtaClass} href={ROUTES.login}>
-                  로그인
-                </Link>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </section>
     </div>
   );
 }

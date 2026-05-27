@@ -40,6 +40,12 @@ const rangeOptions: Array<{ id: TrendKeywordRange; label: string; caption: strin
   { id: "monthly", label: "Monthly", caption: "최근 6개월" },
 ];
 
+const popularRangeOptions: Array<{ id: TrendKeywordRange; label: string; caption: string }> = [
+  { id: "daily", label: "Daily", caption: "최근 24시간" },
+  { id: "weekly", label: "Weekly", caption: "최근 7일" },
+  { id: "monthly", label: "Monthly", caption: "최근 1개월" },
+];
+
 const chartColors = ["#7c3aed", "#2563eb", "#059669", "#ea580c", "#db2777"];
 const naverChartColors = ["#059669", "#2563eb", "#ea580c", "#7c3aed", "#be123c"];
 const beCelebCategories = ["게임", "운동", "IT", "노래", "OTT", "일상", "뷰티", "스터디", "코미디", "먹방", "춤"];
@@ -82,6 +88,14 @@ function formatDate(value: string | null | undefined) {
 
 function formatMetricLabel(value: unknown) {
   return formatCompactNumber(typeof value === "number" ? value : Number(value));
+}
+
+function normalizeViewCount(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function getPopularRangeLabel(range: TrendKeywordRange) {
+  return popularRangeOptions.find((option) => option.id === range)?.caption ?? "최근 7일";
 }
 
 function formatRatio(value: number | null | undefined) {
@@ -178,7 +192,7 @@ function VideoCard({ video }: { video: PopularTrendVideo }) {
 function VideoSkeletonGrid() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 6 }, (_, index) => (
+      {Array.from({ length: 3 }, (_, index) => (
         <SkeletonCard key={index} />
       ))}
     </div>
@@ -205,108 +219,134 @@ function KeywordSkeleton() {
 function PopularVideosSection({
   state,
   selectedCategory,
+  popularRange,
   onCategoryChange,
+  onRangeChange,
   onRetry,
 }: {
   state: AsyncState<PopularVideosResponse>;
   selectedCategory: string;
+  popularRange: TrendKeywordRange;
   onCategoryChange: (category: string) => void;
+  onRangeChange: (range: TrendKeywordRange) => void;
   onRetry: () => void;
 }) {
   const categories = useMemo(() => {
     const fromData = (state.data?.videos ?? []).map((video) => video.category).filter(Boolean);
     return Array.from(new Set([...beCelebCategories, ...fromData])).sort((left, right) => left.localeCompare(right, "ko-KR"));
   }, [state.data?.videos]);
-  const groupedVideos = useMemo(() => {
-    const source = state.data?.videos ?? [];
-    const grouped = new Map<string, PopularTrendVideo[]>();
-    for (const video of source) {
-      const key = video.category || "기타";
-      const current = grouped.get(key) ?? [];
-      current.push(video);
-      grouped.set(key, current);
-    }
-    for (const [category, videos] of grouped) {
-      grouped.set(
-        category,
-        [...videos]
-          .sort((left, right) => {
-            const viewDelta = Number(right.viewCount ?? 0) - Number(left.viewCount ?? 0);
-            if (viewDelta !== 0) {
-              return viewDelta;
-            }
-            return String(right.publishedAt ?? "").localeCompare(String(left.publishedAt ?? ""));
-          })
-          .slice(0, 3),
-      );
-    }
-    if (selectedCategory === "all") {
-      return Array.from(grouped.entries()).sort(([left], [right]) => left.localeCompare(right, "ko-KR"));
-    }
-    return [[selectedCategory, grouped.get(selectedCategory) ?? []]] as Array<[string, PopularTrendVideo[]]>;
-  }, [selectedCategory, state.data?.videos]);
-  const hasAnyVideos = groupedVideos.some(([, videos]) => videos.length > 0);
+  const effectiveRange = selectedCategory === "all" ? "weekly" : popularRange;
+  const rangeLabel = getPopularRangeLabel(effectiveRange);
+  const videos = useMemo(() => {
+    return [...(state.data?.videos ?? [])]
+      .sort((left, right) => {
+        const viewDelta = normalizeViewCount(right.viewCount) - normalizeViewCount(left.viewCount);
+        if (viewDelta !== 0) {
+          return viewDelta;
+        }
+        return String(right.publishedAt ?? "").localeCompare(String(left.publishedAt ?? ""));
+      })
+      .slice(0, 3);
+  }, [state.data?.videos]);
+  const hasVideos = videos.length > 0;
+  const selectedCategoryLabel = selectedCategory === "all" ? "전체" : selectedCategory;
+  const emptyTitle =
+    selectedCategory === "all" ? `${rangeLabel} 전체 인기 영상이 없습니다.` : `${selectedCategory} ${rangeLabel} 인기 영상이 없습니다.`;
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-ink">현재 인기 영상</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">최근 7일 이내 업로드된 영상 중 카테고리별 조회수 TOP 3를 표시합니다.</p>
-          <p className="mt-1 text-xs font-bold text-violet-700">최근 7일 기준</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {selectedCategory === "all"
+              ? "전체 카테고리에서 최근 7일 이내 업로드된 영상 중 조회수 TOP 3를 표시합니다."
+              : `${selectedCategory} 카테고리에서 ${rangeLabel} 업로드된 영상 중 조회수 TOP 3를 표시합니다.`}
+          </p>
+          <p className="mt-1 text-xs font-bold text-violet-700">{rangeLabel} 기준</p>
         </div>
-        {categories.length > 0 ? (
-          <label className="text-sm font-semibold text-slate-700">
-            <span className="sr-only">카테고리 필터</span>
-            <select
-              className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
-              onChange={(event) => onCategoryChange(event.target.value)}
-              value={selectedCategory}
-            >
-              <option value="all">전체 카테고리</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {categories.length > 0 ? (
+            <label className="text-sm font-semibold text-slate-700">
+              <span className="sr-only">카테고리 필터</span>
+              <select
+                className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                onChange={(event) => onCategoryChange(event.target.value)}
+                value={selectedCategory}
+              >
+                <option value="all">전체</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {selectedCategory === "all" ? (
+            <span className="inline-flex min-h-10 items-center rounded-md bg-violet-50 px-3 text-xs font-bold text-violet-700">
+              전체는 최근 7일 고정
+            </span>
+          ) : (
+            <PopularRangeTabs onChange={onRangeChange} range={popularRange} />
+          )}
+        </div>
       </div>
 
       {state.status === "loading" || state.status === "idle" ? <VideoSkeletonGrid /> : null}
       {state.status === "error" ? <ErrorState message={state.error ?? "인기 영상 데이터를 불러오지 못했습니다."} onRetry={onRetry} /> : null}
-      {state.status === "success" && !hasAnyVideos ? (
+      {state.status === "success" && !hasVideos ? (
         <EmptyState
-          title={selectedCategory === "all" ? "최근 7일 인기 영상이 없습니다." : `${selectedCategory} 최근 7일 인기 영상이 없습니다.`}
-          description="최근 7일 이내 업로드된 influencer_videos 데이터가 없거나 카테고리 연결 정보가 없습니다. daily collector를 확인하세요."
+          title={emptyTitle}
+          description="선택한 기간 안에 업로드된 influencer_videos 데이터가 없거나 조회수 집계가 아직 반영되지 않았습니다. daily collector를 확인하세요."
         />
       ) : null}
-      {state.status === "success" && hasAnyVideos ? (
-        <div className="space-y-6">
-          {groupedVideos
-            .filter(([, videos]) => videos.length > 0)
-            .map(([category, videos]) => (
-              <div className="space-y-3" key={category}>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-black text-ink">{category}</h3>
-                  <span className="text-xs font-bold text-slate-500">TOP {videos.length}</span>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {videos.map((video, index) => (
-                    <div className="relative" key={`${video.category}-${video.youtubeVideoId}`}>
-                      <span className="absolute left-3 top-3 z-10 rounded-md bg-white/95 px-2 py-1 text-xs font-black text-violet-700 shadow-sm">
-                        #{index + 1}
-                      </span>
-                      <VideoCard video={video} />
-                    </div>
-                  ))}
-                </div>
+      {state.status === "success" && hasVideos ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-black text-ink">{selectedCategoryLabel}</h3>
+            <span className="text-xs font-bold text-slate-500">
+              {rangeLabel} TOP {videos.length}
+            </span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {videos.map((video, index) => (
+              <div className="relative" key={video.youtubeVideoId}>
+                <span className="absolute left-3 top-3 z-10 rounded-md bg-white/95 px-2 py-1 text-xs font-black text-violet-700 shadow-sm">
+                  #{index + 1}
+                </span>
+                <VideoCard video={video} />
               </div>
             ))}
+          </div>
         </div>
       ) : null}
     </section>
+  );
+}
+
+function PopularRangeTabs({ range, onChange }: { range: TrendKeywordRange; onChange: (range: TrendKeywordRange) => void }) {
+  return (
+    <div className="flex rounded-lg bg-slate-100 p-1">
+      {popularRangeOptions.map((option) => {
+        const isActive = option.id === range;
+
+        return (
+          <button
+            aria-pressed={isActive}
+            className={`min-h-10 rounded-md px-4 py-2 text-left text-xs font-bold transition sm:min-w-28 ${
+              isActive ? "bg-white text-violet-700 shadow-sm" : "text-slate-600 hover:text-violet-700"
+            }`}
+            key={option.id}
+            onClick={() => onChange(option.id)}
+            type="button"
+          >
+            <span className="block text-sm">{option.label}</span>
+            <span className="hidden font-semibold text-slate-400 sm:block">{option.caption}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -670,6 +710,7 @@ export function YouTubeTrendsClient() {
   const [naverState, setNaverState] = useState<AsyncState<NaverTrendKeywordsResponse>>(() => createInitialState());
   const [combinedState, setCombinedState] = useState<AsyncState<CombinedTrendsResponse>>(() => createInitialState());
   const [range, setRange] = useState<TrendKeywordRange>("daily");
+  const [popularRange, setPopularRange] = useState<TrendKeywordRange>("weekly");
   const [naverRange, setNaverRange] = useState<TrendKeywordRange>("daily");
   const [naverCategory, setNaverCategory] = useState("IT");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -679,9 +720,10 @@ export function YouTubeTrendsClient() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const effectiveRange = selectedCategory === "all" ? "weekly" : popularRange;
 
     setPopularState({ status: "loading", data: null, error: null });
-    getPopularVideos(controller.signal)
+    getPopularVideos({ category: selectedCategory, range: effectiveRange }, controller.signal)
       .then((data) => {
         setPopularState({ status: "success", data, error: null });
       })
@@ -696,7 +738,7 @@ export function YouTubeTrendsClient() {
       });
 
     return () => controller.abort();
-  }, [popularReloadKey]);
+  }, [popularRange, popularReloadKey, selectedCategory]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -771,7 +813,9 @@ export function YouTubeTrendsClient() {
 
       <PopularVideosSection
         onCategoryChange={setSelectedCategory}
+        onRangeChange={setPopularRange}
         onRetry={() => setPopularReloadKey((current) => current + 1)}
+        popularRange={popularRange}
         selectedCategory={selectedCategory}
         state={popularState}
       />

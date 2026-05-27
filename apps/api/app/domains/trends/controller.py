@@ -23,10 +23,17 @@ from app.schemas.youtube_content import PopularVideosResponse, TrendKeywordRange
 logger = get_logger(__name__)
 
 
-async def popular_videos() -> ApiResponse[PopularVideosResponse] | JSONResponse:
+async def popular_videos(
+    category: str = Query(default="all"),
+    range_value: str = Query(default="weekly", alias="range"),
+) -> ApiResponse[PopularVideosResponse] | JSONResponse:
     try:
-        return ApiResponse(success=True, data=await get_popular_videos_by_category())
-    except Exception as error:
+        range_name = validate_range(range_value)
+        return ApiResponse(
+            success=True,
+            data=await get_popular_videos_by_category(category=category, range_value=cast(TrendKeywordRange, range_name)),
+        )
+    except Exception:
         logger.exception("Popular videos endpoint failed; returning an empty list fallback.")
         return ApiResponse(
             success=True,
