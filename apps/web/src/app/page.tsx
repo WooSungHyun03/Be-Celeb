@@ -79,6 +79,9 @@ const fallbackKeywords = [
 const primaryCtaClass =
   "inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-violet-600 px-8 text-base font-bold text-white shadow-lg shadow-violet-200 transition hover:-translate-y-0.5 hover:bg-violet-700";
 
+const outlineCtaClass =
+  "inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-8 text-base font-bold text-ink shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:bg-violet-50";
+
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -168,10 +171,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <br className="hidden sm:block" />
               다음 영상 아이디어를 제안합니다
             </p>
-            <div className="flex justify-center">
-              <Link className={primaryCtaClass} href={ROUTES.trends}>
-                실시간 트렌드
+            <div className="flex flex-col justify-center gap-4 sm:flex-row">
+              <Link className={primaryCtaClass} href={ROUTES.signup}>
+                무료로 시작하기
                 <Icon name="arrow" />
+              </Link>
+              <Link className={outlineCtaClass} href={ROUTES.trends}>
+                실시간 트렌드
               </Link>
             </div>
           </div>

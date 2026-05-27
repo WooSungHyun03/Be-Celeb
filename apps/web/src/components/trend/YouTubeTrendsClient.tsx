@@ -35,12 +35,6 @@ type AsyncState<T> = {
 };
 
 const rangeOptions: Array<{ id: TrendKeywordRange; label: string; caption: string }> = [
-  { id: "daily", label: "Daily", caption: "최근 14일" },
-  { id: "weekly", label: "Weekly", caption: "최근 8주" },
-  { id: "monthly", label: "Monthly", caption: "최근 6개월" },
-];
-
-const popularRangeOptions: Array<{ id: TrendKeywordRange; label: string; caption: string }> = [
   { id: "daily", label: "Daily", caption: "최근 24시간" },
   { id: "weekly", label: "Weekly", caption: "최근 7일" },
   { id: "monthly", label: "Monthly", caption: "최근 1개월" },
@@ -95,7 +89,7 @@ function normalizeViewCount(value: number | null | undefined) {
 }
 
 function getPopularRangeLabel(range: TrendKeywordRange) {
-  return popularRangeOptions.find((option) => option.id === range)?.caption ?? "최근 7일";
+  return rangeOptions.find((option) => option.id === range)?.caption ?? "최근 7일";
 }
 
 function formatRatio(value: number | null | undefined) {
@@ -235,8 +229,7 @@ function PopularVideosSection({
     const fromData = (state.data?.videos ?? []).map((video) => video.category).filter(Boolean);
     return Array.from(new Set([...beCelebCategories, ...fromData])).sort((left, right) => left.localeCompare(right, "ko-KR"));
   }, [state.data?.videos]);
-  const effectiveRange = selectedCategory === "all" ? "weekly" : popularRange;
-  const rangeLabel = getPopularRangeLabel(effectiveRange);
+  const rangeLabel = getPopularRangeLabel(popularRange);
   const videos = useMemo(() => {
     return [...(state.data?.videos ?? [])]
       .sort((left, right) => {
@@ -260,7 +253,7 @@ function PopularVideosSection({
           <h2 className="text-2xl font-bold tracking-tight text-ink">현재 인기 영상</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {selectedCategory === "all"
-              ? "전체 카테고리에서 최근 7일 이내 업로드된 영상 중 조회수 TOP 3를 표시합니다."
+              ? `전체 카테고리에서 ${rangeLabel} 업로드된 영상 중 조회수 TOP 3를 표시합니다.`
               : `${selectedCategory} 카테고리에서 ${rangeLabel} 업로드된 영상 중 조회수 TOP 3를 표시합니다.`}
           </p>
           <p className="mt-1 text-xs font-bold text-violet-700">{rangeLabel} 기준</p>
@@ -283,13 +276,7 @@ function PopularVideosSection({
               </select>
             </label>
           ) : null}
-          {selectedCategory === "all" ? (
-            <span className="inline-flex min-h-10 items-center rounded-md bg-violet-50 px-3 text-xs font-bold text-violet-700">
-              전체는 최근 7일 고정
-            </span>
-          ) : (
-            <PopularRangeTabs onChange={onRangeChange} range={popularRange} />
-          )}
+          <RangeTabs onChange={onRangeChange} range={popularRange} />
         </div>
       </div>
 
@@ -322,31 +309,6 @@ function PopularVideosSection({
         </div>
       ) : null}
     </section>
-  );
-}
-
-function PopularRangeTabs({ range, onChange }: { range: TrendKeywordRange; onChange: (range: TrendKeywordRange) => void }) {
-  return (
-    <div className="flex rounded-lg bg-slate-100 p-1">
-      {popularRangeOptions.map((option) => {
-        const isActive = option.id === range;
-
-        return (
-          <button
-            aria-pressed={isActive}
-            className={`min-h-10 rounded-md px-4 py-2 text-left text-xs font-bold transition sm:min-w-28 ${
-              isActive ? "bg-white text-violet-700 shadow-sm" : "text-slate-600 hover:text-violet-700"
-            }`}
-            key={option.id}
-            onClick={() => onChange(option.id)}
-            type="button"
-          >
-            <span className="block text-sm">{option.label}</span>
-            <span className="hidden font-semibold text-slate-400 sm:block">{option.caption}</span>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -720,10 +682,9 @@ export function YouTubeTrendsClient() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const effectiveRange = selectedCategory === "all" ? "weekly" : popularRange;
 
     setPopularState({ status: "loading", data: null, error: null });
-    getPopularVideos({ category: selectedCategory, range: effectiveRange }, controller.signal)
+    getPopularVideos({ category: selectedCategory, range: popularRange }, controller.signal)
       .then((data) => {
         setPopularState({ status: "success", data, error: null });
       })

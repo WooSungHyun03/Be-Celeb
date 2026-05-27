@@ -1,7 +1,6 @@
 # Provides the Render API implementation consumed by the Vercel frontend.
 from __future__ import annotations
 
-import calendar
 import json
 import re
 from collections import Counter, defaultdict
@@ -11,6 +10,7 @@ from urllib.parse import quote
 
 import httpx
 
+from app.common.datetime import get_date_range_by_period, parse_utc_datetime
 from app.core.config import get_settings
 from app.core.errors import BackendApiError, missing_env
 from app.core.logging import get_logger
@@ -1019,15 +1019,7 @@ def _popular_video_uploaded_at(row: dict[str, Any]) -> str | None:
 
 def _parse_popular_video_date(row: dict[str, Any]) -> datetime | None:
     value = _popular_video_uploaded_at(row)
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+    return parse_utc_datetime(value)
 
 
 def _normalize_popular_category_filter(category: str | None) -> str | None:
@@ -1035,25 +1027,6 @@ def _normalize_popular_category_filter(category: str | None) -> str | None:
     if not value or value == "전체" or value.lower() == "all":
         return None
     return value
-
-
-def _one_month_ago(value: datetime) -> datetime:
-    month = value.month - 1
-    year = value.year
-    if month == 0:
-        month = 12
-        year -= 1
-    day = min(value.day, calendar.monthrange(year, month)[1])
-    return value.replace(year=year, month=month, day=day)
-
-
-def _popular_video_cutoff(range_value: TrendKeywordRange) -> datetime:
-    now = datetime.now(UTC)
-    if range_value == "daily":
-        return now - timedelta(hours=24)
-    if range_value == "monthly":
-        return _one_month_ago(now)
-    return now - timedelta(days=7)
 
 
 def _popular_video_sort_key(video: PopularTrendVideo) -> tuple[int, str]:
@@ -1090,8 +1063,7 @@ async def get_popular_videos_by_category(
     )
 
     selected_category = _normalize_popular_category_filter(category)
-    effective_range: TrendKeywordRange = "weekly" if selected_category is None else range_value
-    cutoff = _popular_video_cutoff(effective_range)
+    date_range = get_date_range_by_period(range_value)
     candidates: list[PopularTrendVideo] = []
 
     for row in rows:
@@ -1100,7 +1072,7 @@ async def get_popular_videos_by_category(
             logger.warning("Skipping popular video row without a YouTube video id.")
             continue
         uploaded_at = _parse_popular_video_date(row)
-        if uploaded_at is None or uploaded_at < cutoff:
+        if uploaded_at is None or uploaded_at < date_range.start or uploaded_at > date_range.end:
             continue
         row_categories = _categories_for_video_row(row, category_map, links_by_video)
         if selected_category is not None and selected_category not in row_categories:
@@ -1121,35 +1093,44 @@ def _start_of_day(value: datetime) -> datetime:
     return datetime(value.year, value.month, value.day, tzinfo=UTC)
 
 
+def _start_of_hour(value: datetime) -> datetime:
+    return value.replace(minute=0, second=0, microsecond=0)
+
+
 def _start_of_week(value: datetime) -> datetime:
     day = value.weekday()
     return _start_of_day(value) - timedelta(days=day)
 
 
-def _add_months(value: datetime, months: int) -> datetime:
-    month = value.month - 1 + months
-    year = value.year + month // 12
-    month = month % 12 + 1
-    return datetime(year, month, 1, tzinfo=UTC)
-
-
-def _period_config(range_value: TrendKeywordRange) -> tuple[datetime, list[str], Any]:
-    now = datetime.now(UTC)
-    if range_value == "weekly":
-        current_week = _start_of_week(now)
-        start = current_week - timedelta(weeks=7)
-        periods = [(start + timedelta(weeks=index)).date().isoformat() for index in range(8)]
-        return start, periods, lambda date: _start_of_week(date).date().isoformat()
+def _period_config(range_value: TrendKeywordRange) -> tuple[datetime, datetime, list[str], Any]:
+    date_range = get_date_range_by_period(range_value)
+    if range_value == "daily":
+        start_bucket = _start_of_hour(date_range.start)
+        end_bucket = _start_of_hour(date_range.end)
+        periods: list[str] = []
+        cursor = start_bucket
+        while cursor <= end_bucket:
+            periods.append(cursor.strftime("%Y-%m-%d %H:00"))
+            cursor += timedelta(hours=1)
+        return date_range.start, date_range.end, periods, lambda value: _start_of_hour(value).strftime("%Y-%m-%d %H:00")
     if range_value == "monthly":
-        current_month = datetime(now.year, now.month, 1, tzinfo=UTC)
-        start = _add_months(current_month, -5)
-        periods = [_add_months(start, index).strftime("%Y-%m") for index in range(6)]
-        return start, periods, lambda date: date.strftime("%Y-%m")
+        start_bucket = _start_of_week(date_range.start)
+        end_bucket = _start_of_week(date_range.end)
+        periods = []
+        cursor = start_bucket
+        while cursor <= end_bucket:
+            periods.append(cursor.date().isoformat())
+            cursor += timedelta(weeks=1)
+        return date_range.start, date_range.end, periods, lambda value: _start_of_week(value).date().isoformat()
 
-    today = _start_of_day(now)
-    start = today - timedelta(days=13)
-    periods = [(start + timedelta(days=index)).date().isoformat() for index in range(14)]
-    return start, periods, lambda date: _start_of_day(date).date().isoformat()
+    start_bucket = _start_of_day(date_range.start)
+    end_bucket = _start_of_day(date_range.end)
+    periods = []
+    cursor = start_bucket
+    while cursor <= end_bucket:
+        periods.append(cursor.date().isoformat())
+        cursor += timedelta(days=1)
+    return date_range.start, date_range.end, periods, lambda value: _start_of_day(value).date().isoformat()
 
 
 def _normalize_keyword_tag(value: str) -> str:
@@ -1157,10 +1138,7 @@ def _normalize_keyword_tag(value: str) -> str:
 
 
 def _parse_datetime(value: str) -> datetime | None:
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
-    except ValueError:
-        return None
+    return parse_utc_datetime(value)
 
 
 async def _creator_category_maps() -> tuple[dict[str, str], dict[str, str]]:
@@ -1180,6 +1158,41 @@ async def _creator_category_maps() -> tuple[dict[str, str], dict[str, str]]:
 
 async def _keyword_video_category_links(video_ids: list[str]) -> dict[str, list[str]]:
     return await _video_category_links_by_video_id(video_ids)
+
+
+async def _keyword_video_rows() -> list[dict[str, Any]]:
+    select_candidates = [
+        (
+            "canonical",
+            "id,category_id,uploaded_at,published_at,created_at,tags",
+            "published_at.desc.nullslast,created_at.desc",
+        ),
+        (
+            "published",
+            "id,category_id,published_at,created_at,tags",
+            "published_at.desc.nullslast,created_at.desc",
+        ),
+        (
+            "created",
+            "id,category_id,created_at,tags",
+            "created_at.desc",
+        ),
+        ("wildcard", "*", None),
+    ]
+
+    for label, select_value, order in select_candidates:
+        params = {
+            "select": select_value,
+            "limit": "1000",
+        }
+        if order:
+            params["order"] = order
+        try:
+            rows = await _supabase_get("influencer_videos", params)
+            return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+        except Exception as error:
+            logger.warning("Keyword trends video query failed with select=%s: %s", label, error)
+    return []
 
 
 async def _search_interest_keyword_boost(start: datetime) -> dict[str, Counter[str]]:
@@ -1234,14 +1247,8 @@ async def _search_interest_keyword_boost(start: datetime) -> dict[str, Counter[s
 
 
 async def get_keyword_trends(range_value: TrendKeywordRange) -> TrendKeywordsResponse:
-    start, periods, get_period = _period_config(range_value)
-    rows = await _supabase_get(
-        "influencer_videos",
-        {
-            "select": "id,category_id,published_at,tags",
-            "published_at": f"gte.{start.isoformat().replace('+00:00', 'Z')}",
-        },
-    )
+    start, end, periods, get_period = _period_config(range_value)
+    rows = await _keyword_video_rows()
     total_counts: Counter[str] = Counter()
     category_counts: dict[str, Counter[str]] = defaultdict(Counter)
     period_counts: dict[str, Counter[str]] = {period: Counter() for period in periods}
@@ -1254,9 +1261,9 @@ async def get_keyword_trends(range_value: TrendKeywordRange) -> TrendKeywordsRes
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            published_at = _parse_datetime(_as_str(row.get("published_at")))
+            published_at = _parse_datetime(_popular_video_uploaded_at(row) or "")
             tags = _as_str_list(row.get("tags"))
-            if not published_at or not tags:
+            if not published_at or published_at < start or published_at > end or not tags:
                 continue
             period = get_period(published_at)
             if period not in period_counts:

@@ -6,7 +6,7 @@ from typing import Any, Iterable, cast
 
 import httpx
 
-from app.common.datetime import kst_now, utc_now
+from app.common.datetime import get_date_range_by_period, kst_now, parse_utc_datetime, utc_now
 from app.common.text import normalize_tag, normalize_text
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestException, BackendApiError, ExternalAPIException, NotFoundException, missing_env
@@ -147,12 +147,7 @@ def _as_date(value: Any) -> date | None:
 
 
 def _as_datetime(value: Any) -> datetime | None:
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
-    except ValueError:
-        return None
+    return parse_utc_datetime(value)
 
 
 def _as_float(value: Any) -> float:
@@ -207,23 +202,17 @@ def _require_naver_credentials() -> None:
 
 
 def _range_start(range_value: TrendRange) -> date:
-    today = kst_now().date()
-    if range_value == "weekly":
-        current_week = today - timedelta(days=today.weekday())
-        return current_week - timedelta(weeks=7)
-    if range_value == "monthly":
-        month_index = today.month - 1 - 11
-        year = today.year + month_index // 12
-        month = month_index % 12 + 1
-        return date(year, month, 1)
-    return today - timedelta(days=30)
+    reference = kst_now()
+    return get_date_range_by_period(range_value, now=reference).start.astimezone(reference.tzinfo).date()
+
+
+def _range_start_datetime(range_value: TrendRange) -> datetime:
+    return get_date_range_by_period(range_value).start
 
 
 def _period_key(value: date, range_value: TrendRange) -> str:
-    if range_value == "weekly":
-        return (value - timedelta(days=value.weekday())).isoformat()
     if range_value == "monthly":
-        return value.strftime("%Y-%m")
+        return (value - timedelta(days=value.weekday())).isoformat()
     return value.isoformat()
 
 
@@ -540,7 +529,7 @@ async def collect_naver_trends() -> NaverCollectionSummary:
 async def _naver_daily_rows(category: str, range_value: TrendRange) -> list[dict[str, Any]]:
     start = _range_start(range_value)
     params: dict[str, Any] = {
-        "select": "period,ratio,category_name,keyword_group_title,group_id",
+        "select": "period,ratio,category_name,keyword_group_title,group_id,collected_at,created_at",
         "period": f"gte.{start.isoformat()}",
         "order": "period.asc",
     }
@@ -630,7 +619,7 @@ async def _youtube_rows_for_category(category: str, range_value: TrendRange) -> 
     if not category_id:
         return []
 
-    start = datetime.combine(_range_start(range_value), datetime.min.time(), tzinfo=timezone.utc)
+    start = _range_start_datetime(range_value)
     try:
         linked_rows = await _supabase_get(
             "influencer_video_categories",
