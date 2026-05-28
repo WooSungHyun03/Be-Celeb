@@ -20,18 +20,29 @@ from app.services.youtube_service import get_channel_info, get_recent_videos
 
 UTC = timezone.utc
 DAILY_COLLECTION_JOB_NAME = "collect-daily-videos"
+DATA_CLEANUP_JOB_NAME = "cleanup-old-data"
 DAILY_COLLECTION_SCHEDULE_TEXT = "Every day 06:00 KST"
 ONE_DAY = timedelta(days=1)
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
 DAILY_COLLECTION_CONCURRENCY = 4
+DAILY_COLLECTION_CHANNEL_LIMIT = 20
+DAILY_COLLECTION_VIDEOS_PER_CHANNEL = 8
+DAILY_COLLECTION_TIME_BUDGET_SECONDS = 50
+DAILY_COLLECTION_CHANNEL_TIMEOUT_SECONDS = 45
+DAILY_COLLECTION_LOCK_TTL_MINUTES = 30
 COLLECTION_PROGRESS_UPDATE_SECONDS = 5
+COLLECTION_DETAIL_SAMPLE_LIMIT = 20
+CLEANUP_BATCH_SIZE = 200
+CLEANUP_JOB_LOG_RETENTION_DAYS = 30
+CLEANUP_ADMIN_AUDIT_RETENTION_DAYS = 180
+CLEANUP_INFLUENCER_VIDEO_RETENTION_DAYS = 180
+CLEANUP_VIDEO_ANALYSIS_RETENTION_DAYS = 30
+CLEANUP_RECOMMENDATION_OPTIONS_RETENTION_DAYS = 30
+CLEANUP_GROWTH_SNAPSHOTS_RETENTION_DAYS = 400
 logger = get_logger(__name__)
 VIDEO_ANALYSIS_SKIP_CODES = {
-    "YOUTUBE_REQUIRES_COOKIES",
-    "YOUTUBE_COOKIE_FILE_UNAVAILABLE",
-    "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
-    "YOUTUBE_AUDIO_ANALYSIS_DISABLED",
+    "SUBTITLE_ANALYSIS_DISABLED",
 }
 
 
@@ -41,6 +52,83 @@ def _now() -> datetime:
 
 def _iso(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
+
+
+def _safe_positive_int(value: Any, default: int, minimum: int = 1, maximum: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    parsed = max(minimum, parsed)
+    if maximum is not None:
+        parsed = min(maximum, parsed)
+    return parsed
+
+
+def _process_memory_mb() -> dict[str, float | None]:
+    current_rss: float | None = None
+    peak_rss: float | None = None
+    try:
+        with open("/proc/self/status", "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("VmRSS:"):
+                    current_rss = round(int(line.split()[1]) / 1024, 2)
+                elif line.startswith("VmHWM:"):
+                    peak_rss = round(int(line.split()[1]) / 1024, 2)
+    except OSError:
+        pass
+    if peak_rss is None:
+        try:
+            import resource
+
+            usage = resource.getrusage(resource.RUSAGE_SELF)
+            peak_rss = round(float(usage.ru_maxrss) / 1024, 2)
+        except Exception:
+            peak_rss = None
+    return {"rssMb": current_rss, "peakRssMb": peak_rss}
+
+
+def _duration_seconds(started: datetime) -> float:
+    return round((_now() - started).total_seconds(), 2)
+
+
+def _append_sample(items: list[dict[str, Any]], item: dict[str, Any], limit: int = COLLECTION_DETAIL_SAMPLE_LIMIT) -> None:
+    if len(items) < limit:
+        items.append(item)
+
+
+def _compact_youtube_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    snippet = raw.get("snippet") if isinstance(raw.get("snippet"), dict) else {}
+    statistics = raw.get("statistics") if isinstance(raw.get("statistics"), dict) else {}
+    return {
+        "kind": raw.get("kind"),
+        "etag": raw.get("etag"),
+        "snippet": {
+            "categoryId": snippet.get("categoryId"),
+            "defaultLanguage": snippet.get("defaultLanguage"),
+            "defaultAudioLanguage": snippet.get("defaultAudioLanguage"),
+        },
+        "statistics": {
+            "viewCount": statistics.get("viewCount"),
+            "likeCount": statistics.get("likeCount"),
+            "commentCount": statistics.get("commentCount"),
+        },
+    }
+
+
+class _CollectionRuntime:
+    def __init__(self, analysis_limit: int) -> None:
+        self._analysis_remaining = max(0, analysis_limit)
+        self._lock = asyncio.Lock()
+
+    async def claim_analysis_slot(self) -> bool:
+        async with self._lock:
+            if self._analysis_remaining <= 0:
+                return False
+            self._analysis_remaining -= 1
+            return True
 
 
 def _is_video_analysis_skip_error(error: Exception) -> bool:
@@ -731,12 +819,12 @@ async def delete_admin_video(video_id: str) -> dict[str, Any]:
     return {"deleted": len(rows) if isinstance(rows, list) else 0}
 
 
-async def _start_collection_log(started_at: str) -> str | None:
+async def _start_collection_log(started_at: str, job_name: str = DAILY_COLLECTION_JOB_NAME) -> str | None:
     try:
         rows = await _post(
             "collection_logs",
             {
-                "job_name": DAILY_COLLECTION_JOB_NAME,
+                "job_name": job_name,
                 "started_at": started_at,
                 "status": "running",
                 "summary": {},
@@ -746,6 +834,31 @@ async def _start_collection_log(started_at: str) -> str | None:
         return row.get("id") if isinstance(row.get("id"), str) else None
     except Exception:
         return None
+
+
+async def _running_job_log(job_name: str, lock_ttl_minutes: int) -> dict[str, Any] | None:
+    started_after = _iso(_now() - timedelta(minutes=max(1, lock_ttl_minutes)))
+    try:
+        rows = await _get(
+            "collection_logs",
+            {
+                "select": "id,started_at,status",
+                "job_name": f"eq.{job_name}",
+                "status": "eq.running",
+                "started_at": f"gte.{started_after}",
+                "order": "started_at.desc",
+            },
+            limit=1,
+        )
+    except Exception as error:
+        logger.warning("Job running-lock check skipped job=%s: %s", job_name, error)
+        return None
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+    return row
+
+
+async def _running_collection_log(lock_ttl_minutes: int) -> dict[str, Any] | None:
+    return await _running_job_log(DAILY_COLLECTION_JOB_NAME, lock_ttl_minutes)
 
 
 async def _finish_collection_log(log_id: str | None, status: str, summary: dict[str, Any], error_message: str | None = None) -> None:
@@ -784,6 +897,7 @@ async def _update_collection_progress(log_id: str | None, progress: dict[str, An
 def _collection_progress_summary(
     *,
     started_at: str,
+    started: datetime,
     channels_total: int,
     channels_done: int,
     videos_found: int,
@@ -813,6 +927,8 @@ def _collection_progress_summary(
         "videosSkipped": videos_skipped,
         "errors": errors_count,
         "percent": percent,
+        "durationSeconds": _duration_seconds(started),
+        "memory": _process_memory_mb(),
         "updatedAt": _iso(_now()),
     }
 
@@ -863,6 +979,8 @@ async def _collect_daily_channel(
     window_start: datetime,
     started_at: str,
     semaphore: asyncio.Semaphore,
+    runtime: _CollectionRuntime,
+    max_recent_videos: int,
 ) -> dict[str, Any]:
     async with semaphore:
         channel_identifier = row.get("youtube_channel_id") or row.get("channel_url") or row.get("id")
@@ -891,7 +1009,7 @@ async def _collect_daily_channel(
                 prefer="return=minimal",
             )
 
-            recent_videos = await get_recent_videos(channel)
+            recent_videos = await get_recent_videos(channel, max_results=max_recent_videos)
             last_day_videos = [
                 video
                 for video in recent_videos
@@ -906,6 +1024,7 @@ async def _collect_daily_channel(
                     "videosAnalysisSkipped": 0,
                     "videosAnalysisSkippedByLimit": 0,
                     "videosAnalysisSkippedByYoutube": 0,
+                    "videoAnalysisErrorCount": 0,
                     "videoAnalysisSkipReasons": {},
                     "videoAnalysisSkips": [],
                     "videoAnalysisErrors": [],
@@ -926,26 +1045,30 @@ async def _collect_daily_channel(
                     "view_count": video.viewCount,
                     "like_count": video.likeCount,
                     "comment_count": video.commentCount,
-                    "raw": video.raw,
+                    "raw": _compact_youtube_raw(video.raw),
                     "collected_at": started_at,
                 }
                 for video in last_day_videos
             ]
             inserted_rows = await _post(
-                "influencer_videos?on_conflict=youtube_video_id",
+                "influencer_videos?on_conflict=youtube_video_id&select=id,youtube_video_id,title",
                 upsert_rows,
                 prefer="resolution=merge-duplicates,return=representation",
             )
             videos_analyzed = 0
             video_analysis_errors: list[dict[str, Any]] = []
             video_analysis_skips: list[dict[str, Any]] = []
+            video_analysis_skip_reasons: Counter[str] = Counter()
+            video_analysis_error_count = 0
             inserted_videos = [item for item in inserted_rows if isinstance(item, dict)] if isinstance(inserted_rows, list) else []
-            analysis_limit = max(0, get_settings().video_analysis_max_per_collection)
-            video_analysis_skipped_by_limit = max(0, len(inserted_videos) - analysis_limit)
+            video_analysis_skipped_by_limit = 0
             video_analysis_skipped_by_youtube = 0
-            for inserted_video in inserted_videos[:analysis_limit]:
+            for inserted_video in inserted_videos:
                 youtube_video_id = inserted_video.get("youtube_video_id")
                 if not isinstance(youtube_video_id, str) or not youtube_video_id:
+                    continue
+                if not await runtime.claim_analysis_slot():
+                    video_analysis_skipped_by_limit += 1
                     continue
                 try:
                     result = await create_video_analysis_from_youtube_video(
@@ -957,17 +1080,21 @@ async def _collect_daily_channel(
                         videos_analyzed += 1
                 except Exception as error:
                     if _is_video_analysis_skip_error(error):
-                        logger.info("Video transcript analysis skipped for youtubeVideoId=%s: %s", youtube_video_id, error)
+                        logger.info("Video metadata analysis skipped for youtubeVideoId=%s: %s", youtube_video_id, error)
                         video_analysis_skipped_by_youtube += 1
-                        video_analysis_skips.append(_video_analysis_skip_detail(error, inserted_video))
+                        detail = _video_analysis_skip_detail(error, inserted_video)
+                        video_analysis_skip_reasons[str(detail.get("code") or "UNKNOWN_SKIP_REASON")] += 1
+                        _append_sample(video_analysis_skips, detail)
                         continue
-                    logger.warning("Video transcript analysis failed for youtubeVideoId=%s: %s", youtube_video_id, error)
-                    video_analysis_errors.append(
+                    logger.warning("Video metadata analysis failed for youtubeVideoId=%s: %s", youtube_video_id, error)
+                    video_analysis_error_count += 1
+                    _append_sample(
+                        video_analysis_errors,
                         {
                             "youtubeVideoId": youtube_video_id,
                             "title": inserted_video.get("title"),
                             "message": str(error),
-                        }
+                        },
                     )
             await _sync_video_categories_for_youtube_ids(
                 [video.youtubeVideoId for video in last_day_videos if isinstance(video.youtubeVideoId, str)],
@@ -986,7 +1113,8 @@ async def _collect_daily_channel(
                 "videosAnalysisSkipped": video_analysis_skipped_by_limit + video_analysis_skipped_by_youtube,
                 "videosAnalysisSkippedByLimit": video_analysis_skipped_by_limit,
                 "videosAnalysisSkippedByYoutube": video_analysis_skipped_by_youtube,
-                "videoAnalysisSkipReasons": dict(Counter(str(item.get("code") or "UNKNOWN_SKIP_REASON") for item in video_analysis_skips)),
+                "videoAnalysisErrorCount": video_analysis_error_count,
+                "videoAnalysisSkipReasons": dict(video_analysis_skip_reasons),
                 "videoAnalysisSkips": video_analysis_skips,
                 "videoAnalysisErrors": video_analysis_errors,
                 "error": None,
@@ -1000,6 +1128,7 @@ async def _collect_daily_channel(
                 "videosAnalysisSkipped": 0,
                 "videosAnalysisSkippedByLimit": 0,
                 "videosAnalysisSkippedByYoutube": 0,
+                "videoAnalysisErrorCount": 0,
                 "videoAnalysisSkipReasons": {},
                 "videoAnalysisSkips": [],
                 "videoAnalysisErrors": [],
@@ -1013,14 +1142,66 @@ async def _collect_daily_channel(
             }
 
 
+async def _collect_daily_channel_with_timeout(
+    row: dict[str, Any],
+    *,
+    category_names: dict[Any, Any],
+    category_ids_by_channel: dict[str, list[str]],
+    window_start: datetime,
+    started_at: str,
+    semaphore: asyncio.Semaphore,
+    runtime: _CollectionRuntime,
+    max_recent_videos: int,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    try:
+        return await asyncio.wait_for(
+            _collect_daily_channel(
+                row,
+                category_names=category_names,
+                category_ids_by_channel=category_ids_by_channel,
+                window_start=window_start,
+                started_at=started_at,
+                semaphore=semaphore,
+                runtime=runtime,
+                max_recent_videos=max_recent_videos,
+            ),
+            timeout=max(1.0, timeout_seconds),
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Daily YouTube collection timed out for channel=%s", row.get("youtube_channel_id") or row.get("id"))
+        return {
+            "videosFound": 0,
+            "videosUpserted": 0,
+            "videosAnalyzed": 0,
+            "videosAnalysisSkipped": 0,
+            "videosAnalysisSkippedByLimit": 0,
+            "videosAnalysisSkippedByYoutube": 0,
+            "videoAnalysisErrorCount": 0,
+            "videoAnalysisSkipReasons": {},
+            "videoAnalysisSkips": [],
+            "videoAnalysisErrors": [],
+            "error": {
+                "category": category_names.get(row.get("category_id")),
+                "categories": [category_names.get(category_id, category_id) for category_id in _category_ids_for_channel_row(row, category_ids_by_channel)],
+                "channelId": row.get("youtube_channel_id"),
+                "channelUrl": row.get("channel_url"),
+                "code": "COLLECTION_CHANNEL_TIMEOUT",
+                "message": "Channel collection exceeded the memory-safe per-channel timeout.",
+            },
+        }
+
+
 def _video_analysis_warning(
     video_analysis_errors: list[dict[str, Any]],
     skipped_by_limit: int,
     skipped_by_youtube: int,
     skip_reasons: dict[str, int],
+    error_count: int = 0,
 ) -> str | None:
     parts: list[str] = []
-    if video_analysis_errors:
+    total_errors = error_count or len(video_analysis_errors)
+    if total_errors:
         messages = [
             str(error.get("message") or "Unknown video analysis error")
             for error in video_analysis_errors
@@ -1028,39 +1209,18 @@ def _video_analysis_warning(
         ]
         top_messages = Counter(messages).most_common(3)
         detail = "; ".join(f"{count}x {message[:140]}" for message, count in top_messages)
-        parts.append(f"{len(video_analysis_errors)} video analysis item(s) failed: {detail}")
+        suffix = f": {detail}" if detail else ""
+        parts.append(f"{total_errors} video analysis item(s) failed{suffix}")
     if skipped_by_limit:
         parts.append(f"{skipped_by_limit} video analysis item(s) skipped by per-run analysis limit.")
     if skipped_by_youtube:
-        cookie_codes = {"YOUTUBE_REQUIRES_COOKIES", "YOUTUBE_COOKIE_FILE_UNAVAILABLE"}
-        cookie_skips = {
-            code: count
-            for code, count in skip_reasons.items()
-            if code in cookie_codes and count > 0
-        }
-        unavailable_skips = {
-            code: count
-            for code, count in skip_reasons.items()
-            if code not in cookie_codes and code != "YOUTUBE_AUDIO_ANALYSIS_DISABLED" and count > 0
-        }
-        cookie_total = sum(cookie_skips.values())
-        audio_disabled_total = int(skip_reasons.get("YOUTUBE_AUDIO_ANALYSIS_DISABLED") or 0)
-        unavailable_total = max(0, skipped_by_youtube - cookie_total - audio_disabled_total)
-        if cookie_total:
-            reason_detail = ", ".join(f"{code}: {count}" for code, count in sorted(cookie_skips.items()))
-            parts.append(
-                f"{cookie_total} video analysis item(s) skipped because YouTube cookies were required or unavailable ({reason_detail})."
-            )
-        if unavailable_total:
-            reason_detail = ", ".join(f"{code}: {count}" for code, count in sorted(unavailable_skips.items()))
-            suffix = f" ({reason_detail})" if reason_detail else ""
-            parts.append(
-                f"{unavailable_total} video analysis item(s) skipped because YouTube subtitles were unavailable{suffix}."
-            )
-        if audio_disabled_total:
-            parts.append(
-                f"{audio_disabled_total} video analysis item(s) skipped because audio analysis is disabled and public subtitles were unavailable."
-            )
+        reason_detail = ", ".join(
+            f"{code}: {count}"
+            for code, count in sorted(skip_reasons.items())
+            if count > 0
+        )
+        suffix = f" ({reason_detail})" if reason_detail else ""
+        parts.append(f"{skipped_by_youtube} video analysis item(s) skipped by analysis policy{suffix}.")
     return " ".join(parts) if parts else None
 
 
@@ -1085,18 +1245,62 @@ async def collect_admin_now() -> AdminCollectionSummary:
     started = _now()
     started_at = _iso(started)
     window_start = started - ONE_DAY
+    settings = get_settings()
+    concurrency = _safe_positive_int(settings.daily_collection_concurrency, DAILY_COLLECTION_CONCURRENCY, 1, 4)
+    channel_limit = _safe_positive_int(settings.daily_collection_channel_limit, DAILY_COLLECTION_CHANNEL_LIMIT, 1, 100)
+    max_recent_videos = _safe_positive_int(settings.daily_collection_videos_per_channel, DAILY_COLLECTION_VIDEOS_PER_CHANNEL, 1, 12)
+    time_budget_seconds = _safe_positive_int(settings.daily_collection_time_budget_seconds, DAILY_COLLECTION_TIME_BUDGET_SECONDS, 10, 600)
+    channel_timeout_seconds = _safe_positive_int(settings.daily_collection_channel_timeout_seconds, DAILY_COLLECTION_CHANNEL_TIMEOUT_SECONDS, 10, 180)
+    lock_ttl_minutes = _safe_positive_int(settings.daily_collection_lock_ttl_minutes, DAILY_COLLECTION_LOCK_TTL_MINUTES, 1, 240)
+    analysis_limit = max(0, int(settings.video_analysis_max_per_collection or 0))
+
+    running_log = await _running_collection_log(lock_ttl_minutes)
+    if running_log:
+        logger.warning("Daily YouTube collection skipped because another run is active logId=%s", running_log.get("id"))
+        return AdminCollectionSummary(
+            ok=False,
+            collectedAt=started_at,
+            windowStart=_iso(window_start),
+            windowEnd=started_at,
+            categoriesChecked=0,
+            channelsTotal=0,
+            channelsChecked=0,
+            channelsSkippedByBatchLimit=0,
+            channelsSkippedByTimeBudget=0,
+            videosFoundLast24h=0,
+            videosUpserted=0,
+            videosAnalyzed=0,
+            videosAnalysisSkipped=0,
+            videosAnalysisSkippedByLimit=0,
+            videosAnalysisSkippedByYoutube=0,
+            videoAnalysisErrorCount=0,
+            errors=[
+                {
+                    "code": "COLLECTION_ALREADY_RUNNING",
+                    "message": "Daily YouTube collection is already running.",
+                }
+            ],
+            durationSeconds=_duration_seconds(started),
+            memory=_process_memory_mb(),
+            jobSkippedReason="COLLECTION_ALREADY_RUNNING",
+        )
+
     log_id = await _start_collection_log(started_at)
     categories = await _category_rows()
     category_names = {row.get("id"): row.get("name") for row in categories}
+    channels_total = await _count("influencer_channels", {"is_active": "eq.true"})
     channel_rows = await _get(
         "influencer_channels",
         {
-            "select": "id,category_id,youtube_channel_id,channel_url,channel_title,is_active",
+            "select": "id,category_id,youtube_channel_id,channel_url,channel_title,is_active,last_collected_at,created_at",
             "is_active": "eq.true",
-            "order": "created_at.asc",
+            "order": "last_collected_at.asc.nullsfirst,created_at.asc",
         },
+        limit=channel_limit,
     )
     channels = [row for row in channel_rows if isinstance(row, dict)] if isinstance(channel_rows, list) else []
+    channels_skipped_by_batch_limit = max(0, channels_total - len(channels))
+    channels_skipped_by_time_budget = 0
     category_ids_by_channel = await _category_links_by_owner(
         "influencer_channel_categories",
         "influencer_channel_id",
@@ -1112,14 +1316,28 @@ async def collect_admin_now() -> AdminCollectionSummary:
     videos_analysis_skipped = 0
     videos_analysis_skipped_by_limit = 0
     videos_analysis_skipped_by_youtube = 0
+    video_analysis_error_count = 0
 
     try:
-        logger.info("Daily YouTube collection started: channels=%s concurrency=%s", len(channels), DAILY_COLLECTION_CONCURRENCY)
-        semaphore = asyncio.Semaphore(DAILY_COLLECTION_CONCURRENCY)
+        logger.info(
+            "Daily YouTube collection started: channelsSelected=%s channelsTotal=%s skippedByLimit=%s concurrency=%s videosPerChannel=%s analysisLimit=%s timeBudgetSeconds=%s memory=%s",
+            len(channels),
+            channels_total,
+            channels_skipped_by_batch_limit,
+            concurrency,
+            max_recent_videos,
+            analysis_limit,
+            time_budget_seconds,
+            _process_memory_mb(),
+        )
+        semaphore = asyncio.Semaphore(concurrency)
+        runtime = _CollectionRuntime(analysis_limit)
+        deadline = started + timedelta(seconds=time_budget_seconds)
         await _update_collection_progress(
             log_id,
             _collection_progress_summary(
                 started_at=started_at,
+                started=started,
                 channels_total=len(channels),
                 channels_done=0,
                 videos_found=0,
@@ -1130,98 +1348,305 @@ async def collect_admin_now() -> AdminCollectionSummary:
             ),
         )
         last_progress_update = _now()
-        channel_tasks = [
-            asyncio.create_task(
-                _collect_daily_channel(
-                    row,
-                    category_names=category_names,
-                    category_ids_by_channel=category_ids_by_channel,
-                    window_start=window_start,
-                    started_at=started_at,
-                    semaphore=semaphore,
-                )
-            )
-            for row in channels
-        ]
-
         channels_done = 0
-        for task in asyncio.as_completed(channel_tasks):
-            result = await task
-            channels_done += 1
-            videos_found += int(result.get("videosFound") or 0)
-            videos_upserted += int(result.get("videosUpserted") or 0)
-            videos_analyzed += int(result.get("videosAnalyzed") or 0)
-            videos_analysis_skipped += int(result.get("videosAnalysisSkipped") or 0)
-            videos_analysis_skipped_by_limit += int(result.get("videosAnalysisSkippedByLimit") or 0)
-            videos_analysis_skipped_by_youtube += int(result.get("videosAnalysisSkippedByYoutube") or 0)
-            result_video_analysis_skips = result.get("videoAnalysisSkips")
-            if isinstance(result_video_analysis_skips, list):
-                video_analysis_skips.extend(skip for skip in result_video_analysis_skips if isinstance(skip, dict))
-            result_skip_reasons = result.get("videoAnalysisSkipReasons")
-            if isinstance(result_skip_reasons, dict):
-                video_analysis_skip_reasons.update(
-                    {
-                        str(reason): int(count)
-                        for reason, count in result_skip_reasons.items()
-                        if isinstance(count, int)
-                    }
-                )
-            result_video_analysis_errors = result.get("videoAnalysisErrors")
-            if isinstance(result_video_analysis_errors, list):
-                video_analysis_errors.extend(error for error in result_video_analysis_errors if isinstance(error, dict))
-            if result.get("error"):
-                errors.append(result["error"])
-            now = _now()
-            if channels_done == len(channels) or (now - last_progress_update).total_seconds() >= COLLECTION_PROGRESS_UPDATE_SECONDS:
-                await _update_collection_progress(
-                    log_id,
-                    _collection_progress_summary(
+        for batch_start in range(0, len(channels), concurrency):
+            if _now() >= deadline:
+                channels_skipped_by_time_budget = len(channels) - channels_done
+                logger.warning("Daily YouTube collection stopped before timeout: channelsDone=%s channelsRemaining=%s memory=%s", channels_done, channels_skipped_by_time_budget, _process_memory_mb())
+                break
+            batch = channels[batch_start : batch_start + concurrency]
+            seconds_left = max(1.0, (deadline - _now()).total_seconds())
+            timeout_seconds = min(float(channel_timeout_seconds), seconds_left)
+            channel_tasks = [
+                asyncio.create_task(
+                    _collect_daily_channel_with_timeout(
+                        row,
+                        category_names=category_names,
+                        category_ids_by_channel=category_ids_by_channel,
+                        window_start=window_start,
                         started_at=started_at,
-                        channels_total=len(channels),
-                        channels_done=channels_done,
-                        videos_found=videos_found,
-                        videos_upserted=videos_upserted,
-                        videos_analyzed=videos_analyzed,
-                        videos_skipped=videos_analysis_skipped,
-                        errors_count=len(errors) + len(video_analysis_errors),
-                    ),
+                        semaphore=semaphore,
+                        runtime=runtime,
+                        max_recent_videos=max_recent_videos,
+                        timeout_seconds=timeout_seconds,
+                    )
                 )
-                last_progress_update = now
+                for row in batch
+            ]
+
+            for task in asyncio.as_completed(channel_tasks):
+                result = await task
+                channels_done += 1
+                videos_found += int(result.get("videosFound") or 0)
+                videos_upserted += int(result.get("videosUpserted") or 0)
+                videos_analyzed += int(result.get("videosAnalyzed") or 0)
+                videos_analysis_skipped += int(result.get("videosAnalysisSkipped") or 0)
+                videos_analysis_skipped_by_limit += int(result.get("videosAnalysisSkippedByLimit") or 0)
+                videos_analysis_skipped_by_youtube += int(result.get("videosAnalysisSkippedByYoutube") or 0)
+                video_analysis_error_count += int(result.get("videoAnalysisErrorCount") or 0)
+                result_video_analysis_skips = result.get("videoAnalysisSkips")
+                if isinstance(result_video_analysis_skips, list):
+                    for skip in result_video_analysis_skips:
+                        if isinstance(skip, dict):
+                            _append_sample(video_analysis_skips, skip)
+                result_skip_reasons = result.get("videoAnalysisSkipReasons")
+                if isinstance(result_skip_reasons, dict):
+                    video_analysis_skip_reasons.update(
+                        {
+                            str(reason): int(count)
+                            for reason, count in result_skip_reasons.items()
+                            if isinstance(count, int)
+                        }
+                    )
+                result_video_analysis_errors = result.get("videoAnalysisErrors")
+                if isinstance(result_video_analysis_errors, list):
+                    for error in result_video_analysis_errors:
+                        if isinstance(error, dict):
+                            _append_sample(video_analysis_errors, error)
+                if result.get("error") and isinstance(result["error"], dict):
+                    _append_sample(errors, result["error"])
+                now = _now()
+                if channels_done == len(channels) or (now - last_progress_update).total_seconds() >= COLLECTION_PROGRESS_UPDATE_SECONDS:
+                    await _update_collection_progress(
+                        log_id,
+                        _collection_progress_summary(
+                            started_at=started_at,
+                            started=started,
+                            channels_total=len(channels),
+                            channels_done=channels_done,
+                            videos_found=videos_found,
+                            videos_upserted=videos_upserted,
+                            videos_analyzed=videos_analyzed,
+                            videos_skipped=videos_analysis_skipped,
+                            errors_count=len(errors) + video_analysis_error_count,
+                        ),
+                    )
+                    last_progress_update = now
 
         summary = AdminCollectionSummary(
             collectedAt=started_at,
             windowStart=_iso(window_start),
             windowEnd=started_at,
             categoriesChecked=len(categories),
-            channelsChecked=len(channels),
+            channelsTotal=channels_total,
+            channelsChecked=channels_done,
+            channelsSkippedByBatchLimit=channels_skipped_by_batch_limit,
+            channelsSkippedByTimeBudget=channels_skipped_by_time_budget,
             videosFoundLast24h=videos_found,
             videosUpserted=videos_upserted,
             videosAnalyzed=videos_analyzed,
             videosAnalysisSkipped=videos_analysis_skipped,
             videosAnalysisSkippedByLimit=videos_analysis_skipped_by_limit,
             videosAnalysisSkippedByYoutube=videos_analysis_skipped_by_youtube,
+            videoAnalysisErrorCount=video_analysis_error_count,
             videoAnalysisSkipReasons=dict(video_analysis_skip_reasons),
             videoAnalysisSkips=video_analysis_skips,
             videoAnalysisErrors=video_analysis_errors,
             errors=errors,
+            durationSeconds=_duration_seconds(started),
+            memory=_process_memory_mb(),
         )
         video_analysis_warning = _video_analysis_warning(
             video_analysis_errors,
             videos_analysis_skipped_by_limit,
             videos_analysis_skipped_by_youtube,
             dict(video_analysis_skip_reasons),
+            video_analysis_error_count,
         )
         await _finish_collection_log(
             log_id,
-            "partial_success" if errors or video_analysis_errors else "success",
+            "partial_success" if errors or video_analysis_error_count or channels_skipped_by_time_budget else "success",
             summary.model_dump(mode="json"),
             _collection_error_message(errors, video_analysis_errors, video_analysis_warning),
         )
         await _audit("collect_now", "collection_logs", log_id, summary.model_dump(mode="json"))
+        logger.info(
+            "Daily YouTube collection finished: channelsDone=%s/%s channelsSkippedByBatchLimit=%s channelsSkippedByTimeBudget=%s channelErrors=%s videosFound=%s videosUpserted=%s analyzed=%s skipped=%s videoAnalysisErrors=%s durationSeconds=%s memory=%s",
+            channels_done,
+            channels_total,
+            channels_skipped_by_batch_limit,
+            channels_skipped_by_time_budget,
+            len(errors),
+            videos_found,
+            videos_upserted,
+            videos_analyzed,
+            videos_analysis_skipped,
+            video_analysis_error_count,
+            summary.durationSeconds,
+            summary.memory,
+        )
         return summary
     except Exception as error:
         await _finish_collection_log(log_id, "failed", {}, str(error))
         raise
+
+
+def _cleanup_cutoff(retention_days: int) -> str:
+    return _iso(_now() - timedelta(days=max(1, retention_days)))
+
+
+async def _cleanup_table_by_cutoff(
+    *,
+    table: str,
+    cutoff_column: str,
+    retention_days: int,
+    batch_size: int,
+    filters: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    cutoff = _cleanup_cutoff(retention_days)
+    started = _now()
+    try:
+        rows = await _get(
+            table,
+            {
+                "select": "id",
+                cutoff_column: f"lt.{cutoff}",
+                "order": f"{cutoff_column}.asc",
+                **(filters or {}),
+            },
+            limit=batch_size,
+        )
+        ids = [
+            row["id"]
+            for row in rows
+            if isinstance(row, dict) and isinstance(row.get("id"), str)
+        ] if isinstance(rows, list) else []
+        deleted = 0
+        if ids:
+            await _delete(table, {"id": _in_filter(ids)}, prefer="return=minimal")
+            deleted = len(ids)
+        return {
+            "table": table,
+            "cutoffColumn": cutoff_column,
+            "retentionDays": retention_days,
+            "cutoff": cutoff,
+            "selected": len(ids),
+            "deleted": deleted,
+            "durationSeconds": _duration_seconds(started),
+            "ok": True,
+        }
+    except Exception as error:
+        logger.warning("Cleanup failed table=%s cutoffColumn=%s: %s", table, cutoff_column, error.__class__.__name__)
+        return {
+            "table": table,
+            "cutoffColumn": cutoff_column,
+            "retentionDays": retention_days,
+            "cutoff": cutoff,
+            "selected": 0,
+            "deleted": 0,
+            "durationSeconds": _duration_seconds(started),
+            "ok": False,
+            "error": error.__class__.__name__,
+        }
+
+
+async def cleanup_old_operational_data() -> dict[str, Any]:
+    started = _now()
+    started_at = _iso(started)
+    settings = get_settings()
+    lock_ttl_minutes = _safe_positive_int(settings.cleanup_lock_ttl_minutes, DAILY_COLLECTION_LOCK_TTL_MINUTES, 1, 240)
+    batch_size = _safe_positive_int(settings.cleanup_batch_size, CLEANUP_BATCH_SIZE, 1, 500)
+
+    running_log = await _running_job_log(DATA_CLEANUP_JOB_NAME, lock_ttl_minutes)
+    if running_log:
+        logger.warning("DB cleanup skipped because another run is active logId=%s", running_log.get("id"))
+        return {
+            "ok": False,
+            "jobName": DATA_CLEANUP_JOB_NAME,
+            "startedAt": started_at,
+            "durationSeconds": _duration_seconds(started),
+            "jobSkippedReason": "CLEANUP_ALREADY_RUNNING",
+            "results": [],
+            "totalDeleted": 0,
+            "memory": _process_memory_mb(),
+        }
+
+    log_id = await _start_collection_log(started_at, DATA_CLEANUP_JOB_NAME)
+    logger.info("DB cleanup started: batchSize=%s memory=%s", batch_size, _process_memory_mb())
+    cleanup_specs = [
+        {
+            "table": "collection_logs",
+            "cutoff_column": "started_at",
+            "retention_days": _safe_positive_int(settings.cleanup_job_logs_retention_days, CLEANUP_JOB_LOG_RETENTION_DAYS, 1, 3650),
+            "filters": {"status": "neq.running"},
+        },
+        {
+            "table": "naver_trend_collection_logs",
+            "cutoff_column": "started_at",
+            "retention_days": _safe_positive_int(settings.cleanup_job_logs_retention_days, CLEANUP_JOB_LOG_RETENTION_DAYS, 1, 3650),
+            "filters": {"status": "neq.running"},
+        },
+        {
+            "table": "creator_shop_collection_logs",
+            "cutoff_column": "started_at",
+            "retention_days": _safe_positive_int(settings.cleanup_job_logs_retention_days, CLEANUP_JOB_LOG_RETENTION_DAYS, 1, 3650),
+            "filters": {"status": "neq.running"},
+        },
+        {
+            "table": "admin_audit_logs",
+            "cutoff_column": "created_at",
+            "retention_days": _safe_positive_int(settings.cleanup_admin_audit_retention_days, CLEANUP_ADMIN_AUDIT_RETENTION_DAYS, 30, 3650),
+        },
+        {
+            "table": "recommendation_options",
+            "cutoff_column": "created_at",
+            "retention_days": _safe_positive_int(settings.cleanup_recommendation_options_retention_days, CLEANUP_RECOMMENDATION_OPTIONS_RETENTION_DAYS, 7, 3650),
+        },
+        {
+            "table": "video_analysis",
+            "cutoff_column": "created_at",
+            "retention_days": _safe_positive_int(settings.cleanup_video_analysis_retention_days, CLEANUP_VIDEO_ANALYSIS_RETENTION_DAYS, 7, 3650),
+            "filters": {"user_id": "is.null", "analysis_result->>source": "eq.youtube_metadata"},
+        },
+        {
+            "table": "influencer_videos",
+            "cutoff_column": "published_at",
+            "retention_days": _safe_positive_int(settings.cleanup_influencer_videos_retention_days, CLEANUP_INFLUENCER_VIDEO_RETENTION_DAYS, 30, 3650),
+        },
+        {
+            "table": "video_growth_snapshots",
+            "cutoff_column": "collected_at",
+            "retention_days": _safe_positive_int(settings.cleanup_growth_snapshots_retention_days, CLEANUP_GROWTH_SNAPSHOTS_RETENTION_DAYS, 90, 3650),
+        },
+    ]
+
+    results = [
+        await _cleanup_table_by_cutoff(
+            table=str(spec["table"]),
+            cutoff_column=str(spec["cutoff_column"]),
+            retention_days=int(spec["retention_days"]),
+            batch_size=batch_size,
+            filters=spec.get("filters") if isinstance(spec.get("filters"), dict) else None,
+        )
+        for spec in cleanup_specs
+    ]
+    total_deleted = sum(int(result.get("deleted") or 0) for result in results)
+    failed = [result for result in results if not result.get("ok")]
+    summary = {
+        "ok": not failed,
+        "jobName": DATA_CLEANUP_JOB_NAME,
+        "startedAt": started_at,
+        "finishedAt": _iso(_now()),
+        "durationSeconds": _duration_seconds(started),
+        "batchSize": batch_size,
+        "results": results,
+        "totalDeleted": total_deleted,
+        "memory": _process_memory_mb(),
+    }
+    await _finish_collection_log(
+        log_id,
+        "partial_success" if failed else "success",
+        summary,
+        f"{len(failed)} cleanup target(s) failed." if failed else None,
+    )
+    logger.info(
+        "DB cleanup finished: totalDeleted=%s failed=%s durationSeconds=%s memory=%s",
+        total_deleted,
+        len(failed),
+        summary["durationSeconds"],
+        summary["memory"],
+    )
+    return summary
 
 
 async def list_admin_collection_logs(status: str | None = None, limit: int = DEFAULT_LIMIT, offset: int = 0) -> dict[str, Any]:

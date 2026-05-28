@@ -17,6 +17,7 @@ jobs:
       DAILY_NAVER_TRENDS_ENDPOINT: ${{ secrets.DAILY_NAVER_TRENDS_ENDPOINT }}
       DAILY_SHOP_PRODUCTS_ENDPOINT: ${{ secrets.DAILY_SHOP_PRODUCTS_ENDPOINT }}
       DAILY_GROWTH_REPORT_ENDPOINT: ${{ secrets.DAILY_GROWTH_REPORT_ENDPOINT }}
+      DAILY_CLEANUP_ENDPOINT: ${{ secrets.DAILY_CLEANUP_ENDPOINT }}
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
       - name: Validate secrets
@@ -68,6 +69,22 @@ jobs:
 
             printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
           done
+
+          cleanup_value="${DAILY_CLEANUP_ENDPOINT:-}"
+          cleanup_value="$(printf '%s' "$cleanup_value" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          if [ -z "$cleanup_value" ]; then
+            cleanup_value="${DAILY_COLLECT_ENDPOINT%/api/cron/collect-daily-videos}/api/cron/cleanup-old-data"
+          fi
+          if printf '%s' "$cleanup_value" | grep -q '[[:space:]]'; then
+            echo "::error::DAILY_CLEANUP_ENDPOINT contains whitespace or a newline."
+            missing=1
+          elif ! python3 -c 'import sys; from urllib.parse import urlparse; parsed = urlparse(sys.argv[1]); sys.exit(0 if parsed.scheme in {"http", "https"} and parsed.netloc and parsed.path else 1)' "$cleanup_value"
+          then
+            echo "::error::DAILY_CLEANUP_ENDPOINT is not a valid absolute URL."
+            missing=1
+          else
+            printf 'DAILY_CLEANUP_ENDPOINT=%s\n' "$cleanup_value" >> "$GITHUB_ENV"
+          fi
           exit "$missing"
 
       - name: Call daily YouTube collector
@@ -96,4 +113,11 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail-with-body --show-error --location --connect-timeout 20 --max-time 300 -X POST "$DAILY_GROWTH_REPORT_ENDPOINT" \
+            -H "Authorization: Bearer $CRON_SECRET"
+
+      - name: Call daily data cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --show-error --location --connect-timeout 20 --max-time 180 -X POST "$DAILY_CLEANUP_ENDPOINT" \
             -H "Authorization: Bearer $CRON_SECRET"

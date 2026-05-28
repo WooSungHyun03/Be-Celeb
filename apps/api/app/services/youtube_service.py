@@ -15,5 +15,5 @@ async def get_channel_info(channel_url: str) -> YouTubeChannelAnalysis:
     return await get_youtube_channel(channel_url)
 
 
-async def get_recent_videos(channel: YouTubeChannelAnalysis) -> list[YouTubeVideoAnalysis]:
-    return await _get_recent_videos_for_channel(channel)
+async def get_recent_videos(channel: YouTubeChannelAnalysis, max_results: int = 12) -> list[YouTubeVideoAnalysis]:
+    return await _get_recent_videos_for_channel(channel, max_results=max_results)

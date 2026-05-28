@@ -79,17 +79,24 @@ export type AdminCollectionSummary = {
   windowStart: string;
   windowEnd: string;
   categoriesChecked: number;
+  channelsTotal: number;
   channelsChecked: number;
+  channelsSkippedByBatchLimit: number;
+  channelsSkippedByTimeBudget: number;
   videosFoundLast24h: number;
   videosUpserted: number;
   videosAnalyzed: number;
   videosAnalysisSkipped: number;
   videosAnalysisSkippedByLimit: number;
   videosAnalysisSkippedByYoutube: number;
+  videoAnalysisErrorCount: number;
   videoAnalysisSkipReasons: Record<string, number>;
   videoAnalysisSkips: Array<Record<string, unknown>>;
   videoAnalysisErrors: Array<Record<string, unknown>>;
   errors: Array<Record<string, unknown>>;
+  durationSeconds: number | null;
+  memory: Record<string, unknown>;
+  jobSkippedReason: string | null;
 };
 
 export type AdminNaverKeywordGroup = {

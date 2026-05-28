@@ -1,53 +1,18 @@
 from __future__ import annotations
 
-import asyncio
-import re
 import json
-import os
-import shutil
-import stat
-import tempfile
-from html import unescape
-from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 import httpx
 
 from app.core.config import get_settings
 from app.core.errors import BackendApiError, ForbiddenException, missing_env
-from app.core.logging import get_logger
 from app.domains.video_analysis.schemas import TranscriptSegment, VideoAnalysisRecord
 from app.services.llm_service import call_local_llm, parse_llm_json_with_fallback
 from app.services.text_sanitizer import KOREAN_ONLY_OUTPUT_INSTRUCTION, sanitize_user_facing_text
 
-logger = get_logger(__name__)
-
-YOUTUBE_COOKIE_REQUIRED_MARKERS = (
-    "sign in to confirm",
-    "confirm you're not a bot",
-    "confirm you’re not a bot",
-    "not a bot",
-    "use --cookies-from-browser or --cookies",
-    "cookies are no longer valid",
-    "cookies file",
-)
-YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS = (
-    "this live event will begin",
-    "premieres in",
-    "not made this video available in your country",
-    "private video",
-    "video unavailable",
-    "this video is unavailable",
-    "has been removed",
-    "copyright",
-    "members-only",
-    "requires payment",
-)
-YOUTUBE_SUBTITLE_LANGUAGES = ("ko", "ko-KR", "en", "en-US")
-YTDLP_TIMEOUT_SECONDS = 120
-AUDIO_ANALYSIS_DISABLED_MESSAGE = (
-    "Audio analysis is disabled in this deployment. Only public YouTube subtitles are used for video analysis."
+SUBTITLE_ANALYSIS_DISABLED_MESSAGE = (
+    "YouTube subtitle analysis is disabled in this deployment. Metadata-only video analysis is used instead."
 )
 
 SELECT_COLUMNS = (
@@ -282,304 +247,28 @@ async def create_video_analysis_from_youtube_video(
     if await get_video_analysis_by_youtube_id(youtube_video_id):
         return None
     video_url = f"https://www.youtube.com/watch?v={youtube_video_id}"
-    subtitle_result = await _extract_youtube_subtitles(youtube_video_id)
-    if subtitle_result:
-        transcript, segments, raw = subtitle_result
-        return await _insert_video_analysis(
-            transcript=transcript,
-            segments=segments,
-            raw=raw,
-            source="youtube_subtitles",
-            video_url=video_url,
-            youtube_video_id=youtube_video_id,
-            influencer_video_id=influencer_video_id,
-            title=title,
-            source_filename=f"{youtube_video_id}.subtitles",
-            content_type="text/plain",
-        )
-
-    raise BackendApiError(
-        AUDIO_ANALYSIS_DISABLED_MESSAGE,
-        409,
-        "YOUTUBE_AUDIO_ANALYSIS_DISABLED",
+    metadata_title = sanitize_user_facing_text(title) if isinstance(title, str) else ""
+    transcript = "\n".join(
+        part
+        for part in [
+            SUBTITLE_ANALYSIS_DISABLED_MESSAGE,
+            f"YouTube video id: {youtube_video_id}",
+            f"Title: {metadata_title}" if metadata_title else None,
+        ]
+        if part
     )
-
-
-async def _extract_youtube_subtitles(youtube_video_id: str) -> tuple[str, list[TranscriptSegment], dict[str, Any]] | None:
-    try:
-        from yt_dlp import YoutubeDL
-    except ImportError:
-        return None
-
-    video_url = f"https://www.youtube.com/watch?v={youtube_video_id}"
-    with tempfile.TemporaryDirectory() as temp_dir:
-        options: dict[str, Any] = {
-            "quiet": True,
-            "skip_download": True,
-            "noplaylist": True,
-            "writesubtitles": True,
-            "writeautomaticsub": True,
-            "subtitleslangs": list(YOUTUBE_SUBTITLE_LANGUAGES),
-            "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
-            "cachedir": str(Path(temp_dir) / "yt-dlp-cache"),
-            "paths": {"home": temp_dir, "temp": temp_dir},
-            "socket_timeout": 30,
-            "retries": 2,
-            "fragment_retries": 2,
-        }
-        _set_ytdlp_cookiefile_option(options, temp_dir)
-        try:
-            with YoutubeDL(options) as downloader:
-                info = await _run_ytdlp_info(downloader, video_url)
-        except Exception as error:
-            _raise_youtube_extraction_error(error)
-
-    subtitle_entry = _select_subtitle_entry(info)
-    if not subtitle_entry:
-        return None
-
-    segments = await _download_subtitle_segments(str(subtitle_entry["url"]), str(subtitle_entry.get("ext") or ""))
-    transcript = sanitize_user_facing_text(" ".join(segment.text for segment in segments))
-    if not transcript:
-        return None
-    return transcript, segments, {
-        "duration": info.get("duration") if isinstance(info, dict) else None,
-        "subtitleLanguage": subtitle_entry.get("language"),
-        "subtitleExtension": subtitle_entry.get("ext"),
-        "subtitleSource": subtitle_entry.get("source"),
-    }
-
-
-def _select_subtitle_entry(info: Any) -> dict[str, Any] | None:
-    if not isinstance(info, dict):
-        return None
-    sources = (("subtitles", info.get("subtitles")), ("automatic_captions", info.get("automatic_captions")))
-    for source_name, source in sources:
-        if not isinstance(source, dict):
-            continue
-        for language in YOUTUBE_SUBTITLE_LANGUAGES:
-            entries = source.get(language)
-            if not isinstance(entries, list):
-                continue
-            for preferred_ext in ("json3", "vtt", "srv3", "ttml"):
-                for entry in entries:
-                    if not isinstance(entry, dict) or not entry.get("url"):
-                        continue
-                    if str(entry.get("ext") or "").lower() == preferred_ext:
-                        return {**entry, "language": language, "source": source_name}
-    return None
-
-
-async def _download_subtitle_segments(url: str, extension: str) -> list[TranscriptSegment]:
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        response = await client.get(url)
-    if response.status_code >= 400:
-        return []
-    text = response.text
-    if extension.lower() == "json3":
-        return _parse_json3_subtitles(text)
-    return _parse_timed_text_subtitles(text)
-
-
-def _parse_json3_subtitles(text: str) -> list[TranscriptSegment]:
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        return []
-    segments: list[TranscriptSegment] = []
-    events = payload.get("events") if isinstance(payload, dict) else None
-    if not isinstance(events, list):
-        return []
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        pieces = event.get("segs")
-        if not isinstance(pieces, list):
-            continue
-        line = sanitize_user_facing_text("".join(str(piece.get("utf8") or "") for piece in pieces if isinstance(piece, dict)))
-        if not line:
-            continue
-        start_ms = event.get("tStartMs")
-        duration_ms = event.get("dDurationMs")
-        start = float(start_ms) / 1000 if isinstance(start_ms, (int, float)) else None
-        end = start + (float(duration_ms) / 1000) if start is not None and isinstance(duration_ms, (int, float)) else None
-        segments.append(TranscriptSegment(start=start, end=end, text=line))
-    return segments
-
-
-def _parse_timed_text_subtitles(text: str) -> list[TranscriptSegment]:
-    segments: list[TranscriptSegment] = []
-    blocks = re.split(r"\n\s*\n", text.replace("\r\n", "\n"))
-    for block in blocks:
-        lines = [line.strip() for line in block.split("\n") if line.strip()]
-        time_index = next((index for index, line in enumerate(lines) if "-->" in line), None)
-        if time_index is None:
-            continue
-        start, end = _parse_subtitle_time_range(lines[time_index])
-        caption_text = sanitize_user_facing_text(
-            " ".join(_strip_subtitle_markup(line) for line in lines[time_index + 1 :])
-        )
-        if caption_text:
-            segments.append(TranscriptSegment(start=start, end=end, text=caption_text))
-    return segments
-
-
-def _parse_subtitle_time_range(value: str) -> tuple[float | None, float | None]:
-    parts = value.split("-->", 1)
-    if len(parts) != 2:
-        return None, None
-    return _parse_subtitle_time(parts[0]), _parse_subtitle_time(parts[1].split()[0])
-
-
-def _parse_subtitle_time(value: str) -> float | None:
-    match = re.search(r"(?:(\d+):)?(\d+):(\d+(?:[\.,]\d+)?)", value.strip())
-    if not match:
-        return None
-    hours = int(match.group(1) or 0)
-    minutes = int(match.group(2))
-    seconds = float(match.group(3).replace(",", "."))
-    return hours * 3600 + minutes * 60 + seconds
-
-
-def _strip_subtitle_markup(value: str) -> str:
-    without_tags = re.sub(r"<[^>]+>", "", value)
-    return unescape(without_tags).strip()
-
-
-async def _run_ytdlp_info(downloader: Any, video_url: str) -> dict[str, Any]:
-    return await asyncio.wait_for(
-        asyncio.to_thread(downloader.extract_info, video_url, False),
-        timeout=YTDLP_TIMEOUT_SECONDS,
+    return await _insert_video_analysis(
+        transcript=transcript,
+        segments=[],
+        raw={"metadataOnly": True, "subtitleAnalysisDisabled": True},
+        source="youtube_metadata",
+        video_url=video_url,
+        youtube_video_id=youtube_video_id,
+        influencer_video_id=influencer_video_id,
+        title=metadata_title or title,
+        source_filename=None,
+        content_type="application/json",
     )
-
-
-def _set_ytdlp_cookiefile_option(options: dict[str, Any], temp_dir: str) -> None:
-    runtime_cookie_file = _prepare_runtime_cookie_file(temp_dir)
-    if not runtime_cookie_file:
-        return
-    options["cookiefile"] = runtime_cookie_file
-
-
-def _prepare_runtime_cookie_file(temp_dir: str) -> str | None:
-    settings = get_settings()
-    cookie_file = settings.youtube_cookies_file
-    if not cookie_file:
-        return None
-
-    source = Path(cookie_file)
-    source_label = _masked_path(source)
-    try:
-        if not source.is_file():
-            logger.warning("YouTube cookies source is configured but not readable as a file: %s", source_label)
-            return None
-
-        runtime_path = _runtime_cookie_path(temp_dir, settings.youtube_cookies_runtime_file)
-        runtime_path.parent.mkdir(parents=True, exist_ok=True)
-        with source.open("rb") as source_handle:
-            fd = os.open(str(runtime_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "wb") as runtime_handle:
-                shutil.copyfileobj(source_handle, runtime_handle)
-        try:
-            runtime_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            logger.debug("Could not chmod YouTube runtime cookies file; continuing with platform defaults.")
-        logger.debug(
-            "Prepared YouTube runtime cookies file sourceReadable=%s runtimeWritable=%s",
-            True,
-            _is_writable_file(runtime_path),
-        )
-        return str(runtime_path)
-    except OSError as error:
-        logger.warning(
-            "Failed to prepare writable YouTube runtime cookies file source=%s reason=%s",
-            source_label,
-            error.__class__.__name__,
-        )
-        return None
-
-
-def _runtime_cookie_path(temp_dir: str, configured_runtime_path: str | None) -> Path:
-    if not configured_runtime_path:
-        return Path(temp_dir) / "youtube-cookies.txt"
-
-    configured = Path(configured_runtime_path)
-    configured_text = str(configured)
-    if configured_text.endswith(("/", "\\")) or configured.suffix == "":
-        runtime_dir = configured
-        filename = "youtube-cookies.txt"
-    else:
-        runtime_dir = configured.parent
-        filename = configured.name
-    stem = Path(filename).stem or "youtube-cookies"
-    suffix = Path(filename).suffix or ".txt"
-    return runtime_dir / f"{stem}-{uuid4().hex}{suffix}"
-
-
-def _is_writable_file(path: Path) -> bool:
-    return path.is_file() and os.access(path, os.W_OK)
-
-
-def _masked_path(path: Path) -> str:
-    name = path.name or "configured-file"
-    parent = path.parent.name
-    return f".../{parent}/{name}" if parent else f".../{name}"
-
-
-def _raise_youtube_extraction_error(error: Exception) -> None:
-    error_message = str(error)
-    normalized_message = error_message.lower()
-    if isinstance(error, asyncio.TimeoutError):
-        raise BackendApiError(
-            "YouTube analysis timed out while fetching subtitles.",
-            504,
-            "YOUTUBE_ANALYSIS_TIMEOUT",
-        ) from error
-    if _looks_like_cookie_file_runtime_error(normalized_message):
-        raise BackendApiError(
-            f"YouTube cookies could not be prepared for analysis. {_youtube_cookie_status_message()}",
-            409,
-            "YOUTUBE_COOKIE_FILE_UNAVAILABLE",
-        ) from error
-    if any(marker in normalized_message for marker in YOUTUBE_COOKIE_REQUIRED_MARKERS):
-        raise BackendApiError(
-            f"YouTube requires a signed-in cookies file for this video. {_youtube_cookie_status_message()}",
-            409,
-            "YOUTUBE_REQUIRES_COOKIES",
-        ) from error
-    if any(marker in normalized_message for marker in YOUTUBE_UNAVAILABLE_FOR_ANALYSIS_MARKERS):
-        raise BackendApiError(
-            "This YouTube video is not currently available for transcript analysis.",
-            409,
-            "YOUTUBE_UNAVAILABLE_FOR_ANALYSIS",
-        ) from error
-    raise BackendApiError(
-        f"YouTube subtitle extraction failed: {_safe_ytdlp_error_message(error_message)}",
-        502,
-        "YOUTUBE_SUBTITLE_EXTRACTION_FAILED",
-    ) from error
-
-
-def _looks_like_cookie_file_runtime_error(error_message: str) -> bool:
-    if "read-only file system" in error_message or "[errno 30]" in error_message:
-        return "cookie" in error_message or "cookies" in error_message or "/etc/secrets" in error_message
-    if "permission denied" in error_message:
-        return "cookie" in error_message or "cookies" in error_message
-    return False
-
-
-def _safe_ytdlp_error_message(error_message: str) -> str:
-    sanitized = re.sub(r"(/[A-Za-z0-9._-]+)+/youtube-cookies\.txt", ".../youtube-cookies.txt", error_message)
-    sanitized = re.sub(r"([A-Za-z]:\\(?:[^\\/:*?\"<>|\r\n]+\\)*youtube-cookies\.txt)", r"...\\youtube-cookies.txt", sanitized)
-    return sanitized[:500]
-
-
-def _youtube_cookie_status_message() -> str:
-    cookie_file = get_settings().youtube_cookies_file
-    if not cookie_file:
-        return "YOUTUBE_COOKIES_FILE/YOUTUBE_COOKIES_PATH is not configured."
-    if Path(cookie_file).is_file():
-        return "A cookies source is configured and readable; a writable runtime copy will be used."
-    return "A cookies source is configured but the file is not readable in the backend runtime."
 
 
 async def generate_storyboard_from_analysis(
@@ -611,7 +300,7 @@ async def generate_storyboard_from_analysis(
         [
             "You are Be-Celeb's Korean YouTube storyboard strategist.",
             KOREAN_ONLY_OUTPUT_INSTRUCTION,
-            "Use the transcript and timestamp segments to create an improved storyboard.",
+            "Use the available transcript, timestamp segments, or metadata context to create an improved storyboard.",
             "Return valid JSON only.",
             "Required JSON schema:",
             json.dumps(schema, ensure_ascii=False, indent=2),

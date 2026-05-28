@@ -42,15 +42,21 @@ class Settings(BaseSettings):
     local_llm_model: str = "local-model"
     admin_secret: str | None = None
     cron_secret: str | None = None
-    video_analysis_max_per_collection: int = 100
-    youtube_cookies_file: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("YOUTUBE_COOKIES_FILE", "YOUTUBE_COOKIES_PATH"),
-    )
-    youtube_cookies_runtime_file: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("YOUTUBE_COOKIES_RUNTIME_FILE", "YOUTUBE_COOKIES_RUNTIME_PATH"),
-    )
+    video_analysis_max_per_collection: int = 0
+    daily_collection_concurrency: int = 2
+    daily_collection_channel_limit: int = 20
+    daily_collection_videos_per_channel: int = 8
+    daily_collection_time_budget_seconds: int = 50
+    daily_collection_channel_timeout_seconds: int = 45
+    daily_collection_lock_ttl_minutes: int = 30
+    cleanup_lock_ttl_minutes: int = 30
+    cleanup_batch_size: int = 200
+    cleanup_job_logs_retention_days: int = 30
+    cleanup_admin_audit_retention_days: int = 180
+    cleanup_influencer_videos_retention_days: int = 180
+    cleanup_video_analysis_retention_days: int = 30
+    cleanup_recommendation_options_retention_days: int = 30
+    cleanup_growth_snapshots_retention_days: int = 400
     resend_api_key: str | None = None
     resend_from_email: str = "no-reply@be-celeb.org"
 

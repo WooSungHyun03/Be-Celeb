@@ -9,6 +9,7 @@ Be-Celeb의 카테고리별 인플루언서 영상 수집은 YouTube only로 동
 이번 구조는 다음을 추가합니다.
 
 - `POST /api/cron/collect-daily-videos`
+- `POST /api/cron/cleanup-old-data`
 - GitHub Actions scheduled workflow: `.github/workflows/collect-daily-videos.yml`
 - Supabase migration: `supabase/migrations/20260514000000_daily_youtube_collection.sql`
 - collection log table: `collection_logs`
@@ -123,6 +124,8 @@ DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect
 DAILY_NAVER_TRENDS_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-naver-trends
 DAILY_SHOP_PRODUCTS_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-shop-products
 DAILY_GROWTH_REPORT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-growth-report
+# 선택: 없으면 DAILY_COLLECT_ENDPOINT origin에서 /api/cron/cleanup-old-data를 추론
+DAILY_CLEANUP_ENDPOINT=https://your-render-backend.onrender.com/api/cron/cleanup-old-data
 CRON_SECRET=your-secret
 ```
 
@@ -133,6 +136,8 @@ Vercel Frontend의 `/api` route는 원칙적으로 호출하지 않습니다. �
 `curl: (28) Operation timed out after 60002 milliseconds with 0 bytes received`가 나오면 URL은 맞지만 backend의 YouTube collector가 60초 안에 응답을 시작하지 못한 것이다. active influencer channel 수가 많거나 YouTube/Supabase 응답이 느리면 정상적으로 60초를 넘을 수 있다. 워크플로는 YouTube 수집 step을 `--max-time 600`으로 기다리며, backend는 채널을 제한 병렬 처리해 전체 소요 시간을 줄인다. POST collector는 중복 수집을 피하기 위해 curl retry를 사용하지 않는다.
 
 Growth report daily collector는 `DAILY_GROWTH_REPORT_ENDPOINT`로 `POST /api/cron/collect-growth-report`를 호출한다. 이 endpoint는 `user_channel_settings`에 저장된 모든 회원 채널의 채널/영상 스냅샷을 저장한다.
+
+DB cleanup은 같은 workflow에서 `POST /api/cron/cleanup-old-data`를 호출한다. `DAILY_CLEANUP_ENDPOINT` secret이 없으면 `DAILY_COLLECT_ENDPOINT`의 backend origin을 재사용한다. cleanup은 batch 단위로 오래된 collector/job 로그, metadata-only 분석 결과, 오래된 인플루언서 영상, 오래된 growth snapshot을 정리하고 사용자 추천/즐겨찾기/제작보드 데이터는 직접 삭제하지 않는다.
 
 ## 수동 테스트
 

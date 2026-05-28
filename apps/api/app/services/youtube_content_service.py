@@ -1,6 +1,7 @@
 # Provides the Render API implementation consumed by the Vercel frontend.
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections import Counter, defaultdict
@@ -41,6 +42,8 @@ UTC = timezone.utc
 TOP_KEYWORD_COUNT = 10
 SERIES_KEYWORD_COUNT = 5
 POPULAR_VIDEO_TOP_LIMIT = 3
+YOUTUBE_API_RETRY_ATTEMPTS = 3
+YOUTUBE_API_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
 CREATOR_CATEGORIES: list[CreatorCategoryName] = [
     "게임",
@@ -164,20 +167,45 @@ async def _youtube_fetch(path: str, params: dict[str, Any]) -> dict[str, Any]:
     query = {key: str(value) for key, value in params.items() if value is not None}
     query["key"] = settings.youtube_api_key
 
+    last_error: Exception | None = None
     async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get(f"{YOUTUBE_API_BASE_URL}/{path}", params=query)
+        for attempt in range(YOUTUBE_API_RETRY_ATTEMPTS):
+            try:
+                response = await client.get(f"{YOUTUBE_API_BASE_URL}/{path}", params=query)
+            except (httpx.TimeoutException, httpx.TransportError) as error:
+                last_error = error
+                if attempt < YOUTUBE_API_RETRY_ATTEMPTS - 1:
+                    await asyncio.sleep(0.5 * (2**attempt))
+                    continue
+                raise BackendApiError(
+                    "YouTube API request timed out or failed while collecting metadata.",
+                    504,
+                    "YOUTUBE_API_TIMEOUT",
+                ) from error
 
-    payload = response.json() if response.content else {}
+            try:
+                payload = response.json() if response.content else {}
+            except ValueError:
+                payload = {}
+            if response.status_code in YOUTUBE_API_RETRY_STATUS_CODES and attempt < YOUTUBE_API_RETRY_ATTEMPTS - 1:
+                await asyncio.sleep(0.5 * (2**attempt))
+                continue
 
-    if response.status_code >= 400:
-        message = payload.get("error", {}).get("message") if isinstance(payload, dict) else None
-        raise BackendApiError(
-            message or f"YouTube API request failed with status {response.status_code}.",
-            502 if response.status_code >= 500 else response.status_code,
-            "YOUTUBE_API_ERROR",
-        )
+            if response.status_code >= 400:
+                message = payload.get("error", {}).get("message") if isinstance(payload, dict) else None
+                raise BackendApiError(
+                    message or f"YouTube API request failed with status {response.status_code}.",
+                    502 if response.status_code >= 500 else response.status_code,
+                    "YOUTUBE_API_ERROR",
+                )
 
-    return payload if isinstance(payload, dict) else {}
+            return payload if isinstance(payload, dict) else {}
+
+    raise BackendApiError(
+        f"YouTube API request failed after retries: {last_error.__class__.__name__ if last_error else 'unknown'}",
+        502,
+        "YOUTUBE_API_ERROR",
+    )
 
 
 def _normalize_channel_input(value: str) -> str:
@@ -405,8 +433,8 @@ async def _get_recent_upload_video_ids(uploads_playlist_id: str, max_results: in
     return video_ids
 
 
-async def _get_recent_videos_for_channel(channel: YouTubeChannelAnalysis) -> list[YouTubeVideoAnalysis]:
-    video_ids = await _get_recent_upload_video_ids(channel.uploadsPlaylistId, 12)
+async def _get_recent_videos_for_channel(channel: YouTubeChannelAnalysis, max_results: int = 12) -> list[YouTubeVideoAnalysis]:
+    video_ids = await _get_recent_upload_video_ids(channel.uploadsPlaylistId, max_results)
     videos = await _get_video_details(video_ids)
     return sorted(videos, key=lambda video: video.publishedAt, reverse=True)
 

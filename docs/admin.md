@@ -36,9 +36,6 @@ Render Backend:
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 YOUTUBE_API_KEY=
-YOUTUBE_COOKIES_FILE=/etc/secrets/youtube-cookies.txt
-# 선택: 기본값은 요청별 temp directory. 지정 시 반드시 /tmp 같은 writable 경로를 사용
-YOUTUBE_COOKIES_RUNTIME_PATH=/tmp/youtube-cookies.txt
 NAVER_CLIENT_ID=
 NAVER_CLIENT_SECRET=
 NAVER_SHOPPING_CLIENT_ID=
@@ -102,6 +99,7 @@ GitHub Actions 또는 Render Cron은 기존 `CRON_SECRET` 기반 수집 endpoint
 - `POST /api/cron/collect-naver-trends`
 - `POST /api/cron/collect-shop-products`
 - `POST /api/cron/collect-growth-report`
+- `POST /api/cron/cleanup-old-data`
 
 `creator_shop_keywords` 관리 UI는 아직 admin에 붙이지 않았다. 운영자가 keyword를 자주 바꾸는 단계가 되면 장비 섹션 기준 `/api/admin/shop-keywords` CRUD와 admin 섹션을 추가한다.
 
@@ -115,16 +113,30 @@ Production board는 직접 콘텐츠 생성과 즐겨찾기/추천 전환을 모
 
 Admin의 `시스템` 섹션에서 `Naver Shopping API 테스트`를 실행하면 secret 값을 노출하지 않고 status code, errorCode, credential source를 확인할 수 있다.
 
-## YouTube 영상 분석 cookie 운영
+## YouTube 영상 분석 운영
 
-YouTube 영상 분석은 공개 자막 또는 자동 자막만 조회한다. Render 메모리 사용량을 줄이기 위해 YouTube 오디오 다운로드, 변환, Whisper 전사는 비활성화되어 있다. 일부 자막 조회는 로그인 cookie가 필요할 수 있다.
+YouTube 영상 분석은 Render 메모리 사용량을 줄이기 위해 `yt-dlp`, YouTube 자막 조회, cookie 기반 자막 접근, 오디오 다운로드, 변환, Whisper 전사를 모두 사용하지 않는다. 새 분석 요청은 YouTube Data API로 이미 수집된 제목/영상 ID 같은 메타데이터 기반 `youtube_metadata` 분석 레코드만 생성한다.
 
-- `YOUTUBE_COOKIES_FILE` 또는 `YOUTUBE_COOKIES_PATH`: Render secret file 등 원본 cookie 경로. 이 파일은 읽기 전용 source로만 사용한다.
-- `YOUTUBE_COOKIES_RUNTIME_PATH`: 선택 값. 지정하지 않으면 요청별 temp directory에 writable copy를 만든다. 지정한다면 `/tmp` 같은 writable 경로만 사용한다.
-- `/etc/secrets/youtube-cookies.txt` 같은 secret mount 경로는 read-only일 수 있으므로 `yt-dlp`에 직접 전달하지 않는다.
-- cookie 내용과 전체 경로는 로그에 남기지 않는다.
+- `/api/video-analysis/transcribe` 계약은 유지하지만, `youtubeVideoId` 요청은 metadata-only 분석으로 저장된다.
+- `videoUrl` 업로드/음성 분석 요청은 `SUBTITLE_ANALYSIS_DISABLED`로 거절된다.
+- daily collector의 `video_analysis_max_per_collection` 기본값은 `0`이다. 운영에서 값이 0이면 collector는 영상 메타데이터 수집만 수행하고 분석 레코드는 만들지 않는다.
 
-분석 skip 원인은 `YOUTUBE_REQUIRES_COOKIES`, `YOUTUBE_COOKIE_FILE_UNAVAILABLE`, `YOUTUBE_UNAVAILABLE_FOR_ANALYSIS`, `YOUTUBE_AUDIO_ANALYSIS_DISABLED`처럼 코드별로 집계된다. `video_analysis_max_per_collection` 초과로 인한 limit skip은 cookie/unavailable skip과 별도로 집계된다.
+분석 skip 원인은 `video_analysis_max_per_collection` 초과 같은 정책 기반 skip과 일반 실패로만 집계한다. 자막/cookie/audio 관련 skip code는 더 이상 생성하지 않는다.
+
+## DB retention / cleanup
+
+`POST /api/cron/cleanup-old-data`는 `CRON_SECRET` 검증 후 오래된 운영 데이터를 batch 단위로 정리한다. 실행 상태는 `collection_logs`에 `job_name=cleanup-old-data`로 남기며, 최근 running 로그가 있으면 중복 실행을 건너뛴다.
+
+기본 retention 정책:
+
+- `collection_logs`, `naver_trend_collection_logs`, `creator_shop_collection_logs`: 30일 초과, running 제외
+- `admin_audit_logs`: 180일 초과
+- `recommendation_options`: 30일 초과
+- `video_analysis`: 30일 초과, `user_id is null`이고 `analysis_result.source = youtube_metadata`인 자동 metadata-only 결과만
+- `influencer_videos`: `published_at` 180일 초과
+- `video_growth_snapshots`: `collected_at` 400일 초과
+
+사용자가 직접 조회하는 `content_recommendations`, `favorites`, `production_board_items`, `calendar_events`, `user_channel_analyses`는 자동 cleanup에서 직접 삭제하지 않는다.
 
 ## 위험 작업
 

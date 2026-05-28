@@ -89,17 +89,24 @@ class AdminCollectionSummary(BaseModel):
     windowStart: str
     windowEnd: str
     categoriesChecked: int
+    channelsTotal: int = 0
     channelsChecked: int
+    channelsSkippedByBatchLimit: int = 0
+    channelsSkippedByTimeBudget: int = 0
     videosFoundLast24h: int
     videosUpserted: int
     videosAnalyzed: int = 0
     videosAnalysisSkipped: int = 0
     videosAnalysisSkippedByLimit: int = 0
     videosAnalysisSkippedByYoutube: int = 0
+    videoAnalysisErrorCount: int = 0
     videoAnalysisSkipReasons: dict[str, int] = Field(default_factory=dict)
     videoAnalysisSkips: list[dict[str, Any]] = Field(default_factory=list)
     videoAnalysisErrors: list[dict[str, Any]] = Field(default_factory=list)
     errors: list[dict[str, Any]] = Field(default_factory=list)
+    durationSeconds: float | None = None
+    memory: dict[str, Any] = Field(default_factory=dict)
+    jobSkippedReason: str | None = None
 
 
 class AdminSystemStatus(BaseModel):

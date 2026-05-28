@@ -394,7 +394,7 @@ async def _safe_video_analysis_context(
             return await get_video_analysis_prompt_context(video_analysis_id, user_id)
         return await get_video_analysis_context_for_youtube_ids(youtube_video_ids)
     except Exception as error:
-        logger.warning("Skipping optional video transcript context: %s", error)
+        logger.warning("Skipping optional video analysis context: %s", error)
         return None
 
 
@@ -580,14 +580,14 @@ async def create_single_content_recommendation(
             "Required response contract:",
             "Return valid JSON only. The root object must contain recommendation.",
             KOREAN_ONLY_OUTPUT_INSTRUCTION,
-            "If video transcript context is provided, use it to improve the hook, scene composition, tone analysis, caption style, hashtags, and flow summary.",
+            "If video analysis context is provided, use it to improve the hook, scene composition, tone analysis, caption style, hashtags, and flow summary.",
             "JSON schema:",
             json.dumps(dynamic_schema, ensure_ascii=False, indent=2),
             *(_option_instructions(selected_options)),
         ]
     )
-    transcript_context = f"\n\nVideo transcript context:\n{video_analysis_context}" if video_analysis_context else ""
-    rendered_prompt = f"{render_prompt_template(prompt_template['userPromptTemplate'], values)}{transcript_context}\n\n{prompt_contract}"
+    analysis_context = f"\n\nVideo analysis context:\n{video_analysis_context}" if video_analysis_context else ""
+    rendered_prompt = f"{render_prompt_template(prompt_template['userPromptTemplate'], values)}{analysis_context}\n\n{prompt_contract}"
     raw_text = await call_local_llm(
         rendered_prompt,
         system_prompt=f"{prompt_template['systemPrompt']}\n{KOREAN_ONLY_OUTPUT_INSTRUCTION}",
@@ -712,9 +712,9 @@ async def create_content_plan(
         prompt = "\n\n".join(
             [
                 prompt,
-                "Video transcript context:",
+                "Video analysis context:",
                 video_analysis_context,
-                "Use this transcript to include a stronger first 3-second hook, scene-by-scene composition, tone analysis, caption style suggestions, hashtag recommendations, and a concise flow summary.",
+                "Use this context to include a stronger first 3-second hook, scene-by-scene composition, tone analysis, caption style suggestions, hashtag recommendations, and a concise flow summary.",
             ]
         )
     raw_text = await call_local_llm(prompt, queue_owner_id=user_id, queue_purpose="content_plan")
