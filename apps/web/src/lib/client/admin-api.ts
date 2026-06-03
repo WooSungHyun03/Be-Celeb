@@ -14,6 +14,8 @@ import type {
   AdminRecommendationOption,
   AdminSystemStatus,
   AdminTestResult,
+  AdminYoutubeBackfillPayload,
+  AdminYoutubeBackfillSummary,
   AdminVideo,
 } from "@/types/admin";
 
@@ -201,6 +203,13 @@ export function deleteVideo(videoId: string) {
 export function collectNow() {
   return adminData<AdminCollectionSummary>("/api/admin/collect-now", {
     method: "POST",
+  });
+}
+
+export function backfillYoutube(payload: AdminYoutubeBackfillPayload = {}) {
+  return adminData<AdminYoutubeBackfillSummary>("/api/admin/backfill-youtube", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

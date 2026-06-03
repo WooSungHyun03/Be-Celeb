@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { collectNow, listCollectionLogs } from "@/lib/api/admin";
-import type { AdminCollectionLog, AdminCollectionSummary } from "@/types/admin";
+import { backfillYoutube, collectNow, listCollectionLogs } from "@/lib/api/admin";
+import type { AdminCollectionLog, AdminCollectionSummary, AdminYoutubeBackfillSummary } from "@/types/admin";
 
 type CollectionManagerProps = {
   logs: AdminCollectionLog[];
@@ -22,6 +22,8 @@ type CollectionProgress = {
   videosUpserted: number;
   videosAnalyzed: number;
   videosSkipped: number;
+  videosDeferred: number;
+  pendingVideoAnalysisCount: number;
   errors: number;
   percent: number;
   updatedAt: string;
@@ -31,7 +33,7 @@ const collectionSteps = [
   { title: "채널 목록 확인", stage: "preparing" },
   { title: "최근 영상 수집", stage: "channel_collection" },
   { title: "영상 데이터 저장", stage: "channel_collection" },
-  { title: "자막 분석", stage: "channel_collection" },
+  { title: "메타데이터 분석", stage: "channel_collection" },
   { title: "수집 결과 정리", stage: "finalizing" },
 ];
 
@@ -58,6 +60,8 @@ function readProgress(summary: Record<string, unknown> | null | undefined): Coll
     videosUpserted: numberFrom(value.videosUpserted),
     videosAnalyzed: numberFrom(value.videosAnalyzed),
     videosSkipped: numberFrom(value.videosSkipped),
+    videosDeferred: numberFrom(value.videosDeferred),
+    pendingVideoAnalysisCount: numberFrom(value.pendingVideoAnalysisCount),
     errors: numberFrom(value.errors),
     percent: Math.max(0, Math.min(100, numberFrom(value.percent))),
     updatedAt: stringFrom(value.updatedAt),
@@ -67,8 +71,13 @@ function readProgress(summary: Record<string, unknown> | null | undefined): Coll
 export function CollectionManager({ logs, onChanged, onError }: CollectionManagerProps) {
   const [result, setResult] = useState<AdminCollectionSummary | null>(null);
   const [isCollecting, setIsCollecting] = useState(false);
+  const [isBackfilling, setIsBackfilling] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [liveProgress, setLiveProgress] = useState<CollectionProgress | null>(null);
+  const [backfillStartDate, setBackfillStartDate] = useState("");
+  const [backfillEndDate, setBackfillEndDate] = useState("");
+  const [backfillResume, setBackfillResume] = useState(true);
+  const [backfillResult, setBackfillResult] = useState<AdminYoutubeBackfillSummary | null>(null);
 
   const progress = useMemo(() => {
     if (result) {
@@ -151,6 +160,25 @@ export function CollectionManager({ logs, onChanged, onError }: CollectionManage
     }
   }
 
+  async function handleBackfill(dryRun: boolean) {
+    setIsBackfilling(true);
+    setBackfillResult(null);
+    try {
+      const data = await backfillYoutube({
+        startDate: backfillStartDate || undefined,
+        endDate: backfillEndDate || undefined,
+        dryRun,
+        resume: backfillResume,
+      });
+      setBackfillResult(data);
+      await onChanged();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "YouTube backfill을 실행하지 못했습니다.");
+    } finally {
+      setIsBackfilling(false);
+    }
+  }
+
   const progressTitle = result ? "수집 완료" : collectionSteps[displayStepIndex].title;
   const progressMessage = result ? "최신 수집 결과가 반영되었습니다." : liveProgress?.message ?? "수집 작업을 실행하고 있습니다.";
 
@@ -182,12 +210,13 @@ export function CollectionManager({ logs, onChanged, onError }: CollectionManage
               <div className="h-full rounded-full bg-violet-600 transition-all duration-700" style={{ width: `${progress}%` }} />
             </div>
             {liveProgress ? (
-              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-5">
+              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-6">
                 <span className="rounded-md bg-white px-3 py-2 text-violet-900">채널 {liveProgress.channelsDone}/{liveProgress.channelsTotal}</span>
                 <span className="rounded-md bg-white px-3 py-2 text-violet-900">발견 {liveProgress.videosFound}</span>
                 <span className="rounded-md bg-white px-3 py-2 text-violet-900">저장 {liveProgress.videosUpserted}</span>
                 <span className="rounded-md bg-white px-3 py-2 text-violet-900">분석 {liveProgress.videosAnalyzed}</span>
-                <span className="rounded-md bg-white px-3 py-2 text-violet-900">스킵 {liveProgress.videosSkipped}</span>
+                <span className="rounded-md bg-white px-3 py-2 text-violet-900">보류 {liveProgress.videosDeferred}</span>
+                <span className="rounded-md bg-white px-3 py-2 text-violet-900">정책 스킵 {liveProgress.videosSkipped}</span>
               </div>
             ) : null}
             <div className="mt-4 grid gap-2 sm:grid-cols-5">
@@ -215,16 +244,74 @@ export function CollectionManager({ logs, onChanged, onError }: CollectionManage
         ) : null}
 
         {result ? (
-          <div className="mt-5 grid gap-3 sm:grid-cols-4 xl:grid-cols-7">
+          <div className="mt-5 grid gap-3 sm:grid-cols-4 xl:grid-cols-8">
             <Badge tone="info">channels {result.channelsChecked}</Badge>
             <Badge tone="info">found {result.videosFoundLast24h}</Badge>
             <Badge tone="brand">upserted {result.videosUpserted}</Badge>
             <Badge tone="brand">analyzed {result.videosAnalyzed}</Badge>
-            <Badge tone={result.videosAnalysisSkipped ? "warning" : "brand"}>skipped {result.videosAnalysisSkipped}</Badge>
+            <Badge tone="info">already {result.videosAnalysisAlreadyPresent}</Badge>
+            <Badge tone={result.videosAnalysisDeferred ? "warning" : "brand"}>deferred {result.videosAnalysisDeferred}</Badge>
+            <Badge tone={result.pendingVideoAnalysisCount ? "warning" : "brand"}>pending {result.pendingVideoAnalysisCount}</Badge>
+            <Badge tone={result.videosAnalysisSkipped ? "warning" : "brand"}>policy skipped {result.videosAnalysisSkipped}</Badge>
             <Badge tone={result.videoAnalysisErrors.length ? "warning" : "brand"}>analysis errors {result.videoAnalysisErrors.length}</Badge>
             <Badge tone={result.errors.length ? "warning" : "brand"}>errors {result.errors.length}</Badge>
           </div>
         ) : null}
+
+        <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-slate-600">
+                시작일
+                <input
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-violet-400"
+                  onChange={(event) => setBackfillStartDate(event.target.value)}
+                  type="date"
+                  value={backfillStartDate}
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                종료일
+                <input
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-violet-400"
+                  onChange={(event) => setBackfillEndDate(event.target.value)}
+                  type="date"
+                  value={backfillEndDate}
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-600 sm:col-span-2">
+                <input
+                  checked={backfillResume}
+                  className="h-4 w-4 rounded border-slate-300 text-violet-600"
+                  onChange={(event) => setBackfillResume(event.target.checked)}
+                  type="checkbox"
+                />
+                이전 partial checkpoint에서 이어서 실행
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={isBackfilling} onClick={() => void handleBackfill(true)} variant="secondary">
+                {isBackfilling ? "실행 중" : "Dry-run"}
+              </Button>
+              <Button disabled={isBackfilling} onClick={() => void handleBackfill(false)}>
+                {isBackfilling ? "실행 중" : "30일 Backfill 실행"}
+              </Button>
+            </div>
+          </div>
+
+          {backfillResult ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-4 xl:grid-cols-8">
+              <Badge tone={backfillResult.status === "completed" ? "brand" : "warning"}>{backfillResult.status}</Badge>
+              <Badge tone="info">channels {backfillResult.channelsProcessed}/{backfillResult.channelsTotal}</Badge>
+              <Badge tone="info">pages {backfillResult.pagesScanned}</Badge>
+              <Badge tone="info">matched {backfillResult.videosMatchedWindow}</Badge>
+              <Badge tone="brand">collected {backfillResult.collectedVideos}</Badge>
+              <Badge tone={backfillResult.skippedDuplicates ? "warning" : "brand"}>duplicates {backfillResult.skippedDuplicates}</Badge>
+              <Badge tone={backfillResult.pendingVideoAnalysisCount ? "warning" : "brand"}>pending {backfillResult.pendingVideoAnalysisCount}</Badge>
+              <Badge tone={backfillResult.failedItems.length ? "warning" : "brand"}>failed {backfillResult.failedItems.length}</Badge>
+            </div>
+          ) : null}
+        </div>
       </Card>
 
       <Card title="collection_logs">

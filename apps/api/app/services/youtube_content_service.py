@@ -433,6 +433,42 @@ async def _get_recent_upload_video_ids(uploads_playlist_id: str, max_results: in
     return video_ids
 
 
+async def get_upload_videos_page(
+    channel: YouTubeChannelAnalysis,
+    *,
+    max_results: int = 50,
+    page_token: str | None = None,
+) -> tuple[list[YouTubeVideoAnalysis], str | None]:
+    payload = await _youtube_fetch(
+        "playlistItems",
+        {
+            "part": "snippet,contentDetails",
+            "playlistId": channel.uploadsPlaylistId,
+            "maxResults": max(1, min(max_results, 50)),
+            "pageToken": page_token,
+        },
+    )
+    items = payload.get("items")
+    video_ids: list[str] = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            content_details = item.get("contentDetails") if isinstance(item.get("contentDetails"), dict) else {}
+            snippet = item.get("snippet") if isinstance(item.get("snippet"), dict) else {}
+            resource = snippet.get("resourceId") if isinstance(snippet.get("resourceId"), dict) else {}
+            video_id = content_details.get("videoId") or resource.get("videoId")
+            if isinstance(video_id, str):
+                video_ids.append(video_id)
+
+    videos = await _get_video_details(video_ids)
+    next_page_token = payload.get("nextPageToken")
+    return (
+        sorted(videos, key=lambda video: video.publishedAt, reverse=True),
+        next_page_token if isinstance(next_page_token, str) and next_page_token else None,
+    )
+
+
 async def _get_recent_videos_for_channel(channel: YouTubeChannelAnalysis, max_results: int = 12) -> list[YouTubeVideoAnalysis]:
     video_ids = await _get_recent_upload_video_ids(channel.uploadsPlaylistId, max_results)
     videos = await _get_video_details(video_ids)

@@ -86,14 +86,57 @@ export type AdminCollectionSummary = {
   videosFoundLast24h: number;
   videosUpserted: number;
   videosAnalyzed: number;
+  videosAnalysisAlreadyPresent: number;
+  videosAnalysisDeferred: number;
   videosAnalysisSkipped: number;
   videosAnalysisSkippedByLimit: number;
   videosAnalysisSkippedByYoutube: number;
+  pendingVideoAnalysisCount: number;
   videoAnalysisErrorCount: number;
   videoAnalysisSkipReasons: Record<string, number>;
   videoAnalysisSkips: Array<Record<string, unknown>>;
   videoAnalysisErrors: Array<Record<string, unknown>>;
   errors: Array<Record<string, unknown>>;
+  durationSeconds: number | null;
+  memory: Record<string, unknown>;
+  jobSkippedReason: string | null;
+};
+
+export type AdminYoutubeBackfillPayload = {
+  startDate?: string;
+  endDate?: string;
+  dryRun?: boolean;
+  resume?: boolean;
+  channelLimit?: number;
+  concurrency?: number;
+  pagesPerChannel?: number;
+  timeBudgetSeconds?: number;
+};
+
+export type AdminYoutubeBackfillSummary = {
+  ok: boolean;
+  jobId: string | null;
+  jobType: string;
+  status: string;
+  dryRun: boolean;
+  startedAt: string;
+  finishedAt: string | null;
+  windowStart: string;
+  windowEnd: string;
+  channelsTotal: number;
+  channelsProcessed: number;
+  channelsRemaining: number;
+  pagesScanned: number;
+  videosFound: number;
+  videosMatchedWindow: number;
+  collectedVideos: number;
+  skippedDuplicates: number;
+  videosAnalyzed: number;
+  videosAnalysisAlreadyPresent: number;
+  videosAnalysisDeferred: number;
+  pendingVideoAnalysisCount: number;
+  failedItems: Array<Record<string, unknown>>;
+  checkpoint: Record<string, unknown>;
   durationSeconds: number | null;
   memory: Record<string, unknown>;
   jobSkippedReason: string | null;

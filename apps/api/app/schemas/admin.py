@@ -96,14 +96,59 @@ class AdminCollectionSummary(BaseModel):
     videosFoundLast24h: int
     videosUpserted: int
     videosAnalyzed: int = 0
+    videosAnalysisAlreadyPresent: int = 0
+    videosAnalysisDeferred: int = 0
     videosAnalysisSkipped: int = 0
     videosAnalysisSkippedByLimit: int = 0
     videosAnalysisSkippedByYoutube: int = 0
+    pendingVideoAnalysisCount: int = 0
     videoAnalysisErrorCount: int = 0
     videoAnalysisSkipReasons: dict[str, int] = Field(default_factory=dict)
     videoAnalysisSkips: list[dict[str, Any]] = Field(default_factory=list)
     videoAnalysisErrors: list[dict[str, Any]] = Field(default_factory=list)
     errors: list[dict[str, Any]] = Field(default_factory=list)
+    durationSeconds: float | None = None
+    memory: dict[str, Any] = Field(default_factory=dict)
+    jobSkippedReason: str | None = None
+
+
+class AdminYoutubeBackfillPayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    start_date: str | None = Field(default=None, alias="startDate")
+    end_date: str | None = Field(default=None, alias="endDate")
+    dry_run: bool = Field(default=False, alias="dryRun")
+    resume: bool = True
+    channel_limit: int | None = Field(default=None, alias="channelLimit", ge=1, le=50)
+    concurrency: int | None = Field(default=None, ge=1, le=1)
+    pages_per_channel: int | None = Field(default=None, alias="pagesPerChannel", ge=1, le=10)
+    time_budget_seconds: int | None = Field(default=None, alias="timeBudgetSeconds", ge=10, le=180)
+
+
+class AdminYoutubeBackfillSummary(BaseModel):
+    ok: bool = True
+    jobId: str | None = None
+    jobType: str = "youtube-backfill"
+    status: str
+    dryRun: bool = False
+    startedAt: str
+    finishedAt: str | None = None
+    windowStart: str
+    windowEnd: str
+    channelsTotal: int = 0
+    channelsProcessed: int = 0
+    channelsRemaining: int = 0
+    pagesScanned: int = 0
+    videosFound: int = 0
+    videosMatchedWindow: int = 0
+    collectedVideos: int = 0
+    skippedDuplicates: int = 0
+    videosAnalyzed: int = 0
+    videosAnalysisAlreadyPresent: int = 0
+    videosAnalysisDeferred: int = 0
+    pendingVideoAnalysisCount: int = 0
+    failedItems: list[dict[str, Any]] = Field(default_factory=list)
+    checkpoint: dict[str, Any] = Field(default_factory=dict)
     durationSeconds: float | None = None
     memory: dict[str, Any] = Field(default_factory=dict)
     jobSkippedReason: str | None = None

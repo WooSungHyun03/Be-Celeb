@@ -119,9 +119,44 @@ YouTube 영상 분석은 Render 메모리 사용량을 줄이기 위해 `yt-dlp`
 
 - `/api/video-analysis/transcribe` 계약은 유지하지만, `youtubeVideoId` 요청은 metadata-only 분석으로 저장된다.
 - `videoUrl` 업로드/음성 분석 요청은 `SUBTITLE_ANALYSIS_DISABLED`로 거절된다.
-- daily collector의 `video_analysis_max_per_collection` 기본값은 `0`이다. 운영에서 값이 0이면 collector는 영상 메타데이터 수집만 수행하고 분석 레코드는 만들지 않는다.
+- daily collector는 수집한 영상을 metadata-only 방식으로 분석한다. per-run hard limit으로 영상을 skip하지 않으며, 시간 예산이 부족하면 `VIDEO_ANALYSIS_DEFERRED_BY_TIME_BUDGET`로 다음 실행에서 이어서 처리한다.
+- `daily_collection_analysis_batch_size`는 이전 실행에서 남은 미분석 영상 pending 후보를 한 번에 처리할 최대 배치 크기다. 기본값은 50이며, 전체 병렬 처리가 아니라 순차 metadata 분석에만 사용한다.
 
-분석 skip 원인은 `video_analysis_max_per_collection` 초과 같은 정책 기반 skip과 일반 실패로만 집계한다. 자막/cookie/audio 관련 skip code는 더 이상 생성하지 않는다.
+daily collector의 분석 skip 원인은 metadata-only 분석 정책 skip과 일반 실패로만 집계한다. daily collector에서는 자막/cookie/audio 관련 skip code를 생성하지 않는다.
+
+## YouTube backfill
+
+`POST /api/admin/backfill-youtube`는 `ADMIN_SECRET` 인증 후 최근 30일 기준 누락 영상을 backfill한다. `startDate`, `endDate`를 넘기면 최대 31일 범위 안에서 해당 기간을 사용한다. 날짜 비교는 YouTube `publishedAt`을 UTC datetime으로 정규화해 수행한다.
+
+기본 안전 설정:
+
+- active channel 5개 이하만 한 실행에서 처리
+- channel concurrency 1
+- 채널당 uploads playlist 최대 3 page, page당 50개 이하
+- 실행 시간 예산 55초
+- `collection_logs.job_name = youtube-backfill` running lock으로 중복 실행 방지
+
+요청 예시:
+
+```bash
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/admin/backfill-youtube" \
+  -H "Authorization: Bearer $ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"dryRun":true,"resume":true}'
+```
+
+실제 저장 실행:
+
+```bash
+curl -X POST "$NEXT_PUBLIC_API_BASE_URL/api/admin/backfill-youtube" \
+  -H "Authorization: Bearer $ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"startDate":"2026-05-01","endDate":"2026-05-31","resume":true}'
+```
+
+backfill은 `youtube_video_id` 기준 upsert로 중복 insert를 막고 기존 영상은 조회수/좋아요/댓글 같은 metadata를 갱신한다. 실행 시간이 부족하거나 채널당 page 제한에 걸리면 `collection_logs.summary.checkpoint`에 `channelOffset`, `channelId`, `pageToken`을 저장하고 `partial` 상태로 종료한다. 다음 실행에서 `resume=true`이면 같은 checkpoint부터 이어서 처리한다.
+
+저장된 영상은 `influencer_videos`와 `influencer_video_categories`에 반영되므로 trends 인기 영상, 태그/키워드 집계, 추천 시스템의 카테고리별 인플루언서 영상 입력에 기존 흐름으로 포함된다. 분석 레코드가 없는 영상은 pending으로 남고 metadata-only 분석 배치가 처리한다. audio/Whisper/yt-dlp 자막 분석은 backfill에서도 사용하지 않는다.
 
 ## DB retention / cleanup
 
@@ -167,6 +202,7 @@ YouTube 영상 분석은 Render 메모리 사용량을 줄이기 위해 `yt-dlp`
 - `PATCH /api/admin/videos/{video_id}`
 - `DELETE /api/admin/videos/{video_id}`
 - `POST /api/admin/collect-now`
+- `POST /api/admin/backfill-youtube`
 - `GET /api/admin/collection-logs`
 - `GET /api/admin/analyses`
 - `GET /api/admin/recommendations`

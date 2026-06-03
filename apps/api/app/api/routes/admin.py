@@ -24,11 +24,13 @@ from app.schemas.admin import (
     DangerDeleteVideosByCategoryPayload,
     InfluencerChannelPayload,
     InfluencerChannelUpdatePayload,
+    AdminYoutubeBackfillPayload,
     PromptTemplatePayload,
     PromptTemplateUpdatePayload,
     VideoUpdatePayload,
 )
 from app.services.admin_service import (
+    backfill_youtube_videos,
     collect_admin_now,
     danger_delete_all_videos,
     create_admin_category,
@@ -244,6 +246,14 @@ async def delete_video(video_id: str, _: None = AdminAuth) -> ApiResponse[Any] |
 async def collect_now(_: None = AdminAuth) -> ApiResponse[Any] | JSONResponse:
     try:
         return ApiResponse(success=True, data=await collect_admin_now())
+    except Exception as error:
+        return admin_error_response(error)
+
+
+@router.post("/backfill-youtube", response_model=None)
+async def backfill_youtube(payload: AdminYoutubeBackfillPayload, _: None = AdminAuth) -> ApiResponse[Any] | JSONResponse:
+    try:
+        return ApiResponse(success=True, data=await backfill_youtube_videos(payload.model_dump(by_alias=False)))
     except Exception as error:
         return admin_error_response(error)
 

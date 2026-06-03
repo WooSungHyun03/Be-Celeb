@@ -14,12 +14,13 @@ from app.core.errors import BackendApiError, missing_env
 from app.core.logging import get_logger
 from app.domains.shop.service import check_naver_shopping_connection
 from app.domains.video_analysis.service import create_video_analysis_from_youtube_video
-from app.schemas.admin import AdminCollectionSummary, AdminOverview, AdminSystemStatus, AdminTestResult
+from app.schemas.admin import AdminCollectionSummary, AdminOverview, AdminSystemStatus, AdminTestResult, AdminYoutubeBackfillSummary
 from app.services.llm_service import call_local_llm
-from app.services.youtube_service import get_channel_info, get_recent_videos
+from app.services.youtube_service import get_channel_info, get_channel_videos_page, get_recent_videos
 
 UTC = timezone.utc
 DAILY_COLLECTION_JOB_NAME = "collect-daily-videos"
+YOUTUBE_BACKFILL_JOB_NAME = "youtube-backfill"
 DATA_CLEANUP_JOB_NAME = "cleanup-old-data"
 DAILY_COLLECTION_SCHEDULE_TEXT = "Every day 06:00 KST"
 ONE_DAY = timedelta(days=1)
@@ -31,6 +32,13 @@ DAILY_COLLECTION_VIDEOS_PER_CHANNEL = 8
 DAILY_COLLECTION_TIME_BUDGET_SECONDS = 50
 DAILY_COLLECTION_CHANNEL_TIMEOUT_SECONDS = 45
 DAILY_COLLECTION_LOCK_TTL_MINUTES = 30
+DAILY_COLLECTION_ANALYSIS_BATCH_SIZE = 50
+YOUTUBE_BACKFILL_CHANNEL_BATCH_SIZE = 5
+YOUTUBE_BACKFILL_CONCURRENCY = 1
+YOUTUBE_BACKFILL_PAGES_PER_CHANNEL = 3
+YOUTUBE_BACKFILL_TIME_BUDGET_SECONDS = 55
+YOUTUBE_BACKFILL_LOCK_TTL_MINUTES = 30
+YOUTUBE_BACKFILL_MAX_RANGE_DAYS = 31
 COLLECTION_PROGRESS_UPDATE_SECONDS = 5
 COLLECTION_DETAIL_SAMPLE_LIMIT = 20
 CLEANUP_BATCH_SIZE = 200
@@ -118,19 +126,6 @@ def _compact_youtube_raw(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-class _CollectionRuntime:
-    def __init__(self, analysis_limit: int) -> None:
-        self._analysis_remaining = max(0, analysis_limit)
-        self._lock = asyncio.Lock()
-
-    async def claim_analysis_slot(self) -> bool:
-        async with self._lock:
-            if self._analysis_remaining <= 0:
-                return False
-            self._analysis_remaining -= 1
-            return True
-
-
 def _is_video_analysis_skip_error(error: Exception) -> bool:
     return isinstance(error, BackendApiError) and error.code in VIDEO_ANALYSIS_SKIP_CODES
 
@@ -142,6 +137,15 @@ def _video_analysis_skip_detail(error: Exception, video: dict[str, Any]) -> dict
         "title": video.get("title"),
         "code": code,
         "message": str(error),
+    }
+
+
+def _video_analysis_deferred_detail(video: dict[str, Any], code: str = "VIDEO_ANALYSIS_DEFERRED") -> dict[str, Any]:
+    return {
+        "youtubeVideoId": video.get("youtube_video_id"),
+        "title": video.get("title"),
+        "code": code,
+        "message": "Video metadata analysis deferred to the next collector run.",
     }
 
 
@@ -304,6 +308,16 @@ def _in_filter(values: list[str]) -> str:
     return f"in.({','.join(values)})"
 
 
+def _text_in_filter(values: list[str]) -> str:
+    quoted: list[str] = []
+    for value in values:
+        if not value:
+            continue
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        quoted.append(f'"{escaped}"')
+    return f"in.({','.join(quoted)})"
+
+
 def _parse_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
@@ -311,6 +325,33 @@ def _parse_datetime(value: Any) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
     except ValueError:
         return None
+
+
+def _parse_backfill_boundary(value: Any, *, default: datetime, is_end: bool = False) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        return default
+    raw = value.strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+        raw = f"{raw}T23:59:59.999999+00:00" if is_end else f"{raw}T00:00:00+00:00"
+    parsed = _parse_datetime(raw)
+    if parsed is None:
+        raise BackendApiError("startDate/endDate must be ISO-8601 date or datetime strings.", 400, "VALIDATION_ERROR")
+    return parsed
+
+
+def _backfill_window(payload: dict[str, Any]) -> tuple[datetime, datetime]:
+    now = _now()
+    end = _parse_backfill_boundary(payload.get("end_date") or payload.get("endDate"), default=now, is_end=True)
+    start = _parse_backfill_boundary(payload.get("start_date") or payload.get("startDate"), default=end - timedelta(days=30), is_end=False)
+    if start >= end:
+        raise BackendApiError("startDate must be before endDate.", 400, "VALIDATION_ERROR")
+    if (end - start) > timedelta(days=YOUTUBE_BACKFILL_MAX_RANGE_DAYS):
+        raise BackendApiError(
+            f"YouTube backfill range is limited to {YOUTUBE_BACKFILL_MAX_RANGE_DAYS} days per job.",
+            400,
+            "VALIDATION_ERROR",
+        )
+    return start, end
 
 
 def _best_thumbnail_url(thumbnails: Any) -> str | None:
@@ -894,6 +935,20 @@ async def _update_collection_progress(log_id: str | None, progress: dict[str, An
         return
 
 
+async def _update_job_summary(log_id: str | None, summary: dict[str, Any]) -> None:
+    if not log_id:
+        return
+    try:
+        await _patch(
+            "collection_logs",
+            {"summary": summary},
+            {"id": f"eq.{log_id}"},
+            prefer="return=minimal",
+        )
+    except Exception:
+        return
+
+
 def _collection_progress_summary(
     *,
     started_at: str,
@@ -905,6 +960,8 @@ def _collection_progress_summary(
     videos_analyzed: int,
     videos_skipped: int,
     errors_count: int,
+    videos_deferred: int = 0,
+    pending_video_analysis_count: int = 0,
 ) -> dict[str, Any]:
     percent = 100 if channels_total == 0 else min(95, int((channels_done / channels_total) * 95))
     stage = "channel_collection"
@@ -925,6 +982,8 @@ def _collection_progress_summary(
         "videosUpserted": videos_upserted,
         "videosAnalyzed": videos_analyzed,
         "videosSkipped": videos_skipped,
+        "videosDeferred": videos_deferred,
+        "pendingVideoAnalysisCount": pending_video_analysis_count,
         "errors": errors_count,
         "percent": percent,
         "durationSeconds": _duration_seconds(started),
@@ -971,6 +1030,473 @@ async def _sync_video_categories_for_youtube_ids(youtube_video_ids: list[str], c
         logger.warning("Failed to sync video category links after daily collection: %s", error)
 
 
+def _analysis_deadline_reached(deadline: datetime | None) -> bool:
+    return deadline is not None and (deadline - _now()).total_seconds() <= 1.0
+
+
+async def _pending_video_analysis_candidates(batch_size: int) -> list[dict[str, Any]]:
+    safe_batch_size = max(1, min(batch_size, MAX_LIMIT))
+    select_columns = "id,youtube_video_id,title,collected_at,published_at"
+    try:
+        rows = await _get(
+            "influencer_videos",
+            {
+                "select": f"{select_columns},video_analysis!left(id)",
+                "youtube_video_id": "not.is.null",
+                "video_analysis": "is.null",
+                "order": "collected_at.desc.nullslast,published_at.desc",
+            },
+            limit=safe_batch_size,
+        )
+        if isinstance(rows, list):
+            return [
+                {key: value for key, value in row.items() if key != "video_analysis"}
+                for row in rows
+                if isinstance(row, dict) and isinstance(row.get("youtube_video_id"), str)
+            ]
+    except Exception as error:
+        logger.warning("Pending video analysis anti-join query failed; falling back to candidate scan: %s", error)
+
+    scan_limit = max(safe_batch_size, min(1000, safe_batch_size * 10))
+    pending_rows: list[dict[str, Any]] = []
+    offset = 0
+    while offset < scan_limit and len(pending_rows) < safe_batch_size:
+        rows = await _get(
+            "influencer_videos",
+            {
+                "select": select_columns,
+                "youtube_video_id": "not.is.null",
+                "order": "collected_at.desc.nullslast,published_at.desc",
+            },
+            limit=MAX_LIMIT,
+            offset=offset,
+        )
+        candidates = [row for row in rows if isinstance(row, dict) and isinstance(row.get("youtube_video_id"), str)] if isinstance(rows, list) else []
+        if not candidates:
+            break
+
+        youtube_video_ids = []
+        seen: set[str] = set()
+        for row in candidates:
+            youtube_video_id = row.get("youtube_video_id")
+            if isinstance(youtube_video_id, str) and youtube_video_id and youtube_video_id not in seen:
+                seen.add(youtube_video_id)
+                youtube_video_ids.append(youtube_video_id)
+
+        existing_ids: set[str] = set()
+        if youtube_video_ids:
+            try:
+                analysis_rows = await _get(
+                    "video_analysis",
+                    {
+                        "select": "youtube_video_id",
+                        "youtube_video_id": _text_in_filter(youtube_video_ids),
+                    },
+                    limit=len(youtube_video_ids),
+                )
+                if isinstance(analysis_rows, list):
+                    existing_ids = {
+                        row["youtube_video_id"]
+                        for row in analysis_rows
+                        if isinstance(row, dict) and isinstance(row.get("youtube_video_id"), str)
+                    }
+            except Exception as error:
+                logger.warning("Existing video analysis lookup failed; per-item duplicate checks will be used: %s", error)
+
+        for row in candidates:
+            youtube_video_id = row.get("youtube_video_id")
+            if isinstance(youtube_video_id, str) and youtube_video_id not in existing_ids:
+                pending_rows.append(row)
+                if len(pending_rows) >= safe_batch_size:
+                    break
+
+        if len(candidates) < MAX_LIMIT:
+            break
+        offset += len(candidates)
+
+    return pending_rows[:safe_batch_size]
+
+
+async def _analyze_video_rows(video_rows: list[dict[str, Any]], *, deadline: datetime | None = None) -> dict[str, Any]:
+    videos_analyzed = 0
+    videos_analysis_already_present = 0
+    videos_analysis_deferred = 0
+    video_analysis_skipped_by_youtube = 0
+    video_analysis_error_count = 0
+    video_analysis_skips: list[dict[str, Any]] = []
+    video_analysis_errors: list[dict[str, Any]] = []
+    video_analysis_skip_reasons: Counter[str] = Counter()
+
+    for index, video in enumerate(video_rows):
+        if _analysis_deadline_reached(deadline):
+            remaining = len(video_rows) - index
+            videos_analysis_deferred += remaining
+            if remaining > 0:
+                _append_sample(video_analysis_skips, _video_analysis_deferred_detail(video, "VIDEO_ANALYSIS_DEFERRED_BY_TIME_BUDGET"))
+            break
+
+        youtube_video_id = video.get("youtube_video_id")
+        if not isinstance(youtube_video_id, str) or not youtube_video_id:
+            continue
+
+        try:
+            result = await create_video_analysis_from_youtube_video(
+                youtube_video_id,
+                influencer_video_id=video.get("id") if isinstance(video.get("id"), str) else None,
+                title=video.get("title") if isinstance(video.get("title"), str) else None,
+            )
+            if result:
+                videos_analyzed += 1
+            else:
+                videos_analysis_already_present += 1
+        except Exception as error:
+            if _is_video_analysis_skip_error(error):
+                logger.info("Video metadata analysis skipped for youtubeVideoId=%s: %s", youtube_video_id, error)
+                video_analysis_skipped_by_youtube += 1
+                detail = _video_analysis_skip_detail(error, video)
+                video_analysis_skip_reasons[str(detail.get("code") or "UNKNOWN_SKIP_REASON")] += 1
+                _append_sample(video_analysis_skips, detail)
+                continue
+            logger.warning("Video metadata analysis failed for youtubeVideoId=%s: %s", youtube_video_id, error)
+            video_analysis_error_count += 1
+            _append_sample(
+                video_analysis_errors,
+                {
+                    "youtubeVideoId": youtube_video_id,
+                    "title": video.get("title"),
+                    "message": str(error),
+                },
+            )
+
+    return {
+        "videosAnalyzed": videos_analyzed,
+        "videosAnalysisAlreadyPresent": videos_analysis_already_present,
+        "videosAnalysisDeferred": videos_analysis_deferred,
+        "videosAnalysisSkipped": video_analysis_skipped_by_youtube,
+        "videosAnalysisSkippedByLimit": 0,
+        "videosAnalysisSkippedByYoutube": video_analysis_skipped_by_youtube,
+        "videoAnalysisErrorCount": video_analysis_error_count,
+        "videoAnalysisSkipReasons": dict(video_analysis_skip_reasons),
+        "videoAnalysisSkips": video_analysis_skips,
+        "videoAnalysisErrors": video_analysis_errors,
+    }
+
+
+async def _process_pending_video_analyses(batch_size: int, deadline: datetime) -> dict[str, Any]:
+    if _analysis_deadline_reached(deadline):
+        return {
+            "videosAnalyzed": 0,
+            "videosAnalysisAlreadyPresent": 0,
+            "videosAnalysisDeferred": 0,
+            "videosAnalysisSkipped": 0,
+            "videosAnalysisSkippedByLimit": 0,
+            "videosAnalysisSkippedByYoutube": 0,
+            "videoAnalysisErrorCount": 0,
+            "videoAnalysisSkipReasons": {},
+            "videoAnalysisSkips": [],
+            "videoAnalysisErrors": [],
+            "pendingCandidates": 0,
+        }
+
+    candidates = await _pending_video_analysis_candidates(batch_size)
+    result = await _analyze_video_rows(candidates, deadline=deadline)
+    result["pendingCandidates"] = len(candidates)
+    return result
+
+
+def _summary_checkpoint(summary: Any) -> dict[str, Any]:
+    if not isinstance(summary, dict):
+        return {}
+    checkpoint = summary.get("checkpoint")
+    if isinstance(checkpoint, dict):
+        return checkpoint
+    progress = summary.get("progress")
+    if isinstance(progress, dict) and isinstance(progress.get("checkpoint"), dict):
+        return progress["checkpoint"]
+    return {}
+
+
+async def _latest_youtube_backfill_summary(
+    *,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> dict[str, Any] | None:
+    try:
+        rows = await _get(
+            "collection_logs",
+            {
+                "select": "id,status,summary,started_at",
+                "job_name": f"eq.{YOUTUBE_BACKFILL_JOB_NAME}",
+                "status": _text_in_filter(["partial", "failed", "running"]),
+                "order": "started_at.desc",
+            },
+            limit=5,
+        )
+    except Exception as error:
+        logger.warning("YouTube backfill checkpoint lookup failed: %s", error)
+        return None
+
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        summary = row.get("summary")
+        if not isinstance(summary, dict):
+            continue
+        if window_start and summary.get("windowStart") != _iso(window_start):
+            continue
+        if window_end and summary.get("windowEnd") != _iso(window_end):
+            continue
+        return summary
+    return None
+
+
+def _backfill_checkpoint(
+    *,
+    channel_offset: int,
+    channel_id: str | None = None,
+    page_token: str | None = None,
+    completed: bool = False,
+) -> dict[str, Any]:
+    return {
+        "channelOffset": max(0, channel_offset),
+        "channelId": channel_id,
+        "pageToken": page_token,
+        "completed": completed,
+    }
+
+
+def _backfill_progress_summary(
+    *,
+    started_at: str,
+    started: datetime,
+    channels_total: int,
+    channel_offset: int,
+    channels_processed: int,
+    pages_scanned: int,
+    collected_videos: int,
+    skipped_duplicates: int,
+    failed_count: int,
+    checkpoint: dict[str, Any],
+) -> dict[str, Any]:
+    percent = 100 if channels_total == 0 else min(95, int((min(channel_offset, channels_total) / channels_total) * 95))
+    return {
+        "stage": "youtube_backfill",
+        "message": "최근 30일 YouTube 누락 영상을 backfill하는 중입니다.",
+        "startedAt": started_at,
+        "channelsTotal": channels_total,
+        "channelOffset": channel_offset,
+        "channelsProcessed": channels_processed,
+        "pagesScanned": pages_scanned,
+        "collectedVideos": collected_videos,
+        "skippedDuplicates": skipped_duplicates,
+        "failedItems": failed_count,
+        "checkpoint": checkpoint,
+        "percent": percent,
+        "durationSeconds": _duration_seconds(started),
+        "memory": _process_memory_mb(),
+        "updatedAt": _iso(_now()),
+    }
+
+
+async def _youtube_backfill_channel_row(channel_offset: int) -> dict[str, Any] | None:
+    rows = await _get(
+        "influencer_channels",
+        {
+            "select": "id,category_id,youtube_channel_id,channel_url,channel_title,is_active,last_collected_at,created_at",
+            "is_active": "eq.true",
+            "order": "id.asc",
+        },
+        limit=1,
+        offset=channel_offset,
+    )
+    return rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+
+
+async def _existing_youtube_video_ids(youtube_video_ids: list[str]) -> set[str]:
+    if not youtube_video_ids:
+        return set()
+    rows = await _get(
+        "influencer_videos",
+        {
+            "select": "youtube_video_id",
+            "youtube_video_id": _text_in_filter(youtube_video_ids[:MAX_LIMIT]),
+        },
+        limit=min(len(youtube_video_ids), MAX_LIMIT),
+    )
+    return {
+        row["youtube_video_id"]
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("youtube_video_id"), str)
+    } if isinstance(rows, list) else set()
+
+
+async def _upsert_backfill_videos(
+    videos: list[Any],
+    *,
+    channel_row: dict[str, Any],
+    category_ids: list[str],
+    started_at: str,
+    dry_run: bool,
+) -> dict[str, int]:
+    youtube_video_ids = [
+        video.youtubeVideoId
+        for video in videos
+        if isinstance(getattr(video, "youtubeVideoId", None), str) and video.youtubeVideoId
+    ]
+    existing_ids = await _existing_youtube_video_ids(youtube_video_ids)
+    skipped_duplicates = sum(1 for video_id in youtube_video_ids if video_id in existing_ids)
+    if dry_run or not videos:
+        return {
+            "collectedVideos": max(0, len(youtube_video_ids) - skipped_duplicates),
+            "videosUpserted": 0,
+            "skippedDuplicates": skipped_duplicates,
+        }
+
+    upsert_rows = [
+        {
+            "category_id": category_ids[0],
+            "influencer_channel_id": channel_row.get("id"),
+            "youtube_channel_id": video.channelId,
+            "youtube_video_id": video.youtubeVideoId,
+            "published_at": video.publishedAt,
+            "title": video.title,
+            "description": video.description,
+            "thumbnails": {key: item.model_dump(mode="json") for key, item in video.thumbnails.items()},
+            "tags": video.tags,
+            "view_count": video.viewCount,
+            "like_count": video.likeCount,
+            "comment_count": video.commentCount,
+            "raw": _compact_youtube_raw(video.raw),
+            "collected_at": started_at,
+        }
+        for video in videos
+    ]
+    await _post(
+        "influencer_videos?on_conflict=youtube_video_id&select=id,youtube_video_id,title",
+        upsert_rows,
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    await _sync_video_categories_for_youtube_ids(youtube_video_ids, category_ids)
+    return {
+        "collectedVideos": len(upsert_rows),
+        "videosUpserted": len(upsert_rows),
+        "skippedDuplicates": skipped_duplicates,
+    }
+
+
+async def _backfill_channel_window(
+    channel_row: dict[str, Any],
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    started_at: str,
+    page_token: str | None,
+    pages_per_channel: int,
+    dry_run: bool,
+    deadline: datetime,
+) -> dict[str, Any]:
+    channel_identifier = channel_row.get("youtube_channel_id") or channel_row.get("channel_url") or channel_row.get("id")
+    category_ids_by_channel = await _category_links_by_owner(
+        "influencer_channel_categories",
+        "influencer_channel_id",
+        [channel_row["id"]] if isinstance(channel_row.get("id"), str) else [],
+    )
+    category_ids = _category_ids_for_channel_row(channel_row, category_ids_by_channel)
+    if not category_ids:
+        raise BackendApiError("Influencer channel has no linked creator categories.", 400, "VALIDATION_ERROR")
+
+    channel_input = channel_row.get("channel_url") or channel_row.get("youtube_channel_id")
+    if not isinstance(channel_input, str) or not channel_input.strip():
+        raise BackendApiError("Influencer channel is missing a YouTube URL or id.", 400, "VALIDATION_ERROR")
+
+    channel = await get_channel_info(channel_input)
+    if not dry_run:
+        await _patch(
+            "influencer_channels",
+            {
+                "youtube_channel_id": channel.youtubeChannelId,
+                "channel_title": channel.channelTitle,
+                "channel_url": channel_row.get("channel_url") or channel.channelUrl,
+                "description": channel.description,
+                "thumbnail_url": channel.thumbnailUrl,
+                "updated_at": started_at,
+            },
+            {"id": f"eq.{channel_row.get('id')}"},
+            prefer="return=minimal",
+        )
+
+    pages_scanned = 0
+    videos_found = 0
+    videos_matched_window = 0
+    collected_videos = 0
+    videos_upserted = 0
+    skipped_duplicates = 0
+    next_page_token = page_token
+    completed = False
+
+    while pages_scanned < pages_per_channel and not _analysis_deadline_reached(deadline):
+        videos, next_token = await get_channel_videos_page(channel, max_results=50, page_token=next_page_token)
+        pages_scanned += 1
+        videos_found += len(videos)
+
+        window_videos = []
+        reached_window_start = False
+        for video in videos:
+            published_at = _parse_datetime(video.publishedAt)
+            if published_at is None:
+                continue
+            if published_at < window_start:
+                reached_window_start = True
+                continue
+            if published_at <= window_end:
+                window_videos.append(video)
+
+        videos_matched_window += len(window_videos)
+        upsert_result = await _upsert_backfill_videos(
+            window_videos,
+            channel_row=channel_row,
+            category_ids=category_ids,
+            started_at=started_at,
+            dry_run=dry_run,
+        )
+        collected_videos += upsert_result["collectedVideos"]
+        videos_upserted += upsert_result["videosUpserted"]
+        skipped_duplicates += upsert_result["skippedDuplicates"]
+
+        next_page_token = next_token
+        if reached_window_start or not next_page_token:
+            completed = True
+            next_page_token = None
+            break
+
+    if _analysis_deadline_reached(deadline) and not completed:
+        next_page_token = next_page_token or page_token
+
+    logger.info(
+        "YouTube backfill channel processed channel=%s pages=%s videosFound=%s matched=%s collected=%s duplicates=%s completed=%s memory=%s",
+        channel_identifier,
+        pages_scanned,
+        videos_found,
+        videos_matched_window,
+        collected_videos,
+        skipped_duplicates,
+        completed,
+        _process_memory_mb(),
+    )
+    return {
+        "pagesScanned": pages_scanned,
+        "videosFound": videos_found,
+        "videosMatchedWindow": videos_matched_window,
+        "collectedVideos": collected_videos,
+        "videosUpserted": videos_upserted,
+        "skippedDuplicates": skipped_duplicates,
+        "completed": completed,
+        "nextPageToken": next_page_token,
+    }
+
+
 async def _collect_daily_channel(
     row: dict[str, Any],
     *,
@@ -979,8 +1505,8 @@ async def _collect_daily_channel(
     window_start: datetime,
     started_at: str,
     semaphore: asyncio.Semaphore,
-    runtime: _CollectionRuntime,
     max_recent_videos: int,
+    deadline: datetime,
 ) -> dict[str, Any]:
     async with semaphore:
         channel_identifier = row.get("youtube_channel_id") or row.get("channel_url") or row.get("id")
@@ -1021,6 +1547,8 @@ async def _collect_daily_channel(
                     "videosFound": 0,
                     "videosUpserted": 0,
                     "videosAnalyzed": 0,
+                    "videosAnalysisAlreadyPresent": 0,
+                    "videosAnalysisDeferred": 0,
                     "videosAnalysisSkipped": 0,
                     "videosAnalysisSkippedByLimit": 0,
                     "videosAnalysisSkippedByYoutube": 0,
@@ -1055,47 +1583,8 @@ async def _collect_daily_channel(
                 upsert_rows,
                 prefer="resolution=merge-duplicates,return=representation",
             )
-            videos_analyzed = 0
-            video_analysis_errors: list[dict[str, Any]] = []
-            video_analysis_skips: list[dict[str, Any]] = []
-            video_analysis_skip_reasons: Counter[str] = Counter()
-            video_analysis_error_count = 0
             inserted_videos = [item for item in inserted_rows if isinstance(item, dict)] if isinstance(inserted_rows, list) else []
-            video_analysis_skipped_by_limit = 0
-            video_analysis_skipped_by_youtube = 0
-            for inserted_video in inserted_videos:
-                youtube_video_id = inserted_video.get("youtube_video_id")
-                if not isinstance(youtube_video_id, str) or not youtube_video_id:
-                    continue
-                if not await runtime.claim_analysis_slot():
-                    video_analysis_skipped_by_limit += 1
-                    continue
-                try:
-                    result = await create_video_analysis_from_youtube_video(
-                        youtube_video_id,
-                        influencer_video_id=inserted_video.get("id") if isinstance(inserted_video.get("id"), str) else None,
-                        title=inserted_video.get("title") if isinstance(inserted_video.get("title"), str) else None,
-                    )
-                    if result:
-                        videos_analyzed += 1
-                except Exception as error:
-                    if _is_video_analysis_skip_error(error):
-                        logger.info("Video metadata analysis skipped for youtubeVideoId=%s: %s", youtube_video_id, error)
-                        video_analysis_skipped_by_youtube += 1
-                        detail = _video_analysis_skip_detail(error, inserted_video)
-                        video_analysis_skip_reasons[str(detail.get("code") or "UNKNOWN_SKIP_REASON")] += 1
-                        _append_sample(video_analysis_skips, detail)
-                        continue
-                    logger.warning("Video metadata analysis failed for youtubeVideoId=%s: %s", youtube_video_id, error)
-                    video_analysis_error_count += 1
-                    _append_sample(
-                        video_analysis_errors,
-                        {
-                            "youtubeVideoId": youtube_video_id,
-                            "title": inserted_video.get("title"),
-                            "message": str(error),
-                        },
-                    )
+            analysis_result = await _analyze_video_rows(inserted_videos, deadline=deadline)
             await _sync_video_categories_for_youtube_ids(
                 [video.youtubeVideoId for video in last_day_videos if isinstance(video.youtubeVideoId, str)],
                 category_ids,
@@ -1109,14 +1598,7 @@ async def _collect_daily_channel(
             return {
                 "videosFound": len(last_day_videos),
                 "videosUpserted": len(upsert_rows),
-                "videosAnalyzed": videos_analyzed,
-                "videosAnalysisSkipped": video_analysis_skipped_by_limit + video_analysis_skipped_by_youtube,
-                "videosAnalysisSkippedByLimit": video_analysis_skipped_by_limit,
-                "videosAnalysisSkippedByYoutube": video_analysis_skipped_by_youtube,
-                "videoAnalysisErrorCount": video_analysis_error_count,
-                "videoAnalysisSkipReasons": dict(video_analysis_skip_reasons),
-                "videoAnalysisSkips": video_analysis_skips,
-                "videoAnalysisErrors": video_analysis_errors,
+                **analysis_result,
                 "error": None,
             }
         except Exception as error:
@@ -1125,6 +1607,8 @@ async def _collect_daily_channel(
                 "videosFound": 0,
                 "videosUpserted": 0,
                 "videosAnalyzed": 0,
+                "videosAnalysisAlreadyPresent": 0,
+                "videosAnalysisDeferred": 0,
                 "videosAnalysisSkipped": 0,
                 "videosAnalysisSkippedByLimit": 0,
                 "videosAnalysisSkippedByYoutube": 0,
@@ -1150,8 +1634,8 @@ async def _collect_daily_channel_with_timeout(
     window_start: datetime,
     started_at: str,
     semaphore: asyncio.Semaphore,
-    runtime: _CollectionRuntime,
     max_recent_videos: int,
+    deadline: datetime,
     timeout_seconds: float,
 ) -> dict[str, Any]:
     try:
@@ -1163,8 +1647,8 @@ async def _collect_daily_channel_with_timeout(
                 window_start=window_start,
                 started_at=started_at,
                 semaphore=semaphore,
-                runtime=runtime,
                 max_recent_videos=max_recent_videos,
+                deadline=deadline,
             ),
             timeout=max(1.0, timeout_seconds),
         )
@@ -1174,6 +1658,8 @@ async def _collect_daily_channel_with_timeout(
             "videosFound": 0,
             "videosUpserted": 0,
             "videosAnalyzed": 0,
+            "videosAnalysisAlreadyPresent": 0,
+            "videosAnalysisDeferred": 0,
             "videosAnalysisSkipped": 0,
             "videosAnalysisSkippedByLimit": 0,
             "videosAnalysisSkippedByYoutube": 0,
@@ -1194,7 +1680,7 @@ async def _collect_daily_channel_with_timeout(
 
 def _video_analysis_warning(
     video_analysis_errors: list[dict[str, Any]],
-    skipped_by_limit: int,
+    deferred_count: int,
     skipped_by_youtube: int,
     skip_reasons: dict[str, int],
     error_count: int = 0,
@@ -1211,8 +1697,8 @@ def _video_analysis_warning(
         detail = "; ".join(f"{count}x {message[:140]}" for message, count in top_messages)
         suffix = f": {detail}" if detail else ""
         parts.append(f"{total_errors} video analysis item(s) failed{suffix}")
-    if skipped_by_limit:
-        parts.append(f"{skipped_by_limit} video analysis item(s) skipped by per-run analysis limit.")
+    if deferred_count:
+        parts.append(f"{deferred_count} video analysis item(s) deferred for the next collector run.")
     if skipped_by_youtube:
         reason_detail = ", ".join(
             f"{code}: {count}"
@@ -1252,7 +1738,7 @@ async def collect_admin_now() -> AdminCollectionSummary:
     time_budget_seconds = _safe_positive_int(settings.daily_collection_time_budget_seconds, DAILY_COLLECTION_TIME_BUDGET_SECONDS, 10, 600)
     channel_timeout_seconds = _safe_positive_int(settings.daily_collection_channel_timeout_seconds, DAILY_COLLECTION_CHANNEL_TIMEOUT_SECONDS, 10, 180)
     lock_ttl_minutes = _safe_positive_int(settings.daily_collection_lock_ttl_minutes, DAILY_COLLECTION_LOCK_TTL_MINUTES, 1, 240)
-    analysis_limit = max(0, int(settings.video_analysis_max_per_collection or 0))
+    analysis_batch_size = _safe_positive_int(settings.daily_collection_analysis_batch_size, DAILY_COLLECTION_ANALYSIS_BATCH_SIZE, 1, MAX_LIMIT)
 
     running_log = await _running_collection_log(lock_ttl_minutes)
     if running_log:
@@ -1270,9 +1756,12 @@ async def collect_admin_now() -> AdminCollectionSummary:
             videosFoundLast24h=0,
             videosUpserted=0,
             videosAnalyzed=0,
+            videosAnalysisAlreadyPresent=0,
+            videosAnalysisDeferred=0,
             videosAnalysisSkipped=0,
             videosAnalysisSkippedByLimit=0,
             videosAnalysisSkippedByYoutube=0,
+            pendingVideoAnalysisCount=0,
             videoAnalysisErrorCount=0,
             errors=[
                 {
@@ -1313,25 +1802,27 @@ async def collect_admin_now() -> AdminCollectionSummary:
     videos_found = 0
     videos_upserted = 0
     videos_analyzed = 0
+    videos_analysis_already_present = 0
+    videos_analysis_deferred = 0
     videos_analysis_skipped = 0
     videos_analysis_skipped_by_limit = 0
     videos_analysis_skipped_by_youtube = 0
+    pending_video_analysis_count = 0
     video_analysis_error_count = 0
 
     try:
         logger.info(
-            "Daily YouTube collection started: channelsSelected=%s channelsTotal=%s skippedByLimit=%s concurrency=%s videosPerChannel=%s analysisLimit=%s timeBudgetSeconds=%s memory=%s",
+            "Daily YouTube collection started: channelsSelected=%s channelsTotal=%s skippedByChannelLimit=%s concurrency=%s videosPerChannel=%s analysisBatchSize=%s timeBudgetSeconds=%s memory=%s",
             len(channels),
             channels_total,
             channels_skipped_by_batch_limit,
             concurrency,
             max_recent_videos,
-            analysis_limit,
+            analysis_batch_size,
             time_budget_seconds,
             _process_memory_mb(),
         )
         semaphore = asyncio.Semaphore(concurrency)
-        runtime = _CollectionRuntime(analysis_limit)
         deadline = started + timedelta(seconds=time_budget_seconds)
         await _update_collection_progress(
             log_id,
@@ -1347,6 +1838,83 @@ async def collect_admin_now() -> AdminCollectionSummary:
                 errors_count=0,
             ),
         )
+        try:
+            pending_result = await _process_pending_video_analyses(analysis_batch_size, deadline)
+        except Exception as error:
+            logger.warning("Pending video metadata analysis failed before channel collection; continuing: %s", error)
+            pending_result = {
+                "videosAnalyzed": 0,
+                "videosAnalysisAlreadyPresent": 0,
+                "videosAnalysisDeferred": 0,
+                "videosAnalysisSkipped": 0,
+                "videosAnalysisSkippedByLimit": 0,
+                "videosAnalysisSkippedByYoutube": 0,
+                "videoAnalysisErrorCount": 0,
+                "videoAnalysisSkipReasons": {},
+                "videoAnalysisSkips": [],
+                "videoAnalysisErrors": [],
+                "pendingCandidates": 0,
+            }
+            video_analysis_error_count += 1
+            _append_sample(
+                video_analysis_errors,
+                {
+                    "code": "PENDING_VIDEO_ANALYSIS_FAILED",
+                    "message": str(error),
+                },
+            )
+        pending_candidates = int(pending_result.get("pendingCandidates") or 0)
+        videos_analyzed += int(pending_result.get("videosAnalyzed") or 0)
+        videos_analysis_already_present += int(pending_result.get("videosAnalysisAlreadyPresent") or 0)
+        videos_analysis_deferred += int(pending_result.get("videosAnalysisDeferred") or 0)
+        videos_analysis_skipped += int(pending_result.get("videosAnalysisSkipped") or 0)
+        videos_analysis_skipped_by_limit += int(pending_result.get("videosAnalysisSkippedByLimit") or 0)
+        videos_analysis_skipped_by_youtube += int(pending_result.get("videosAnalysisSkippedByYoutube") or 0)
+        video_analysis_error_count += int(pending_result.get("videoAnalysisErrorCount") or 0)
+        pending_video_analysis_skips = pending_result.get("videoAnalysisSkips")
+        if isinstance(pending_video_analysis_skips, list):
+            for skip in pending_video_analysis_skips:
+                if isinstance(skip, dict):
+                    _append_sample(video_analysis_skips, skip)
+        pending_skip_reasons = pending_result.get("videoAnalysisSkipReasons")
+        if isinstance(pending_skip_reasons, dict):
+            video_analysis_skip_reasons.update(
+                {
+                    str(reason): int(count)
+                    for reason, count in pending_skip_reasons.items()
+                    if isinstance(count, int)
+                }
+            )
+        pending_video_analysis_errors = pending_result.get("videoAnalysisErrors")
+        if isinstance(pending_video_analysis_errors, list):
+            for error in pending_video_analysis_errors:
+                if isinstance(error, dict):
+                    _append_sample(video_analysis_errors, error)
+        if pending_candidates:
+            logger.info(
+                "Pending video metadata analysis processed: candidates=%s analyzed=%s alreadyPresent=%s deferred=%s failed=%s memory=%s",
+                pending_candidates,
+                pending_result.get("videosAnalyzed") or 0,
+                pending_result.get("videosAnalysisAlreadyPresent") or 0,
+                pending_result.get("videosAnalysisDeferred") or 0,
+                pending_result.get("videoAnalysisErrorCount") or 0,
+                _process_memory_mb(),
+            )
+            await _update_collection_progress(
+                log_id,
+                _collection_progress_summary(
+                    started_at=started_at,
+                    started=started,
+                    channels_total=len(channels),
+                    channels_done=0,
+                    videos_found=0,
+                    videos_upserted=0,
+                    videos_analyzed=videos_analyzed,
+                    videos_skipped=videos_analysis_skipped,
+                    errors_count=len(errors) + video_analysis_error_count,
+                    videos_deferred=videos_analysis_deferred,
+                ),
+            )
         last_progress_update = _now()
         channels_done = 0
         for batch_start in range(0, len(channels), concurrency):
@@ -1366,8 +1934,8 @@ async def collect_admin_now() -> AdminCollectionSummary:
                         window_start=window_start,
                         started_at=started_at,
                         semaphore=semaphore,
-                        runtime=runtime,
                         max_recent_videos=max_recent_videos,
+                        deadline=deadline,
                         timeout_seconds=timeout_seconds,
                     )
                 )
@@ -1380,6 +1948,8 @@ async def collect_admin_now() -> AdminCollectionSummary:
                 videos_found += int(result.get("videosFound") or 0)
                 videos_upserted += int(result.get("videosUpserted") or 0)
                 videos_analyzed += int(result.get("videosAnalyzed") or 0)
+                videos_analysis_already_present += int(result.get("videosAnalysisAlreadyPresent") or 0)
+                videos_analysis_deferred += int(result.get("videosAnalysisDeferred") or 0)
                 videos_analysis_skipped += int(result.get("videosAnalysisSkipped") or 0)
                 videos_analysis_skipped_by_limit += int(result.get("videosAnalysisSkippedByLimit") or 0)
                 videos_analysis_skipped_by_youtube += int(result.get("videosAnalysisSkippedByYoutube") or 0)
@@ -1419,9 +1989,16 @@ async def collect_admin_now() -> AdminCollectionSummary:
                             videos_analyzed=videos_analyzed,
                             videos_skipped=videos_analysis_skipped,
                             errors_count=len(errors) + video_analysis_error_count,
+                            videos_deferred=videos_analysis_deferred,
                         ),
                     )
                     last_progress_update = now
+
+        try:
+            pending_video_analysis_count = len(await _pending_video_analysis_candidates(analysis_batch_size))
+        except Exception as error:
+            logger.warning("Pending video metadata analysis count lookup failed: %s", error)
+            pending_video_analysis_count = 0
 
         summary = AdminCollectionSummary(
             collectedAt=started_at,
@@ -1435,9 +2012,12 @@ async def collect_admin_now() -> AdminCollectionSummary:
             videosFoundLast24h=videos_found,
             videosUpserted=videos_upserted,
             videosAnalyzed=videos_analyzed,
+            videosAnalysisAlreadyPresent=videos_analysis_already_present,
+            videosAnalysisDeferred=videos_analysis_deferred,
             videosAnalysisSkipped=videos_analysis_skipped,
             videosAnalysisSkippedByLimit=videos_analysis_skipped_by_limit,
             videosAnalysisSkippedByYoutube=videos_analysis_skipped_by_youtube,
+            pendingVideoAnalysisCount=pending_video_analysis_count,
             videoAnalysisErrorCount=video_analysis_error_count,
             videoAnalysisSkipReasons=dict(video_analysis_skip_reasons),
             videoAnalysisSkips=video_analysis_skips,
@@ -1448,20 +2028,20 @@ async def collect_admin_now() -> AdminCollectionSummary:
         )
         video_analysis_warning = _video_analysis_warning(
             video_analysis_errors,
-            videos_analysis_skipped_by_limit,
+            videos_analysis_deferred,
             videos_analysis_skipped_by_youtube,
             dict(video_analysis_skip_reasons),
             video_analysis_error_count,
         )
         await _finish_collection_log(
             log_id,
-            "partial_success" if errors or video_analysis_error_count or channels_skipped_by_time_budget else "success",
+            "partial_success" if errors or video_analysis_error_count or channels_skipped_by_time_budget or videos_analysis_deferred else "success",
             summary.model_dump(mode="json"),
             _collection_error_message(errors, video_analysis_errors, video_analysis_warning),
         )
         await _audit("collect_now", "collection_logs", log_id, summary.model_dump(mode="json"))
         logger.info(
-            "Daily YouTube collection finished: channelsDone=%s/%s channelsSkippedByBatchLimit=%s channelsSkippedByTimeBudget=%s channelErrors=%s videosFound=%s videosUpserted=%s analyzed=%s skipped=%s videoAnalysisErrors=%s durationSeconds=%s memory=%s",
+            "Daily YouTube collection finished: channelsDone=%s/%s channelsSkippedByBatchLimit=%s channelsSkippedByTimeBudget=%s channelErrors=%s videosFound=%s videosUpserted=%s analyzed=%s alreadyPresent=%s deferred=%s pendingNextWindow=%s skipped=%s videoAnalysisErrors=%s durationSeconds=%s memory=%s",
             channels_done,
             channels_total,
             channels_skipped_by_batch_limit,
@@ -1470,8 +2050,293 @@ async def collect_admin_now() -> AdminCollectionSummary:
             videos_found,
             videos_upserted,
             videos_analyzed,
+            videos_analysis_already_present,
+            videos_analysis_deferred,
+            pending_video_analysis_count,
             videos_analysis_skipped,
             video_analysis_error_count,
+            summary.durationSeconds,
+            summary.memory,
+        )
+        return summary
+    except Exception as error:
+        await _finish_collection_log(log_id, "failed", {}, str(error))
+        raise
+
+
+async def backfill_youtube_videos(payload: dict[str, Any]) -> AdminYoutubeBackfillSummary:
+    started = _now()
+    started_at = _iso(started)
+    settings = get_settings()
+    dry_run = bool(payload.get("dry_run") if "dry_run" in payload else payload.get("dryRun", False))
+    resume = bool(payload.get("resume", True))
+    explicit_window = any(
+        payload.get(key)
+        for key in ("start_date", "startDate", "end_date", "endDate")
+    )
+    window_start, window_end = _backfill_window(payload)
+    channel_limit = _safe_positive_int(
+        payload.get("channel_limit") or payload.get("channelLimit") or settings.youtube_backfill_channel_batch_size,
+        YOUTUBE_BACKFILL_CHANNEL_BATCH_SIZE,
+        1,
+        50,
+    )
+    concurrency = _safe_positive_int(
+        payload.get("concurrency") or settings.youtube_backfill_concurrency,
+        YOUTUBE_BACKFILL_CONCURRENCY,
+        1,
+        1,
+    )
+    pages_per_channel = _safe_positive_int(
+        payload.get("pages_per_channel") or payload.get("pagesPerChannel") or settings.youtube_backfill_pages_per_channel,
+        YOUTUBE_BACKFILL_PAGES_PER_CHANNEL,
+        1,
+        10,
+    )
+    time_budget_seconds = _safe_positive_int(
+        payload.get("time_budget_seconds") or payload.get("timeBudgetSeconds") or settings.youtube_backfill_time_budget_seconds,
+        YOUTUBE_BACKFILL_TIME_BUDGET_SECONDS,
+        10,
+        180,
+    )
+    lock_ttl_minutes = _safe_positive_int(settings.youtube_backfill_lock_ttl_minutes, YOUTUBE_BACKFILL_LOCK_TTL_MINUTES, 1, 240)
+
+    running_log = await _running_job_log(YOUTUBE_BACKFILL_JOB_NAME, lock_ttl_minutes)
+    if running_log:
+        logger.warning("YouTube backfill skipped because another run is active logId=%s", running_log.get("id"))
+        return AdminYoutubeBackfillSummary(
+            ok=False,
+            jobId=str(running_log.get("id")) if running_log.get("id") else None,
+            status="running",
+            dryRun=dry_run,
+            startedAt=started_at,
+            finishedAt=_iso(_now()),
+            windowStart=_iso(window_start),
+            windowEnd=_iso(window_end),
+            durationSeconds=_duration_seconds(started),
+            memory=_process_memory_mb(),
+            jobSkippedReason="YOUTUBE_BACKFILL_ALREADY_RUNNING",
+        )
+
+    resume_summary: dict[str, Any] | None = None
+    if resume and not dry_run:
+        resume_summary = await _latest_youtube_backfill_summary(
+            window_start=window_start if explicit_window else None,
+            window_end=window_end if explicit_window else None,
+        )
+        if resume_summary and not explicit_window:
+            previous_start = _parse_datetime(str(resume_summary.get("windowStart") or ""))
+            previous_end = _parse_datetime(str(resume_summary.get("windowEnd") or ""))
+            if previous_start and previous_end:
+                window_start, window_end = previous_start, previous_end
+
+    channels_total = await _count("influencer_channels", {"is_active": "eq.true"})
+    checkpoint = _summary_checkpoint(resume_summary)
+    channel_offset = _safe_positive_int(checkpoint.get("channelOffset"), 0, 0, channels_total) if checkpoint else 0
+    page_token = checkpoint.get("pageToken") if isinstance(checkpoint.get("pageToken"), str) else None
+    checkpoint_channel_id = checkpoint.get("channelId") if isinstance(checkpoint.get("channelId"), str) else None
+
+    channels_processed = int(resume_summary.get("channelsProcessed") or 0) if resume_summary else 0
+    pages_scanned = int(resume_summary.get("pagesScanned") or 0) if resume_summary else 0
+    videos_found = int(resume_summary.get("videosFound") or 0) if resume_summary else 0
+    videos_matched_window = int(resume_summary.get("videosMatchedWindow") or 0) if resume_summary else 0
+    collected_videos = int(resume_summary.get("collectedVideos") or 0) if resume_summary else 0
+    skipped_duplicates = int(resume_summary.get("skippedDuplicates") or 0) if resume_summary else 0
+    videos_analyzed = int(resume_summary.get("videosAnalyzed") or 0) if resume_summary else 0
+    videos_analysis_already_present = int(resume_summary.get("videosAnalysisAlreadyPresent") or 0) if resume_summary else 0
+    videos_analysis_deferred = int(resume_summary.get("videosAnalysisDeferred") or 0) if resume_summary else 0
+    failed_items = [
+        item for item in resume_summary.get("failedItems", []) if isinstance(item, dict)
+    ] if resume_summary else []
+
+    log_id = await _start_collection_log(started_at, YOUTUBE_BACKFILL_JOB_NAME)
+    deadline = started + timedelta(seconds=time_budget_seconds)
+    processed_this_run = 0
+    status = "running"
+    error_message: str | None = None
+
+    logger.info(
+        "YouTube backfill started: dryRun=%s resume=%s channelsTotal=%s channelOffset=%s channelLimit=%s concurrency=%s pagesPerChannel=%s windowStart=%s windowEnd=%s timeBudgetSeconds=%s memory=%s",
+        dry_run,
+        resume,
+        channels_total,
+        channel_offset,
+        channel_limit,
+        concurrency,
+        pages_per_channel,
+        _iso(window_start),
+        _iso(window_end),
+        time_budget_seconds,
+        _process_memory_mb(),
+    )
+
+    try:
+        while channel_offset < channels_total and processed_this_run < channel_limit:
+            if _analysis_deadline_reached(deadline):
+                break
+            channel_row = await _youtube_backfill_channel_row(channel_offset)
+            if not channel_row:
+                channel_offset = channels_total
+                break
+
+            channel_id = channel_row.get("id") if isinstance(channel_row.get("id"), str) else None
+            active_page_token = page_token if checkpoint_channel_id == channel_id else None
+            try:
+                result = await _backfill_channel_window(
+                    channel_row,
+                    window_start=window_start,
+                    window_end=window_end,
+                    started_at=started_at,
+                    page_token=active_page_token,
+                    pages_per_channel=pages_per_channel,
+                    dry_run=dry_run,
+                    deadline=deadline,
+                )
+                pages_scanned += int(result.get("pagesScanned") or 0)
+                videos_found += int(result.get("videosFound") or 0)
+                videos_matched_window += int(result.get("videosMatchedWindow") or 0)
+                collected_videos += int(result.get("collectedVideos") or 0)
+                skipped_duplicates += int(result.get("skippedDuplicates") or 0)
+
+                if result.get("completed"):
+                    channel_offset += 1
+                    channels_processed += 1
+                    processed_this_run += 1
+                    page_token = None
+                    checkpoint_channel_id = None
+                else:
+                    page_token = result.get("nextPageToken") if isinstance(result.get("nextPageToken"), str) else None
+                    checkpoint_channel_id = channel_id
+                    break
+            except Exception as error:
+                logger.warning("YouTube backfill channel failed channelId=%s: %s", channel_id, error)
+                _append_sample(
+                    failed_items,
+                    {
+                        "channelId": channel_id,
+                        "youtubeChannelId": channel_row.get("youtube_channel_id"),
+                        "channelUrl": channel_row.get("channel_url"),
+                        "message": str(error),
+                    },
+                )
+                channel_offset += 1
+                channels_processed += 1
+                processed_this_run += 1
+                page_token = None
+                checkpoint_channel_id = None
+
+            checkpoint = _backfill_checkpoint(
+                channel_offset=channel_offset,
+                channel_id=checkpoint_channel_id,
+                page_token=page_token,
+                completed=channel_offset >= channels_total,
+            )
+            await _update_job_summary(
+                log_id,
+                {
+                    "jobType": YOUTUBE_BACKFILL_JOB_NAME,
+                    "status": "running",
+                    "dryRun": dry_run,
+                    "windowStart": _iso(window_start),
+                    "windowEnd": _iso(window_end),
+                    "progress": _backfill_progress_summary(
+                        started_at=started_at,
+                        started=started,
+                        channels_total=channels_total,
+                        channel_offset=channel_offset,
+                        channels_processed=channels_processed,
+                        pages_scanned=pages_scanned,
+                        collected_videos=collected_videos,
+                        skipped_duplicates=skipped_duplicates,
+                        failed_count=len(failed_items),
+                        checkpoint=checkpoint,
+                    ),
+                    "checkpoint": checkpoint,
+                },
+            )
+
+        if not dry_run and not _analysis_deadline_reached(deadline):
+            analysis_result = await _process_pending_video_analyses(
+                _safe_positive_int(settings.daily_collection_analysis_batch_size, DAILY_COLLECTION_ANALYSIS_BATCH_SIZE, 1, MAX_LIMIT),
+                deadline,
+            )
+            videos_analyzed += int(analysis_result.get("videosAnalyzed") or 0)
+            videos_analysis_already_present += int(analysis_result.get("videosAnalysisAlreadyPresent") or 0)
+            videos_analysis_deferred += int(analysis_result.get("videosAnalysisDeferred") or 0)
+            analysis_errors = analysis_result.get("videoAnalysisErrors")
+            if isinstance(analysis_errors, list):
+                for item in analysis_errors:
+                    if isinstance(item, dict):
+                        _append_sample(failed_items, {"type": "video_analysis", **item})
+
+        pending_video_analysis_count = 0
+        if not dry_run:
+            try:
+                pending_video_analysis_count = len(
+                    await _pending_video_analysis_candidates(
+                        _safe_positive_int(settings.daily_collection_analysis_batch_size, DAILY_COLLECTION_ANALYSIS_BATCH_SIZE, 1, MAX_LIMIT)
+                    )
+                )
+            except Exception as error:
+                logger.warning("YouTube backfill pending analysis count lookup failed: %s", error)
+
+        completed = channel_offset >= channels_total
+        if completed and not failed_items:
+            status = "completed"
+        elif completed:
+            status = "partial"
+        else:
+            status = "partial"
+
+        checkpoint = _backfill_checkpoint(
+            channel_offset=channel_offset,
+            channel_id=checkpoint_channel_id,
+            page_token=page_token,
+            completed=completed,
+        )
+        summary = AdminYoutubeBackfillSummary(
+            jobId=log_id,
+            status=status,
+            dryRun=dry_run,
+            startedAt=started_at,
+            finishedAt=_iso(_now()),
+            windowStart=_iso(window_start),
+            windowEnd=_iso(window_end),
+            channelsTotal=channels_total,
+            channelsProcessed=channels_processed,
+            channelsRemaining=max(0, channels_total - channel_offset),
+            pagesScanned=pages_scanned,
+            videosFound=videos_found,
+            videosMatchedWindow=videos_matched_window,
+            collectedVideos=collected_videos,
+            skippedDuplicates=skipped_duplicates,
+            videosAnalyzed=videos_analyzed,
+            videosAnalysisAlreadyPresent=videos_analysis_already_present,
+            videosAnalysisDeferred=videos_analysis_deferred,
+            pendingVideoAnalysisCount=pending_video_analysis_count,
+            failedItems=failed_items,
+            checkpoint=checkpoint,
+            durationSeconds=_duration_seconds(started),
+            memory=_process_memory_mb(),
+        )
+        if failed_items:
+            error_message = f"{len(failed_items)} YouTube backfill item(s) failed or need retry."
+        await _finish_collection_log(log_id, status, summary.model_dump(mode="json"), error_message)
+        await _audit("youtube_backfill", "collection_logs", log_id, summary.model_dump(mode="json"))
+        logger.info(
+            "YouTube backfill finished: status=%s dryRun=%s channelsProcessed=%s/%s remaining=%s pages=%s matched=%s collected=%s duplicates=%s analyzed=%s pending=%s failed=%s durationSeconds=%s memory=%s",
+            status,
+            dry_run,
+            channels_processed,
+            channels_total,
+            summary.channelsRemaining,
+            pages_scanned,
+            videos_matched_window,
+            collected_videos,
+            skipped_duplicates,
+            videos_analyzed,
+            pending_video_analysis_count,
+            len(failed_items),
             summary.durationSeconds,
             summary.memory,
         )
