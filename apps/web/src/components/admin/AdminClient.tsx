@@ -75,7 +75,7 @@ const initialData: AdminData = {
 };
 
 function getApiBaseUrlText() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "NEXT_PUBLIC_API_BASE_URL 미설정";
+  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "API 서버 주소 미설정";
 }
 
 export function AdminClient() {

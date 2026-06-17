@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("NAVER_SHOPPING_CLIENT_SECRET", "NAVER_SEARCH_CLIENT_SECRET"),
     )
-    local_llm_api_url: str | None = "https://llm-api.be-celeb.org/v1/chat/completions"
+    local_llm_api_url: str | None = None
     local_llm_api_key: str | None = None
     local_llm_model: str = "local-model"
     admin_secret: str | None = None
@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     daily_collection_concurrency: int = 2
     daily_collection_channel_limit: int = 20
     daily_collection_videos_per_channel: int = 8
+    daily_collection_pages_per_channel: int = 2
     daily_collection_analysis_batch_size: int = 50
     daily_collection_time_budget_seconds: int = 50
     daily_collection_channel_timeout_seconds: int = 45

@@ -4,9 +4,29 @@ import { getSupabasePublicEnv, hasSupabasePublicEnv } from "@/lib/config/env";
 
 const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"];
 const ALLOWED_METHODS = "GET,POST,PATCH,PUT,DELETE,OPTIONS";
-const DEFAULT_ALLOWED_HEADERS = "Content-Type, Authorization, x-cron-secret";
+const DEFAULT_ALLOWED_HEADERS = "Content-Type, Authorization, x-cron-secret, x-admin-secret";
 const AUTH_ENTRY_PATHS = new Set(["/login", "/signup"]);
 const AUTHENTICATED_REDIRECT_PATH = "/dashboard";
+const AUTH_REQUIRED_PATHS = [
+  "/admin",
+  "/calendar",
+  "/dashboard",
+  "/favorites",
+  "/growth-report",
+  "/onboarding",
+  "/production-board",
+  "/profile",
+  "/recommendations",
+  "/saved",
+];
+
+function isAuthRequiredPath(pathname: string) {
+  return AUTH_REQUIRED_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+function getNextPath(request: NextRequest) {
+  return `${request.nextUrl.pathname}${request.nextUrl.search}`;
+}
 
 function normalizeOrigin(value: string) {
   return new URL(value).origin;
@@ -87,9 +107,17 @@ function applyCorsHeaders(response: NextResponse, request: NextRequest) {
   return response;
 }
 
-async function redirectAuthenticatedAuthPage(request: NextRequest) {
+function applySecurityHeaders(response: NextResponse) {
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  return response;
+}
+
+async function getUserAwareResponse(request: NextRequest) {
   if (!hasSupabasePublicEnv()) {
-    return NextResponse.next();
+    return { response: NextResponse.next({ request }), user: null };
   }
 
   const { supabaseAnonKey, supabaseUrl } = getSupabasePublicEnv();
@@ -113,11 +141,32 @@ async function redirectAuthenticatedAuthPage(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
 
+  return { response: supabaseResponse, user };
+}
+
+async function redirectAuthenticatedAuthPage(request: NextRequest) {
+  const { response: supabaseResponse, user } = await getUserAwareResponse(request);
+
   if (!user) {
     return supabaseResponse;
   }
-
   const redirectResponse = NextResponse.redirect(new URL(AUTHENTICATED_REDIRECT_PATH, request.url));
+  supabaseResponse.cookies.getAll().forEach((cookie) => {
+    redirectResponse.cookies.set(cookie);
+  });
+  return redirectResponse;
+}
+
+async function requireAuthenticatedPage(request: NextRequest) {
+  const { response: supabaseResponse, user } = await getUserAwareResponse(request);
+
+  if (user) {
+    return supabaseResponse;
+  }
+
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("next", getNextPath(request));
+  const redirectResponse = NextResponse.redirect(loginUrl);
   supabaseResponse.cookies.getAll().forEach((cookie) => {
     redirectResponse.cookies.set(cookie);
   });
@@ -126,25 +175,33 @@ async function redirectAuthenticatedAuthPage(request: NextRequest) {
 
 export async function proxy(request: NextRequest) {
   if (AUTH_ENTRY_PATHS.has(request.nextUrl.pathname)) {
-    return redirectAuthenticatedAuthPage(request);
+    return applySecurityHeaders(await redirectAuthenticatedAuthPage(request));
+  }
+
+  if (isAuthRequiredPath(request.nextUrl.pathname)) {
+    return applySecurityHeaders(await requireAuthenticatedPage(request));
   }
 
   const origin = getRequestOrigin(request);
 
   if (request.method === "OPTIONS") {
     if (origin && !isAllowedOrigin(origin)) {
-      return NextResponse.json({ success: false, message: "CORS origin is not allowed." }, { status: 403 });
+      return applySecurityHeaders(NextResponse.json({ success: false, message: "CORS origin is not allowed." }, { status: 403 }));
     }
 
-    return new NextResponse(null, {
-      status: 204,
-      headers: getCorsHeaders(request),
-    });
+    return applySecurityHeaders(
+      new NextResponse(null, {
+        status: 204,
+        headers: getCorsHeaders(request),
+      }),
+    );
   }
 
-  return applyCorsHeaders(NextResponse.next(), request);
+  return applySecurityHeaders(applyCorsHeaders(NextResponse.next(), request));
 }
 
 export const config = {
-  matcher: ["/api/:path*", "/login", "/signup"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)",
+  ],
 };

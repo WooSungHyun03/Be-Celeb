@@ -32,7 +32,7 @@ export async function requireSupabaseSession() {
   try {
     sessionResult = await getSupabaseBrowserClient().auth.getSession();
   } catch {
-    throw new Error("Supabase auth is not configured for this local environment.");
+    throw new Error("로그인 설정을 확인하지 못했습니다. 관리자에게 문의해 주세요.");
   }
 
   const {

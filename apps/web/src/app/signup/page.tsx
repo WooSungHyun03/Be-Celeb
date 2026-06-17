@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/common/Button";
 import { ROUTES } from "@/constants/routes";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+import { getSafeNextPath } from "@/lib/navigation/safe-next-path";
 
 function SparklesIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -68,12 +69,13 @@ export default function SignupPage() {
 
     try {
       const supabase = getSupabaseBrowserClient();
+      const nextPath = getSafeNextPath(new URL(window.location.href).searchParams.get("next"), ROUTES.dashboard);
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: { nickname },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=${ROUTES.dashboard}`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
         },
       });
 
@@ -99,7 +101,7 @@ export default function SignupPage() {
         );
       }
 
-      router.push(ROUTES.dashboard);
+      router.replace(nextPath);
       router.refresh();
     } catch (error) {
       setStatus("error");
@@ -176,6 +178,17 @@ export default function SignupPage() {
           >
             {status === "loading" ? "가입 중..." : "회원가입"}
           </Button>
+          <p className="text-center text-xs leading-5 text-slate-500">
+            가입하면{" "}
+            <Link className="font-semibold text-violet-700 hover:underline" href={ROUTES.terms}>
+              이용약관
+            </Link>
+            과{" "}
+            <Link className="font-semibold text-violet-700 hover:underline" href={ROUTES.privacy}>
+              개인정보처리방침
+            </Link>
+            에 동의한 것으로 간주됩니다.
+          </p>
         </form>
 
         <div className="relative my-6">

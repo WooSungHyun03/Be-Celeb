@@ -19,6 +19,7 @@ class ShopProduct(BaseModel):
     popularityScore: float = 0
     recommendedLevel: str | None = None
     collectedAt: str | None = None
+    selectionReason: str | None = None
 
 
 class ShopSectionInfo(BaseModel):
@@ -41,6 +42,8 @@ class ShopSet(BaseModel):
     level: str
     title: str
     description: str | None = None
+    criteria: list[str] = Field(default_factory=list)
+    selectionReason: str | None = None
     items: list[str] = Field(default_factory=list)
     products: list[ShopProduct] = Field(default_factory=list)
 

@@ -46,17 +46,17 @@ export function AdminAuthGate({ children, onUnlock }: AdminAuthGateProps) {
         <Card title="Admin 접근">
           <div className="mb-5 flex flex-wrap gap-2">
             <Badge tone="warning">MVP 보호</Badge>
-            <Badge>Authorization Bearer</Badge>
+            <Badge>운영자 인증</Badge>
           </div>
           <p className="mb-5 text-sm leading-6 text-slate-600">
-            운영자 기능은 Render Backend의 `ADMIN_SECRET`과 일치하는 passcode가 있어야 접근할 수 있습니다.
+            운영자 기능은 별도 passcode가 있어야 접근할 수 있습니다.
             입력한 값은 현재 브라우저 sessionStorage에만 저장됩니다.
           </p>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <Input
-              label="Admin passcode"
+              label="운영자 passcode"
               onChange={(event) => setSecret(event.target.value)}
-              placeholder="ADMIN_SECRET"
+              placeholder="운영자 passcode 입력"
               type="password"
               value={secret}
             />

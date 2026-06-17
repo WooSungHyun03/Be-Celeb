@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/common/Button";
 import { ROUTES } from "@/constants/routes";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+import { getSafeNextPath } from "@/lib/navigation/safe-next-path";
 
 function SparklesIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -37,7 +38,8 @@ export default function LoginPage() {
         throw new Error("이메일 또는 비밀번호가 올바르지 않습니다.");
       }
 
-      router.push(ROUTES.dashboard);
+      const nextPath = getSafeNextPath(new URL(window.location.href).searchParams.get("next"), ROUTES.dashboard);
+      router.replace(nextPath);
       router.refresh();
     } catch (error) {
       setStatus("error");
@@ -127,10 +129,10 @@ export default function LoginPage() {
 
         <div className="mt-8 border-t border-slate-200 pt-6">
           <div className="flex justify-center gap-6 text-xs text-slate-500">
-            <Link className="transition hover:text-ink" href={ROUTES.home}>
+            <Link className="transition hover:text-ink" href={ROUTES.terms}>
               이용약관
             </Link>
-            <Link className="transition hover:text-ink" href={ROUTES.home}>
+            <Link className="transition hover:text-ink" href={ROUTES.privacy}>
               개인정보처리방침
             </Link>
           </div>

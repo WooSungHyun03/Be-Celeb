@@ -16,7 +16,7 @@ from app.domains.shop.service import check_naver_shopping_connection
 from app.domains.video_analysis.service import create_video_analysis_from_youtube_video
 from app.schemas.admin import AdminCollectionSummary, AdminOverview, AdminSystemStatus, AdminTestResult, AdminYoutubeBackfillSummary
 from app.services.llm_service import call_local_llm
-from app.services.youtube_service import get_channel_info, get_channel_videos_page, get_recent_videos
+from app.services.youtube_service import get_channel_info, get_channel_videos_page
 
 UTC = timezone.utc
 DAILY_COLLECTION_JOB_NAME = "collect-daily-videos"
@@ -26,9 +26,11 @@ DAILY_COLLECTION_SCHEDULE_TEXT = "Every day 06:00 KST"
 ONE_DAY = timedelta(days=1)
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
+MAX_SEARCH_LENGTH = 80
 DAILY_COLLECTION_CONCURRENCY = 4
 DAILY_COLLECTION_CHANNEL_LIMIT = 20
 DAILY_COLLECTION_VIDEOS_PER_CHANNEL = 8
+DAILY_COLLECTION_PAGES_PER_CHANNEL = 2
 DAILY_COLLECTION_TIME_BUDGET_SECONDS = 50
 DAILY_COLLECTION_CHANNEL_TIMEOUT_SECONDS = 45
 DAILY_COLLECTION_LOCK_TTL_MINUTES = 30
@@ -269,6 +271,15 @@ def _trim(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _postgrest_search_value(value: str | None) -> str | None:
+    trimmed = _trim(value)
+    if not trimmed:
+        return None
+    normalized = re.sub(r"[,()*%\"'\\]", " ", trimmed[:MAX_SEARCH_LENGTH])
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized or None
 
 
 def _clean_update(payload: dict[str, Any]) -> dict[str, Any]:
@@ -616,8 +627,8 @@ async def list_admin_influencer_channels(
     }
     if is_active is not None:
         params["is_active"] = f"eq.{str(is_active).lower()}"
-    if search:
-        q = search.replace("*", "").strip()
+    q = _postgrest_search_value(search)
+    if q:
         params["or"] = f"(channel_title.ilike.*{q}*,channel_url.ilike.*{q}*,youtube_channel_id.ilike.*{q}*)"
 
     rows = await _get("influencer_channels", params, limit=fetch_limit, offset=fetch_offset)
@@ -801,8 +812,8 @@ async def list_admin_videos(
         params["published_at"] = f"gte.{date_from}"
     if date_to:
         params["published_at"] = f"lte.{date_to}"
-    if search:
-        q = search.replace("*", "").strip()
+    q = _postgrest_search_value(search)
+    if q:
         params["or"] = f"(title.ilike.*{q}*,description.ilike.*{q}*,youtube_video_id.ilike.*{q}*)"
 
     rows = await _get("influencer_videos", params, limit=fetch_limit, offset=fetch_offset)
@@ -1009,7 +1020,7 @@ async def _sync_video_categories_for_youtube_ids(youtube_video_ids: list[str], c
             "influencer_videos",
             {
                 "select": "id,youtube_video_id",
-                "youtube_video_id": _in_filter(youtube_video_ids),
+                "youtube_video_id": _text_in_filter(youtube_video_ids),
             },
         )
         video_ids = [row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)] if isinstance(rows, list) else []
@@ -1365,7 +1376,7 @@ async def _upsert_backfill_videos(
             "description": video.description,
             "thumbnails": {key: item.model_dump(mode="json") for key, item in video.thumbnails.items()},
             "tags": video.tags,
-            "view_count": video.viewCount,
+            "view_count": video.viewCount if video.viewCount is not None else 0,
             "like_count": video.likeCount,
             "comment_count": video.commentCount,
             "raw": _compact_youtube_raw(video.raw),
@@ -1503,9 +1514,11 @@ async def _collect_daily_channel(
     category_names: dict[Any, Any],
     category_ids_by_channel: dict[str, list[str]],
     window_start: datetime,
+    window_end: datetime,
     started_at: str,
     semaphore: asyncio.Semaphore,
     max_recent_videos: int,
+    pages_per_channel: int,
     deadline: datetime,
 ) -> dict[str, Any]:
     async with semaphore:
@@ -1535,14 +1548,35 @@ async def _collect_daily_channel(
                 prefer="return=minimal",
             )
 
-            recent_videos = await get_recent_videos(channel, max_results=max_recent_videos)
-            last_day_videos = [
-                video
-                for video in recent_videos
-                if (published := _parse_datetime(video.publishedAt)) is not None and published >= window_start
-            ]
+            last_day_videos_by_id: dict[str, Any] = {}
+            next_page_token: str | None = None
+            pages_scanned = 0
+            reached_window_start = False
+            while pages_scanned < pages_per_channel and not _analysis_deadline_reached(deadline):
+                page_videos, next_page_token = await get_channel_videos_page(
+                    channel,
+                    max_results=max(max_recent_videos, 50),
+                    page_token=next_page_token,
+                )
+                pages_scanned += 1
+                for video in page_videos:
+                    published = _parse_datetime(video.publishedAt)
+                    if published is None:
+                        continue
+                    if published < window_start:
+                        reached_window_start = True
+                        continue
+                    if published <= window_end and video.youtubeVideoId not in last_day_videos_by_id:
+                        last_day_videos_by_id[video.youtubeVideoId] = video
+                if reached_window_start or not next_page_token:
+                    break
+            last_day_videos = sorted(last_day_videos_by_id.values(), key=lambda video: video.publishedAt, reverse=True)
             if not last_day_videos:
-                logger.info("Daily YouTube collection finished for channel=%s videosFound=0", channel.youtubeChannelId)
+                logger.info(
+                    "Daily YouTube collection finished for channel=%s videosFound=0 pagesScanned=%s",
+                    channel.youtubeChannelId,
+                    pages_scanned,
+                )
                 return {
                     "videosFound": 0,
                     "videosUpserted": 0,
@@ -1570,7 +1604,7 @@ async def _collect_daily_channel(
                     "description": video.description,
                     "thumbnails": {key: item.model_dump(mode="json") for key, item in video.thumbnails.items()},
                     "tags": video.tags,
-                    "view_count": video.viewCount,
+                    "view_count": video.viewCount if video.viewCount is not None else 0,
                     "like_count": video.likeCount,
                     "comment_count": video.commentCount,
                     "raw": _compact_youtube_raw(video.raw),
@@ -1590,10 +1624,11 @@ async def _collect_daily_channel(
                 category_ids,
             )
             logger.info(
-                "Daily YouTube collection finished for channel=%s videosFound=%s videosUpserted=%s",
+                "Daily YouTube collection finished for channel=%s videosFound=%s videosUpserted=%s pagesScanned=%s",
                 channel.youtubeChannelId,
                 len(last_day_videos),
                 len(upsert_rows),
+                pages_scanned,
             )
             return {
                 "videosFound": len(last_day_videos),
@@ -1632,9 +1667,11 @@ async def _collect_daily_channel_with_timeout(
     category_names: dict[Any, Any],
     category_ids_by_channel: dict[str, list[str]],
     window_start: datetime,
+    window_end: datetime,
     started_at: str,
     semaphore: asyncio.Semaphore,
     max_recent_videos: int,
+    pages_per_channel: int,
     deadline: datetime,
     timeout_seconds: float,
 ) -> dict[str, Any]:
@@ -1645,9 +1682,11 @@ async def _collect_daily_channel_with_timeout(
                 category_names=category_names,
                 category_ids_by_channel=category_ids_by_channel,
                 window_start=window_start,
+                window_end=window_end,
                 started_at=started_at,
                 semaphore=semaphore,
                 max_recent_videos=max_recent_videos,
+                pages_per_channel=pages_per_channel,
                 deadline=deadline,
             ),
             timeout=max(1.0, timeout_seconds),
@@ -1735,6 +1774,7 @@ async def collect_admin_now() -> AdminCollectionSummary:
     concurrency = _safe_positive_int(settings.daily_collection_concurrency, DAILY_COLLECTION_CONCURRENCY, 1, 4)
     channel_limit = _safe_positive_int(settings.daily_collection_channel_limit, DAILY_COLLECTION_CHANNEL_LIMIT, 1, 100)
     max_recent_videos = _safe_positive_int(settings.daily_collection_videos_per_channel, DAILY_COLLECTION_VIDEOS_PER_CHANNEL, 1, 12)
+    pages_per_channel = _safe_positive_int(settings.daily_collection_pages_per_channel, DAILY_COLLECTION_PAGES_PER_CHANNEL, 1, 5)
     time_budget_seconds = _safe_positive_int(settings.daily_collection_time_budget_seconds, DAILY_COLLECTION_TIME_BUDGET_SECONDS, 10, 600)
     channel_timeout_seconds = _safe_positive_int(settings.daily_collection_channel_timeout_seconds, DAILY_COLLECTION_CHANNEL_TIMEOUT_SECONDS, 10, 180)
     lock_ttl_minutes = _safe_positive_int(settings.daily_collection_lock_ttl_minutes, DAILY_COLLECTION_LOCK_TTL_MINUTES, 1, 240)
@@ -1812,12 +1852,13 @@ async def collect_admin_now() -> AdminCollectionSummary:
 
     try:
         logger.info(
-            "Daily YouTube collection started: channelsSelected=%s channelsTotal=%s skippedByChannelLimit=%s concurrency=%s videosPerChannel=%s analysisBatchSize=%s timeBudgetSeconds=%s memory=%s",
+            "Daily YouTube collection started: channelsSelected=%s channelsTotal=%s skippedByChannelLimit=%s concurrency=%s videosPerChannel=%s pagesPerChannel=%s analysisBatchSize=%s timeBudgetSeconds=%s memory=%s",
             len(channels),
             channels_total,
             channels_skipped_by_batch_limit,
             concurrency,
             max_recent_videos,
+            pages_per_channel,
             analysis_batch_size,
             time_budget_seconds,
             _process_memory_mb(),
@@ -1932,9 +1973,11 @@ async def collect_admin_now() -> AdminCollectionSummary:
                         category_names=category_names,
                         category_ids_by_channel=category_ids_by_channel,
                         window_start=window_start,
+                        window_end=started,
                         started_at=started_at,
                         semaphore=semaphore,
                         max_recent_videos=max_recent_videos,
+                        pages_per_channel=pages_per_channel,
                         deadline=deadline,
                         timeout_seconds=timeout_seconds,
                     )

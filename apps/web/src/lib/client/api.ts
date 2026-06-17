@@ -244,6 +244,7 @@ export type ShopProduct = {
   popularityScore: number;
   recommendedLevel: string | null;
   collectedAt: string | null;
+  selectionReason?: string | null;
 };
 
 export type ShopSectionInfo = {
@@ -266,6 +267,8 @@ export type ShopSet = {
   level: string;
   title: string;
   description: string | null;
+  criteria?: string[];
+  selectionReason?: string | null;
   items: string[];
   products: ShopProduct[];
 };
@@ -346,7 +349,7 @@ async function parseJsonResponse(response: Response) {
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new ApiClientError("Backend API 응답을 JSON으로 해석하지 못했습니다.", response.status);
+    throw new ApiClientError("API 응답 형식이 올바르지 않습니다. 잠시 후 다시 시도해 주세요.", response.status, "INVALID_API_RESPONSE");
   }
 }
 
@@ -354,7 +357,7 @@ export function getApiBaseUrl() {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
-    throw new ApiClientError("NEXT_PUBLIC_API_BASE_URL is not configured");
+    throw new ApiClientError("API 서버 주소가 설정되지 않았습니다. 관리자에게 문의해 주세요.", undefined, "MISSING_API_BASE_URL");
   }
 
   return trimTrailingSlash(baseUrl);
@@ -388,7 +391,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const payload = await parseJsonResponse(response);
 
   if (!response.ok || isFailurePayload(payload)) {
-    const message = getFailureMessage(payload, `Backend API request failed: ${response.status}`);
+    const message = getFailureMessage(payload, "요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     throw new ApiClientError(message, response.status, getFailureCode(payload), payload);
   }
 

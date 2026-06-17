@@ -109,8 +109,8 @@ curl --fail-with-body -X POST "$DAILY_COLLECT_ENDPOINT" \
 Schedule: 0 21 * * *
 Timezone: UTC
 KST 기준: 매일 다음날 06:00
-DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
-CRON_SECRET=your-secret
+DAILY_COLLECT_ENDPOINT=<RENDER_API_ORIGIN>/api/cron/collect-daily-videos
+CRON_SECRET=<CRON_SECRET>
 ```
 
 ## GitHub Actions 설정
@@ -120,13 +120,13 @@ CRON_SECRET=your-secret
 GitHub repository secrets:
 
 ```txt
-DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
-DAILY_NAVER_TRENDS_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-naver-trends
-DAILY_SHOP_PRODUCTS_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-shop-products
-DAILY_GROWTH_REPORT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-growth-report
+DAILY_COLLECT_ENDPOINT=<RENDER_API_ORIGIN>/api/cron/collect-daily-videos
+DAILY_NAVER_TRENDS_ENDPOINT=<RENDER_API_ORIGIN>/api/cron/collect-naver-trends
+DAILY_SHOP_PRODUCTS_ENDPOINT=<RENDER_API_ORIGIN>/api/cron/collect-shop-products
+DAILY_GROWTH_REPORT_ENDPOINT=<RENDER_API_ORIGIN>/api/cron/collect-growth-report
 # 선택: 없으면 DAILY_COLLECT_ENDPOINT origin에서 /api/cron/cleanup-old-data를 추론
-DAILY_CLEANUP_ENDPOINT=https://your-render-backend.onrender.com/api/cron/cleanup-old-data
-CRON_SECRET=your-secret
+DAILY_CLEANUP_ENDPOINT=<RENDER_API_ORIGIN>/api/cron/cleanup-old-data
+CRON_SECRET=<CRON_SECRET>
 ```
 
 Vercel Frontend의 `/api` route는 원칙적으로 호출하지 않습니다. 모든 `DAILY_*_ENDPOINT`는 Render Backend API URL로 설정합니다.

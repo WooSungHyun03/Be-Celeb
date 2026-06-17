@@ -1,23 +1,14 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getSafeNextPath } from "@/lib/navigation/safe-next-path";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const DEFAULT_NEXT_PATH = "/dashboard";
-
-function getSafeNextPath(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return DEFAULT_NEXT_PATH;
-  }
-
-  return value;
-}
-
-function redirectWithError(requestUrl: URL, message: string) {
+function redirectWithError(requestUrl: URL) {
   const fallbackUrl = new URL("/auth/callback", requestUrl.origin);
   fallbackUrl.searchParams.set("error", "auth_callback_error");
-  fallbackUrl.searchParams.set("error_description", message);
+  fallbackUrl.searchParams.set("error_description", "인증 요청을 완료하지 못했습니다. 다시 로그인해 주세요.");
   return NextResponse.redirect(fallbackUrl);
 }
 
@@ -26,21 +17,20 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get("code");
   const nextPath = getSafeNextPath(requestUrl.searchParams.get("next"));
   const providerError = requestUrl.searchParams.get("error");
-  const providerErrorDescription = requestUrl.searchParams.get("error_description");
 
   if (providerError) {
-    return redirectWithError(requestUrl, providerErrorDescription ?? providerError);
+    return redirectWithError(requestUrl);
   }
 
   if (!code) {
-    return redirectWithError(requestUrl, "Supabase authentication code is missing.");
+    return redirectWithError(requestUrl);
   }
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return redirectWithError(requestUrl, error.message);
+    return redirectWithError(requestUrl);
   }
 
   return NextResponse.redirect(new URL(nextPath, requestUrl.origin));

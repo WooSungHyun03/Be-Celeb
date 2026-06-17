@@ -98,6 +98,7 @@ function SetCard({
   onSelect: () => void;
 }) {
   const products = set.products ?? [];
+  const criteria = set.criteria ?? [];
 
   return (
     <button
@@ -118,6 +119,19 @@ function SetCard({
             <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-black text-violet-700">{products.length}개</span>
           </div>
           {set.description ? <p className="mt-3 text-sm leading-6 text-slate-500">{set.description}</p> : null}
+          {set.selectionReason ? <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">{set.selectionReason}</p> : null}
+          {criteria.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {criteria.map((criterion) => (
+                <span
+                  className="rounded-full border border-violet-100 bg-violet-50 px-2.5 py-1 text-[11px] font-black text-violet-700"
+                  key={`${set.level}-${criterion}`}
+                >
+                  {criterion}
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             {set.items.map((item) => (
               <span
@@ -156,6 +170,7 @@ function SetProductRow({ product }: { product: ShopProduct }) {
           {title}
         </a>
         <p className="mt-1 text-sm font-semibold text-slate-500">{product.mallName || "판매처 정보 없음"}</p>
+        {product.selectionReason ? <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{product.selectionReason}</p> : null}
       </div>
       <div className="flex items-end justify-between gap-3 sm:flex-col sm:items-end">
         <p className="text-sm font-black text-ink">{formatKrw(product.price)}</p>
@@ -174,6 +189,7 @@ function SetProductRow({ product }: { product: ShopProduct }) {
 
 function SetDetail({ set }: { set: ShopSet }) {
   const products = set.products ?? [];
+  const criteria = set.criteria ?? [];
 
   return (
     <Card>
@@ -186,6 +202,21 @@ function SetDetail({ set }: { set: ShopSet }) {
         </div>
         <p className="text-sm font-bold text-slate-500">실제 수집 상품 {products.length}개</p>
       </div>
+      {set.selectionReason ? (
+        <div className="mt-4 rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+          <p className="text-xs font-black uppercase text-violet-700">이 세트로 구성한 이유</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-700">{set.selectionReason}</p>
+          {criteria.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {criteria.map((criterion) => (
+                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-violet-700" key={`${set.level}-detail-${criterion}`}>
+                  {criterion}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {products.length === 0 ? (
         <EmptyState
           description="이 세트에 연결된 실제 판매 상품 캐시가 없습니다. daily shop collector 실행 후 다시 확인하세요."

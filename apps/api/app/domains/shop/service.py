@@ -56,19 +56,25 @@ SHOP_SET_CONFIG: list[dict[str, Any]] = [
     {
         "level": "beginner",
         "title": "입문용 세트",
-        "description": "스마트폰이나 기본 카메라로 바로 촬영을 시작할 때 필요한 기본 구성입니다.",
+        "description": "낮은 예산으로 촬영을 시작할 수 있도록 기본 음성, 조명, 거치 안정성을 우선한 구성입니다.",
+        "criteria": ["낮은 가격", "기본 기능 충족", "사용 난이도 낮음", "가성비"],
+        "selectionReason": "입문자는 장비 운용 부담과 초기 비용이 가장 큰 제약이므로, 가격 부담이 낮고 바로 쓰기 쉬운 기본 장비를 우선했습니다.",
         "items": ["USB 마이크", "링라이트", "스마트폰 삼각대"],
     },
     {
         "level": "intermediate",
         "title": "중급자용 세트",
-        "description": "음성 품질과 촬영 안정성을 함께 올리고 편집 파일을 안정적으로 관리하는 구성입니다.",
+        "description": "콘텐츠 품질을 올리면서 비용을 과도하게 키우지 않도록 성능, 안정성, 확장성을 균형 있게 맞춘 구성입니다.",
+        "criteria": ["성능/가격 균형", "수집 인기 점수", "확장성", "편집/촬영 안정성"],
+        "selectionReason": "중급자는 촬영 품질과 작업 효율을 함께 끌어올려야 하므로, 인기 점수와 가격 균형이 좋은 실제 판매 상품을 우선했습니다.",
         "items": ["무선 핀마이크", "촬영 조명", "카메라 삼각대", "외장 SSD"],
     },
     {
         "level": "advanced",
         "title": "고급자용 세트",
-        "description": "라이브, 리뷰, 스튜디오 촬영까지 확장할 수 있는 고급 제작 장비 구성입니다.",
+        "description": "라이브, 리뷰, 스튜디오 촬영처럼 전문 제작 환경에 필요한 고성능 장비 중심 구성입니다.",
+        "criteria": ["고성능", "전문 촬영/제작용", "고급 기능", "브랜드/제조사 신뢰도"],
+        "selectionReason": "고급자는 전문 워크플로우와 확장 기능이 중요하므로, 고성능 카테고리와 브랜드/제조사 정보가 확인되는 상품을 우선했습니다.",
         "items": ["액션캠", "캡처보드", "스트림덱", "고성능 조명"],
     },
 ]
@@ -336,6 +342,85 @@ def _keyword_matches_product(keyword: str, product: ShopProduct) -> bool:
     return normalized_keyword in searchable
 
 
+def _format_price(value: int | None) -> str:
+    return f"{value:,}원" if isinstance(value, int) else "가격 정보 없음"
+
+
+def _brand_signal(product: ShopProduct) -> bool:
+    return bool(product.brand or product.maker)
+
+
+def _level_price_score(level: str, price: int | None) -> tuple[float, str]:
+    if price is None:
+        return 0, "가격 정보가 없어 인기 점수와 검색어 매칭을 보조 기준으로 사용"
+    if level == "beginner":
+        if price <= 50_000:
+            return 25, "입문 예산에 맞는 낮은 가격"
+        if price <= 120_000:
+            return 16, "초기 구매 부담이 비교적 낮은 가격"
+        return 2, "입문용치고 가격 부담이 있어 보조 후보로 평가"
+    if level == "intermediate":
+        if 50_000 <= price <= 350_000:
+            return 20, "성능과 가격 균형을 기대할 수 있는 중간 가격대"
+        if price < 50_000:
+            return 8, "가격은 낮지만 중급 확장성은 추가 확인 필요"
+        return 10, "가격은 높지만 품질 개선 목적에 부합 가능"
+    if price >= 150_000:
+        return 20, "전문 제작 장비에 가까운 고가/고성능 가격대"
+    if price >= 80_000:
+        return 12, "고급 기능 후보로 볼 수 있는 가격대"
+    return 3, "고급자용 기준에서는 낮은 가격이라 기능 확인 필요"
+
+
+def _score_product_for_set(product: ShopProduct, level: str, keyword: str) -> tuple[float, list[str]]:
+    score = min(product.popularityScore, 100) * 0.2
+    reasons: list[str] = []
+    if _keyword_matches_product(keyword, product):
+        score += 35
+        reasons.append(f"'{keyword}' 검색 의도와 직접 매칭")
+    else:
+        reasons.append(f"'{keyword}' 직접 매칭은 약하지만 같은 {product.equipmentCategory} 카테고리")
+
+    if product.recommendedLevel == level:
+        score += 25
+        reasons.append("collector 추천 레벨 일치")
+    elif product.recommendedLevel:
+        score += 5
+        reasons.append(f"collector 레벨은 {product.recommendedLevel}로 보조 후보")
+    else:
+        reasons.append("추천 레벨 미지정 상품이라 가격/인기/카테고리 기준으로 보완")
+
+    price_score, price_reason = _level_price_score(level, product.price)
+    score += price_score
+    reasons.append(price_reason)
+
+    if _brand_signal(product):
+        score += 8
+        reasons.append("브랜드/제조사 정보 확인")
+    if product.popularityScore > 0:
+        reasons.append(f"수집 인기 점수 {round(product.popularityScore, 1)}")
+    return score, reasons
+
+
+def _selection_reason(product: ShopProduct, level: str, keyword: str, explicit: bool = False) -> str:
+    if explicit:
+        return "운영자가 세트에 고정한 실제 판매 상품입니다."
+    _score, reasons = _score_product_for_set(product, level, keyword)
+    compact_reasons = reasons[:3]
+    compact_reasons.append(_format_price(product.price))
+    return " · ".join(compact_reasons)
+
+
+def _with_selection_reason(product: ShopProduct, level: str, keyword: str, explicit: bool = False) -> ShopProduct:
+    recommended_level = product.recommendedLevel or level
+    return product.model_copy(
+        update={
+            "recommendedLevel": recommended_level,
+            "selectionReason": _selection_reason(product, level, keyword, explicit),
+        }
+    )
+
+
 async def _active_keywords(equipment_category: str | None = None) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
         "select": "id,equipment_category,keyword,source,is_active",
@@ -425,7 +510,7 @@ async def _set_products_for_config(level: str, config: dict[str, Any], product_i
     if product_ids:
         products = await _cached_products_by_ids(product_ids)
         if products:
-            return products
+            return [_with_selection_reason(product, level, "운영자 고정 구성", explicit=True) for product in products]
 
     selected: list[ShopProduct] = []
     selected_keys: set[str] = set()
@@ -433,28 +518,27 @@ async def _set_products_for_config(level: str, config: dict[str, Any], product_i
         equipment_category = _keyword_equipment_category(keyword)
         if not equipment_category:
             continue
-        candidates = await _cached_products(equipment_category, 8, DEFAULT_SORT, level)
-        if not candidates:
-            candidates = await _cached_products(equipment_category, 8, DEFAULT_SORT, None)
-        candidates = sorted(candidates, key=lambda product: (not _keyword_matches_product(keyword, product), -product.popularityScore))
+        level_candidates = await _cached_products(equipment_category, MAX_LIMIT, DEFAULT_SORT, level)
+        general_candidates = await _cached_products(equipment_category, MAX_LIMIT, DEFAULT_SORT, None)
+        candidates = _dedupe_products([*level_candidates, *general_candidates], MAX_LIMIT)
+        candidates = sorted(
+            candidates,
+            key=lambda product: (
+                _score_product_for_set(product, level, keyword)[0],
+                product.popularityScore,
+                product.collectedAt or "",
+            ),
+            reverse=True,
+        )
         for product in candidates:
             key = product.id or product.sourceProductId or product.productUrl
             if not key or key in selected_keys:
                 continue
-            selected.append(product)
+            selected.append(_with_selection_reason(product, level, keyword))
             selected_keys.add(key)
             break
 
-    if selected:
-        return selected
-
-    fallback_sections = [
-        section
-        for section in [await _section_products(category, 2, DEFAULT_SORT, level) for category in EQUIPMENT_KEYWORDS]
-        if not section.isFallback
-    ]
-    products = [product for section in fallback_sections for product in section.items]
-    return _dedupe_products(products, 4)
+    return selected
 
 
 async def _fetch_naver_shop(keyword: str, display: int) -> list[dict[str, Any]]:
@@ -682,6 +766,8 @@ async def list_shop_sets() -> ShopSetsResponse:
                 level=level,
                 title=str(row.get("title") or config.get("title") or level),
                 description=row.get("description") if isinstance(row.get("description"), str) else config.get("description"),
+                criteria=_as_str_list(config.get("criteria")),
+                selectionReason=config.get("selectionReason") if isinstance(config.get("selectionReason"), str) else None,
                 items=list(config.get("items") or []),
                 products=products,
             )

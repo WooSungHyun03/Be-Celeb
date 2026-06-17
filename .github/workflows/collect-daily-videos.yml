@@ -60,9 +60,9 @@ jobs:
                 ;;
             esac
 
-            if ! python3 -c 'import sys; from urllib.parse import urlparse; parsed = urlparse(sys.argv[1]); sys.exit(0 if parsed.scheme in {"http", "https"} and parsed.netloc and parsed.path else 1)' "$value"
+            if ! python3 -c 'import sys; from urllib.parse import urlparse; parsed = urlparse(sys.argv[1]); sys.exit(0 if parsed.scheme in {"http", "https"} and parsed.netloc and parsed.path and not parsed.query and not parsed.fragment else 1)' "$value"
             then
-              echo "::error::$name is not a valid absolute URL."
+              echo "::error::$name must be an absolute URL without query strings or fragments. Put credentials only in CRON_SECRET."
               missing=1
               continue
             fi
@@ -78,9 +78,9 @@ jobs:
           if printf '%s' "$cleanup_value" | grep -q '[[:space:]]'; then
             echo "::error::DAILY_CLEANUP_ENDPOINT contains whitespace or a newline."
             missing=1
-          elif ! python3 -c 'import sys; from urllib.parse import urlparse; parsed = urlparse(sys.argv[1]); sys.exit(0 if parsed.scheme in {"http", "https"} and parsed.netloc and parsed.path else 1)' "$cleanup_value"
+          elif ! python3 -c 'import sys; from urllib.parse import urlparse; parsed = urlparse(sys.argv[1]); sys.exit(0 if parsed.scheme in {"http", "https"} and parsed.netloc and parsed.path and not parsed.query and not parsed.fragment else 1)' "$cleanup_value"
           then
-            echo "::error::DAILY_CLEANUP_ENDPOINT is not a valid absolute URL."
+            echo "::error::DAILY_CLEANUP_ENDPOINT must be an absolute URL without query strings or fragments. Put credentials only in CRON_SECRET."
             missing=1
           else
             printf 'DAILY_CLEANUP_ENDPOINT=%s\n' "$cleanup_value" >> "$GITHUB_ENV"

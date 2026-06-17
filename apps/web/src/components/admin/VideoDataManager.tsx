@@ -189,7 +189,7 @@ export function VideoDataManager({ categories, channels, videos, onChanged, onEr
                 <td className="px-3 py-3">
                   <div className="flex justify-end gap-2">
                     {video.youtubeUrl ? (
-                      <a className="text-sm font-semibold text-violet-700" href={video.youtubeUrl} rel="noreferrer" target="_blank">
+                      <a className="text-sm font-semibold text-violet-700" href={video.youtubeUrl} rel="noopener noreferrer" target="_blank">
                         YouTube
                       </a>
                     ) : null}

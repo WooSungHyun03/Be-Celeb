@@ -7,7 +7,7 @@ let browserClient: SupabaseClient | null = null;
 
 export function getSupabaseBrowserClient() {
   if (!hasSupabasePublicEnv()) {
-    throw new Error("Supabase auth is not configured for this local environment.");
+    throw new Error("로그인 설정을 확인하지 못했습니다. 관리자에게 문의해 주세요.");
   }
 
   const { supabaseAnonKey, supabaseUrl } = getSupabasePublicEnv();

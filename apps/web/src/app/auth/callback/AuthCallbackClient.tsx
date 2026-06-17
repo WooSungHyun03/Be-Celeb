@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@/constants/routes";
 import { getSupabaseBrowserClient } from "@/lib/auth/supabase";
+import { getSafeNextPath } from "@/lib/navigation/safe-next-path";
 
 type AuthCallbackClientProps = {
   code?: string;
@@ -12,14 +13,6 @@ type AuthCallbackClientProps = {
   errorDescription?: string;
   nextPath?: string;
 };
-
-function getSafeNextPath(nextPath: string | undefined) {
-  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
-    return null;
-  }
-
-  return nextPath;
-}
 
 export function AuthCallbackClient({ code, error, errorDescription, nextPath }: AuthCallbackClientProps) {
   const router = useRouter();
@@ -30,13 +23,13 @@ export function AuthCallbackClient({ code, error, errorDescription, nextPath }: 
     async function exchangeSession() {
       if (error) {
         setStatus("error");
-        setMessage(errorDescription ?? error);
+        setMessage(errorDescription ?? "인증 요청을 완료하지 못했습니다. 다시 로그인해 주세요.");
         return;
       }
 
       if (!code) {
         setStatus("error");
-        setMessage("Supabase 인증 코드가 없습니다.");
+        setMessage("인증 링크가 유효하지 않거나 만료되었습니다. 다시 로그인해 주세요.");
         return;
       }
 
@@ -47,19 +40,17 @@ export function AuthCallbackClient({ code, error, errorDescription, nextPath }: 
 
         if (exchangeError) {
           setStatus("error");
-          setMessage(exchangeError.message);
+          setMessage("인증 링크가 만료되었거나 이미 사용되었습니다. 다시 로그인해 주세요.");
           return;
         }
 
         setStatus("success");
         setMessage("인증이 완료됐어요. 잠시 후 이동합니다.");
 
-        const safeNextPath = getSafeNextPath(nextPath);
-
-        router.replace(safeNextPath ?? ROUTES.dashboard);
+        router.replace(getSafeNextPath(nextPath, ROUTES.dashboard));
       } catch (exchangeError) {
         setStatus("error");
-        setMessage(exchangeError instanceof Error ? exchangeError.message : "알 수 없는 인증 오류입니다.");
+        setMessage("인증 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
       }
     }
 

@@ -16,6 +16,10 @@ venv/
 # Environment
 .env
 .env.*
+.envrc
+.envrc.*
+*.local
+.npmrc
 
 # Logs
 *.log
@@ -23,12 +27,17 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.next-dev*.log
 
 # Build outputs
 dist/
 build/
 coverage/
 *.tsbuildinfo
+.turbo/
+.cache/
+playwright-report/
+test-results/
 
 # OS and editor
 .DS_Store
@@ -41,5 +50,22 @@ Thumbs.db
 
 # Supabase CLI local state
 supabase/.temp/
+
+# Local secrets, credentials, and dumps
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+*.mobileprovision
+*.jks
+*.keystore
+*.dump
+*.sql.gz
+*.bak
+*.backup
+*.har
+*.trace.zip
 
 Backend_Feddback.md

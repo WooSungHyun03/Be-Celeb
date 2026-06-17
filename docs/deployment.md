@@ -15,10 +15,10 @@ Vercel은 UI만 담당한다. 브라우저에서 실행되는 클라이언트 �
 Vercel에는 브라우저에 노출되어도 되는 값만 설정한다.
 
 ```env
-NEXT_PUBLIC_SITE_URL=https://be-celeb.org
-NEXT_PUBLIC_API_BASE_URL=https://your-render-backend.onrender.com
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_SITE_URL=<WEB_ORIGIN>
+NEXT_PUBLIC_API_BASE_URL=<RENDER_API_ORIGIN>
+NEXT_PUBLIC_SUPABASE_URL=<SUPABASE_PROJECT_URL>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<SUPABASE_ANON_KEY>
 ```
 
 Vercel에는 다음 값을 넣지 않는다.
@@ -41,21 +41,21 @@ Admin 콘솔(`/admin`)도 Render Backend의 `/api/admin/*`만 호출한다.
 Render Backend API에는 서버에서만 쓰는 값을 설정한다.
 
 ```env
-NEXT_PUBLIC_SITE_URL=https://be-celeb.org
-ALLOWED_ORIGINS=https://be-celeb.org,https://be-celeb.vercel.app,http://localhost:3000
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-YOUTUBE_API_KEY=your-youtube-api-key
-NAVER_CLIENT_ID=your-naver-client-id
-NAVER_CLIENT_SECRET=your-naver-client-secret
-NAVER_SHOPPING_CLIENT_ID=your-shopping-search-client-id
-NAVER_SHOPPING_CLIENT_SECRET=your-shopping-search-client-secret
-LOCAL_LLM_API_URL=https://llm-api.be-celeb.org/v1/chat/completions
-LOCAL_LLM_API_KEY=your-local-llm-key
-LOCAL_LLM_MODEL=local-model
-CRON_SECRET=your-cron-secret
-ADMIN_SECRET=your-admin-secret
+NEXT_PUBLIC_SITE_URL=<WEB_ORIGIN>
+ALLOWED_ORIGINS=<WEB_ORIGIN>,<PREVIEW_WEB_ORIGIN>,http://localhost:3000
+SUPABASE_URL=<SUPABASE_PROJECT_URL>
+SUPABASE_ANON_KEY=<SUPABASE_ANON_KEY>
+SUPABASE_SERVICE_ROLE_KEY=<SUPABASE_SERVICE_ROLE_KEY>
+YOUTUBE_API_KEY=<YOUTUBE_API_KEY>
+NAVER_CLIENT_ID=<NAVER_CLIENT_ID>
+NAVER_CLIENT_SECRET=<NAVER_CLIENT_SECRET>
+NAVER_SHOPPING_CLIENT_ID=<NAVER_SHOPPING_CLIENT_ID>
+NAVER_SHOPPING_CLIENT_SECRET=<NAVER_SHOPPING_CLIENT_SECRET>
+LOCAL_LLM_API_URL=<LOCAL_LLM_API_URL>
+LOCAL_LLM_API_KEY=<LOCAL_LLM_API_KEY>
+LOCAL_LLM_MODEL=<LOCAL_LLM_MODEL>
+CRON_SECRET=<CRON_SECRET>
+ADMIN_SECRET=<ADMIN_SECRET>
 ```
 
 `ADMIN_SECRET`은 MVP admin passcode다. 운영자는 `/admin`에서 이 값을 입력하고, 프론트엔드는 `Authorization: Bearer <ADMIN_SECRET>`로 Render Backend에 전달한다. 장기 운영에서는 Supabase Auth admin role로 교체하는 것을 권장한다.
@@ -66,7 +66,7 @@ Frontend API client는 `apps/web/src/lib/api` 도메인 wrapper와 `apps/web/src
 
 - `getApiBaseUrl()`은 `NEXT_PUBLIC_API_BASE_URL`을 읽는다.
 - `apiFetch("/api/...")`는 내부에서 Render Backend URL과 결합한다.
-- 예: `/api/recommend-content` → `https://your-render-backend.onrender.com/api/recommend-content`
+- 예: `/api/recommend-content` → `<RENDER_API_ORIGIN>/api/recommend-content`
 - `NEXT_PUBLIC_API_BASE_URL`이 없으면 `NEXT_PUBLIC_API_BASE_URL is not configured` 에러를 표시한다.
 - `NEXT_PUBLIC_API_BASE_URL`에는 `/api`를 붙이지 않는다.
 
@@ -418,7 +418,7 @@ await fetch("/api/recommend-content");
 1. Vercel에서 `NEXT_PUBLIC_API_BASE_URL`이 Render Backend URL인지 확인한다.
 2. 브라우저 개발자 도구 Network 탭을 연다.
 3. `/dashboard`에서 추천 생성을 실행한다.
-4. 요청 URL이 `https://your-render-backend.onrender.com/api/recommend-content`인지 확인한다.
+4. 요청 URL이 `<RENDER_API_ORIGIN>/api/recommend-content`인지 확인한다.
 5. 요청 URL이 `https://be-celeb.org/api/recommend-content`이면 잘못된 배포다.
 6. 요청 URL이 `https://api.be-celeb.org/api/api/recommend-content`이면 `NEXT_PUBLIC_API_BASE_URL`에서 `/api`를 제거한다.
 7. CORS 오류가 나면 Render의 `ALLOWED_ORIGINS`에 현재 Vercel origin을 추가하고 재배포한다.
@@ -481,11 +481,11 @@ curl "$NEXT_PUBLIC_API_BASE_URL/api/shop/sets"
 Daily YouTube collection과 Daily Naver trends collection은 Render Backend API를 호출한다.
 
 ```env
-DAILY_COLLECT_ENDPOINT=https://your-render-backend.onrender.com/api/cron/collect-daily-videos
+DAILY_COLLECT_ENDPOINT=<RENDER_API_ORIGIN>/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
 DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-products
 DAILY_GROWTH_REPORT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-growth-report
-CRON_SECRET=your-cron-secret
+CRON_SECRET=<CRON_SECRET>
 ```
 
 Schedule:
@@ -503,7 +503,7 @@ DAILY_COLLECT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-daily-videos
 DAILY_NAVER_TRENDS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-naver-trends
 DAILY_SHOP_PRODUCTS_ENDPOINT=https://api.be-celeb.org/api/cron/collect-shop-products
 DAILY_GROWTH_REPORT_ENDPOINT=https://api.be-celeb.org/api/cron/collect-growth-report
-CRON_SECRET=your-cron-secret
+CRON_SECRET=<CRON_SECRET>
 ```
 
 `curl: (3) URL rejected: Malformed input to a URL function`가 발생하면 backend API가 실행되기 전 단계에서 URL secret 값 자체가 잘못된 것이다. GitHub repository secret의 `DAILY_SHOP_PRODUCTS_ENDPOINT`를 다시 저장한다.

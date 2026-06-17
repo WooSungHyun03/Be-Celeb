@@ -1,365 +1,205 @@
 # Be Celeb
 
-Be Celeb은 유튜브 크리에이터가 자신의 채널과 비슷한 카테고리의 인플루언서 콘텐츠 패턴을 분석해 다음 영상 아이디어를 추천받는 AI 서비스입니다.
+Be Celeb is a creator operations app for YouTube trend research, content recommendations, growth tracking, production planning, and creator equipment discovery.
 
-이 저장소는 Next.js 웹앱, Render Backend API, Supabase, Resend, Local LLM API를 실제 배포 환경에 연결할 수 있는 최소 구조를 제공합니다. API Key와 secret은 코드에 포함하지 않고 환경변수로만 주입합니다.
+This repository contains the existing Be Celeb monorepo:
 
-## 배포 아키텍처
+- `apps/web`: Next.js App Router frontend
+- `apps/api`: FastAPI backend for recommendations, trends, collectors, admin operations, and Supabase-backed APIs
+- `packages/shared`: shared constants and types
+- `supabase`: schema, policies, seed data, and versioned migrations
+- `docs`: deployment, admin, collector, recommendation, and Supabase operation notes
 
-| 영역 | 서비스 |
-| --- | --- |
-| DNS / 도메인 / Email Routing | Cloudflare |
-| Web | Vercel + Next.js |
-| API | Render Backend API |
-| Auth / DB / Storage | Supabase |
-| Email 발송 | Resend |
-| AI 추천 | Local LLM API / OpenAI API |
+Do not commit runtime secrets. This project does not use committed `.env` or `.env.example` files. Configure all environment variables in your shell, Docker runtime, Vercel, Render, Supabase, or GitHub Actions secrets.
 
-## 도메인 구조
+## Stack
 
-| Domain | Target |
-| --- | --- |
-| `https://be-celeb.org` | Vercel Next.js production |
-| `https://www.be-celeb.org` | Vercel Next.js production |
-| `https://api.be-celeb.org` | Render Backend API production |
+- Web: Next.js, React, TypeScript, Tailwind CSS
+- API: FastAPI, Pydantic, httpx
+- Auth and DB: Supabase
+- Collectors: YouTube Data API, Naver DataLab, Naver Shopping Search
+- LLM: OpenAI-compatible local LLM endpoint configured on the backend
+- Deployment: Vercel for web, Render for API, Supabase for database, GitHub Actions or Render Cron for scheduled collection
 
-## 사용 스택
+## Local Setup
 
-- Frontend: Next.js, React, TypeScript, App Router, Tailwind CSS
-- Backend API: Render-hosted Next.js Route Handlers, FastAPI legacy routes
-- Auth/Database/Storage: Supabase
-- Email: Resend
-- AI: OpenAI Responses API
-- Deployment: Vercel, Render, Cloudflare
-
-Frontend는 `NEXT_PUBLIC_API_BASE_URL`을 통해 Render Backend API를 호출합니다. Vercel에는 `YOUTUBE_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LOCAL_LLM_API_KEY`를 넣지 않습니다. 자세한 배포 구조와 CORS 설정은 `docs/deployment.md`를 확인합니다. 운영자 콘솔 사용 방법은 `docs/admin.md`, 추천 흐름은 `docs/recommendation-flow.md`를 확인합니다.
-
-## 역할별 담당 디렉토리
-
-팀은 3명 역할로 나눕니다.
-
-| 역할 | 주로 수정 가능 | 협의 없이 수정하지 않는 영역 |
-| --- | --- | --- |
-| Frontend | `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/lib/api/`, `apps/web/src/lib/auth/`, `apps/web/src/lib/common/`, `apps/web/src/utils/`, `apps/web/src/types/`, `apps/web/src/constants/`, `apps/web/public/` | `apps/api/`, `supabase/` |
-| Backend | `apps/api/app/domains/`, `apps/api/app/core/`, `apps/api/app/common/`, `apps/api/app/services/`, `supabase/` | `apps/web/src/components/`, 화면 페이지 디렉토리, `data-design/` |
-| Data/Design | `data-design/`, `apps/web/src/constants/`, `packages/shared/constants/` | `apps/web/src/app/`, `apps/web/src/components/`, `apps/api/app/domains/`, `supabase/schema.sql` |
-
-자세한 역할별 파일 목록은 `docs/role-guide.md`와 `docs/role-task-list.md`를 확인합니다.
-
-## Git Conflict 방지 규칙
-
-- 담당 디렉토리 외 파일은 수정하지 않습니다.
-- `package.json`, `requirements.txt`, `schema.sql`, `tsconfig.json`, `tailwind.config.ts` 같은 공통 파일은 Jira 티켓을 만들고 수정합니다.
-- 매일 작업 시작 전 `develop`을 최신화합니다.
-- 작업은 항상 `feature/*`, `fix/*`, `docs/*` 브랜치에서 합니다.
-- `main`과 `develop`에는 직접 push하지 않습니다.
-- Pull Request를 통해서만 merge합니다.
-- 같은 페이지를 두 명이 동시에 수정하지 않습니다.
-- 샘플 데이터 구조 변경 시 Frontend/Backend 모두에게 알립니다.
-- API response 형식 변경 시 `docs/api-contract.md`를 먼저 수정합니다.
-
-자세한 규칙은 `docs/git-conflict-prevention.md`를 확인합니다.
-
-## 초보자용 작업 시작 방법
-
-처음 한 번:
+Install JavaScript dependencies from the repository root:
 
 ```bash
-git clone <REPOSITORY_URL>
-cd be-celeb
-git checkout develop
-git pull origin develop
-```
-
-매일 작업 시작:
-
-```bash
-git checkout develop
-git pull origin develop
-git checkout -b feature/역할-작업명
-```
-
-Frontend 예시:
-
-```bash
-git checkout -b feature/frontend-dashboard
-cd apps/web
 npm install
-npm run dev
 ```
 
-Backend 예시:
+Install Python dependencies for the API:
 
 ```bash
-git checkout -b feature/backend-recommendation-api
 cd apps/api
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn app.main:app --reload
 ```
 
-Data/Design 예시:
+Run the web app:
 
 ```bash
-git checkout -b feature/data-rulebase
-git add data-design apps/web/src/constants
-git commit -m "data: add rulebase and sample trends"
-git push origin feature/data-rulebase
+npm run dev:web
 ```
 
-전체 명령어 가이드는 `docs/beginner-git-guide.md`를 확인합니다.
-
-## 브랜치 전략
-
-- `main`: 배포 가능한 안정 브랜치. 직접 push 금지.
-- `develop`: 개발 통합 브랜치. 직접 push 금지.
-- `feature/frontend-작업명`: Frontend 작업.
-- `feature/backend-작업명`: Backend 작업.
-- `feature/data-작업명`: Data 작업.
-- `feature/design-작업명`: Design 작업.
-- `fix/버그명`: 버그 수정.
-- `docs/문서명`: 문서 작업.
-
-예시:
-
-```txt
-feature/frontend-landing-page
-feature/backend-openai-service
-feature/data-rulebase
-feature/design-service-copy
-fix/cors-error
-docs/jira-workflow
-```
-
-## PR 규칙
-
-- PR 제목에 Jira 티켓 번호를 포함합니다.
-- PR 설명에 작업 내용, 수정한 디렉토리, 테스트 방법을 작성합니다.
-- 화면 작업이면 스크린샷을 첨부합니다.
-- API 작업이면 요청/응답 예시를 첨부합니다.
-- conflict가 있으면 혼자 해결하지 말고 담당자에게 공유합니다.
-- API response를 바꿨다면 `docs/api-contract.md` 변경을 PR에 포함합니다.
-
-PR 템플릿은 `.github/pull_request_template.md`를 사용합니다.
-
-## Jira 티켓 규칙
-
-Jira 상태값:
-
-- `Backlog`
-- `To Do`
-- `In Progress`
-- `Code Review`
-- `Done`
-
-Epic 예시:
-
-- `FE: Frontend UI`
-- `BE: Backend API`
-- `DATA: Trend Data and Rulebase`
-- `DESIGN: Design and Copy`
-- `DEPLOY: Deployment`
-- `DOCS: Documentation`
-
-티켓 예시:
-
-- `FE-1 랜딩 페이지 UI 구현`
-- `BE-3 OpenAI 추천 API 연결`
-- `DATA-2 룰베이스 추천 규칙 작성`
-- `DESIGN-1 랜딩 페이지 문구 작성`
-
-자세한 규칙은 `docs/jira-workflow.md`를 확인합니다.
-
-## 역할별 구현해야 하는 기능 요약
-
-Frontend:
-
-- 랜딩, 로그인, 회원가입, 온보딩, 대시보드, 트렌드, 추천, 저장 UI
-- Header, Sidebar/Navbar, Footer, Button, Card, Input, Badge
-- Loading, Empty, Error 상태 UI
-- 추천 생성/저장/복사 버튼 UI
-- 카테고리/YouTube 형식 필터와 추천 결과 표시 UI
-
-Backend:
-
-- FastAPI `/health`, `/api/recommend-content`, `/api/recommendations/{id}`, `/api/trends/*`, `/api/admin/*`
-- Domain router structure under `apps/api/app/domains`
-- Supabase Auth/DB 연결
-- YouTube API / Supabase / Local LLM API 연동
-- API contract, SQL schema, RLS 정책
-
-Data/Design:
-
-- 트렌드 카테고리
-- YouTube 형식 목록
-- 룰베이스 추천 규칙
-- 샘플 트렌드와 사용자 프로필
-- 서비스 문구, 온보딩 질문, 추천 결과 예시 문구
-- 발표용 데이터와 데모 시나리오
-
-자세한 구현 목록은 `docs/role-task-list.md`를 확인합니다.
-
-## 로컬 실행
-
-### Web
+Run the API:
 
 ```bash
-cd apps/web
-npm install
-npm run dev
+npm run dev:api
 ```
 
-환경값은 `.env` 파일이 아니라 shell, Docker, Vercel 또는 내부 환경 설정에서 주입합니다.
+Default local URLs:
 
-로컬 주소:
+- Web: `http://localhost:3000`
+- API: `http://localhost:8000`
 
-```txt
-http://localhost:3000
-```
+## Validation Commands
 
-### FastAPI
+Root scripts currently available:
 
 ```bash
+npm run typecheck
+npm run lint
+npm run build
+```
+
+API checks:
+
+```bash
+python -m compileall apps\api\app
 cd apps/api
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+python -m pytest
 ```
 
-FastAPI도 `.env` 파일을 로드하지 않습니다. 필요한 값은 runtime environment로 주입합니다.
+`npm run lint` currently runs the web TypeScript check. There is no separate ESLint configuration yet.
 
-로컬 주소:
+## Environment Variables
 
-```txt
-http://localhost:8000
+Use these names only. Set real values in the deployment platform or local shell; never commit the values.
+
+### Web, Vercel, and Browser-Safe Variables
+
+| Name | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_SITE_URL` | Public web origin |
+| `NEXT_PUBLIC_API_BASE_URL` | Public backend API origin |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL, safe for browser use |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key, safe for browser use under RLS |
+| `ALLOWED_ORIGINS` | Optional comma-separated origins for proxy/CORS behavior |
+
+Only `NEXT_PUBLIC_*` values are bundled into the browser. Do not add service-role keys, API keys, admin secrets, cron secrets, or LLM keys to Vercel frontend variables.
+
+### API, Render, and Server-Only Variables
+
+| Name | Purpose |
+| --- | --- |
+| `SUPABASE_URL` | Supabase REST/Auth URL |
+| `SUPABASE_ANON_KEY` | Supabase anon key for server-side auth verification |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase service-role key |
+| `YOUTUBE_API_KEY` | Server-only YouTube Data API key |
+| `NAVER_CLIENT_ID` | Naver API client id |
+| `NAVER_CLIENT_SECRET` | Naver API client secret |
+| `NAVER_SHOPPING_CLIENT_ID` | Optional shopping-search-specific Naver client id |
+| `NAVER_SHOPPING_CLIENT_SECRET` | Optional shopping-search-specific Naver client secret |
+| `LOCAL_LLM_API_URL` | Server-only OpenAI-compatible LLM endpoint |
+| `LOCAL_LLM_API_KEY` | Optional server-only LLM bearer token |
+| `LOCAL_LLM_MODEL` | LLM model identifier |
+| `ADMIN_SECRET` | Temporary admin console passcode for backend admin APIs |
+| `CRON_SECRET` | Shared secret for collector/cron endpoints |
+| `ENVIRONMENT` / `FASTAPI_ENV` | Runtime environment label |
+| `LOG_LEVEL` | API log level |
+| `FRONTEND_URL` | Canonical frontend origin for CORS |
+| `API_BASE_URL` | Canonical backend API origin |
+
+### GitHub Actions Secrets
+
+| Name | Purpose |
+| --- | --- |
+| `DAILY_COLLECT_ENDPOINT` | Absolute URL for daily YouTube collector |
+| `DAILY_NAVER_TRENDS_ENDPOINT` | Absolute URL for Naver trends collector |
+| `DAILY_SHOP_PRODUCTS_ENDPOINT` | Absolute URL for shop product collector |
+| `DAILY_GROWTH_REPORT_ENDPOINT` | Absolute URL for growth report collector |
+| `DAILY_CLEANUP_ENDPOINT` | Optional absolute URL for cleanup collector |
+| `CRON_SECRET` | Secret sent as `Authorization: Bearer ...` |
+| `SUPABASE_ACCESS_TOKEN` | Supabase CLI access token |
+| `SUPABASE_PROJECT_REF` | Supabase project reference |
+| `SUPABASE_DB_PASSWORD` | Hosted Supabase database password |
+
+Collector endpoint secrets must be plain absolute URLs without query strings or fragments. Put credentials only in `CRON_SECRET`.
+
+## Deployment
+
+### Web on Vercel
+
+- Project root: `apps/web`
+- Install command: `npm install`
+- Build command: `npm run build`
+- Runtime command: Vercel default for Next.js
+- Required variables: the browser-safe `NEXT_PUBLIC_*` values listed above
+
+### API on Render
+
+- Root directory: `apps/api`
+- Build command: `pip install -r requirements.txt`
+- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Health check: `/health`
+- Required variables: server-only API variables listed above
+
+### Supabase
+
+Database changes are managed with versioned files in `supabase/migrations`.
+
+Useful root commands:
+
+```bash
+npm run db:link
+npm run db:push
+npm run db:push:seed
 ```
 
-## Vercel 배포
+The GitHub workflow `.github/workflows/supabase-db.yml` applies migrations from `main` when Supabase secrets are configured.
 
-- Root Directory: `apps/web`
-- Install Command: `npm install`
-- Build Command: `npm run build`
-- Output: Next.js 기본값
+### Collectors
 
-배포 후 확인:
+Scheduled collection can run from Render Cron or `.github/workflows/collect-daily-videos.yml`.
 
-```txt
-https://be-celeb.org/api/health
+Important endpoints:
+
+- `POST /api/cron/collect-daily-videos`
+- `POST /api/cron/collect-naver-trends`
+- `POST /api/cron/collect-shop-products`
+- `POST /api/cron/collect-growth-report`
+- `POST /api/cron/cleanup-old-data`
+
+Every cron endpoint requires `CRON_SECRET`. Do not place secrets in endpoint query strings.
+
+## Docker
+
+Docker files are included for local parity and platform builds:
+
+```bash
+docker compose build
+docker compose up
 ```
 
-자세한 내용은 `docs/vercel-deploy.md`를 확인합니다.
+Values referenced in `docker-compose.yml` must come from the shell or the Docker runtime environment. Do not commit a local env file.
 
-## Render 배포
+## Documentation
 
-- Root Directory: `apps/api`
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- [Deployment](docs/deployment.md)
+- [Admin operations](docs/admin.md)
+- [Daily collection](docs/daily-collection.md)
+- [Docker](docs/docker.md)
+- [Recommendation flow](docs/recommendation-flow.md)
+- [Recommendation system](docs/recommendation-system.md)
+- [Supabase setup](docs/supabase-setup.md)
+- [QA report](docs/qa-report.md)
 
-배포 후 확인:
+## Security Rules
 
-```txt
-https://api.be-celeb.org/health
-```
-
-자세한 내용은 `docs/render-deploy.md`를 확인합니다.
-
-## Supabase 설정
-
-Supabase Auth 설정:
-
-- Site URL: `https://be-celeb.org`
-- Redirect URLs:
-  - `http://localhost:3000/auth/callback`
-  - `https://be-celeb.org/auth/callback`
-  - `https://www.be-celeb.org/auth/callback`
-
-DB 변경은 `supabase/migrations/`의 versioned migration으로 관리합니다. `main` 브랜치에 migration 변경이 push되면 `.github/workflows/supabase-db.yml`이 `supabase db push`를 실행합니다.
-
-자세한 내용은 `docs/supabase-setup.md`를 확인합니다.
-
-## 매일 YouTube 인플루언서 영상 수집
-
-카테고리별 인플루언서 채널은 Supabase `influencer_channels.channel_url`에 입력합니다. 한 채널/영상은 `influencer_channel_categories`, `influencer_video_categories` join table로 여러 카테고리에 연결할 수 있습니다. `POST /api/cron/collect-daily-videos`가 매일 KST 06:00(UTC 21:00)에 최근 24시간 업로드 영상을 YouTube API로 조회해 `influencer_videos`에 upsert하고, 채널의 다중 카테고리를 영상에도 반영합니다.
-
-자동 실행은 Render Cron Job 또는 `.github/workflows/collect-daily-videos.yml`로 설정합니다. 자세한 입력 SQL, 환경 변수, 수동 테스트 방법은 `docs/daily-collection.md`를 확인합니다.
-
-## Cloudflare 설정
-
-Cloudflare는 DNS, 도메인 관리, Email Routing을 담당합니다.
-
-- `be-celeb.org`: Vercel 연결
-- `www.be-celeb.org`: Vercel 연결
-- `api.be-celeb.org`: Render 연결
-- `hello@be-celeb.org`: 개인 Gmail forwarding
-- `support@be-celeb.org`: 개인 Gmail forwarding
-- `no-reply@be-celeb.org`: Resend 발신 주소
-
-자세한 내용은 `docs/cloudflare-setup.md`를 확인합니다.
-
-## AI API 설정
-
-FastAPI Backend만 Local LLM API를 호출합니다. YouTube 추천 흐름은 Render의 `POST /api/recommend-content`에서 1회 LLM 호출로 처리합니다.
-
-- FastAPI route: `POST /api/recommend-content`
-- Admin prompt route: `GET/POST/PATCH/DELETE /api/admin/llm-prompts`
-
-브라우저에는 YouTube, Supabase service role, Local LLM key가 노출되지 않습니다.
-
-## 환경변수 목록
-
-공통:
-
-```txt
-NEXT_PUBLIC_SITE_URL=https://be-celeb.org
-NEXT_PUBLIC_API_BASE_URL=https://api.be-celeb.org
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-YOUTUBE_API_KEY=
-NAVER_CLIENT_ID=
-NAVER_CLIENT_SECRET=
-LOCAL_LLM_API_URL=https://llm-api.be-celeb.org/v1/chat/completions
-LOCAL_LLM_API_KEY=
-LOCAL_LLM_MODEL=local-model
-CRON_SECRET=
-FASTAPI_ENV=production
-ENVIRONMENT=production
-LOG_LEVEL=INFO
-FRONTEND_URL=https://be-celeb.org
-API_BASE_URL=https://api.be-celeb.org
-```
-
-`.env`와 `.env.example` 파일은 사용하지 않습니다. 자세한 Docker 실행 방식은 `docs/docker.md`를 확인합니다.
-
-## 배포 체크리스트
-
-- [ ] Cloudflare nameserver 적용
-- [ ] Vercel `be-celeb.org` 연결
-- [ ] Vercel `www.be-celeb.org` 연결
-- [ ] Render `api.be-celeb.org` 연결
-- [ ] Supabase Site URL / Redirect URL 설정
-- [ ] Supabase SQL / RLS 적용
-- [ ] Vercel frontend 접속 확인
-- [ ] Render `/health` 확인
-- [ ] Docker build 또는 Render Docker 배포 확인
-- [ ] AI 추천 API 테스트 확인
-
-상세 체크리스트는 `project-management/deployment-checklist.md`를 사용합니다.
-
-## 문제 해결
-
-- Frontend 접속이 실패하면 Vercel Root Directory와 Build Command를 확인합니다.
-- `/health`가 실패하면 Render Start Command와 `PORT` 사용 여부를 확인합니다.
-- Supabase 인증 redirect가 실패하면 Site URL과 Redirect URLs를 확인합니다.
-- AI 추천이 실패하면 `YOUTUBE_API_KEY`, `LOCAL_LLM_API_URL`, `LOCAL_LLM_API_KEY` 설정을 확인합니다.
-- `/shop`에서 Naver 401 `errorCode: 024`가 나오면 Render Backend의 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, Render 재배포 여부, Naver Developers 앱의 “검색 API / 쇼핑 검색 API” 권한을 확인합니다.
-- `api.be-celeb.org` TLS 또는 routing 문제가 생기면 Cloudflare DNS record를 `DNS only`로 바꿔 확인합니다.
-
-## 보안 원칙
-
-- `SUPABASE_SERVICE_ROLE_KEY`는 클라이언트에 노출하지 않습니다.
-- `YOUTUBE_API_KEY`와 `LOCAL_LLM_API_KEY`는 서버 route handler에서만 사용합니다.
-- `NEXT_PUBLIC_` 접두사는 공개 가능한 값에만 사용합니다.
-- `.env`와 `.env.local`은 Git에 커밋하지 않습니다.
+- Never commit `.env`, `.env.local`, `.npmrc`, private keys, dumps, HAR files, logs, or build artifacts.
+- Treat `SUPABASE_SERVICE_ROLE_KEY`, `YOUTUBE_API_KEY`, Naver secrets, `LOCAL_LLM_API_KEY`, `ADMIN_SECRET`, `CRON_SECRET`, and GitHub/Supabase tokens as server-only.
+- Keep browser-exposed values limited to `NEXT_PUBLIC_*` values that are safe to publish.
+- If a real secret is ever committed, remove it from code and rotate or revoke it immediately. Removing it from the latest commit is not enough because Git history may still contain it.

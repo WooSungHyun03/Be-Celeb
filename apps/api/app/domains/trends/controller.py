@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import cast
 
 from fastapi import Header, Query
@@ -35,9 +36,15 @@ async def popular_videos(
         )
     except Exception:
         logger.exception("Popular videos endpoint failed; returning an empty list fallback.")
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         return ApiResponse(
             success=True,
-            data=PopularVideosResponse(videos=[]),
+            data=PopularVideosResponse(
+                videos=[],
+                emptyReason="인기 영상 조회 중 오류가 발생했습니다.",
+                windowStart=now,
+                windowEnd=now,
+            ),
             message="현재 인기 영상 데이터를 불러오지 못해 빈 목록을 반환했습니다.",
         )
 

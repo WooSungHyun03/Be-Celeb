@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse
 
-from app.core.config import get_settings
 from app.core.errors import AppException
+from app.core.security import verify_admin_secret
 from app.domains.trends.schemas import NaverKeywordGroupPayload, NaverKeywordGroupUpdatePayload
 from app.domains.trends.service import (
     collect_naver_trends,
@@ -87,13 +87,7 @@ async def require_admin(
     authorization: str | None = Header(default=None),
     x_admin_secret: str | None = Header(default=None),
 ) -> None:
-    settings = get_settings()
-    if not settings.admin_secret:
-        raise HTTPException(status_code=500, detail="Missing required environment variable: ADMIN_SECRET")
-    expected = settings.admin_secret
-    bearer = f"Bearer {expected}"
-    if authorization != bearer and x_admin_secret != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized admin request.")
+    verify_admin_secret(authorization, x_admin_secret)
 
 
 AdminAuth = Depends(require_admin)

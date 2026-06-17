@@ -231,6 +231,9 @@ class PopularTrendVideo(BaseModel):
 
 class PopularVideosResponse(BaseModel):
     videos: list[PopularTrendVideo]
+    emptyReason: str | None = None
+    windowStart: str | None = None
+    windowEnd: str | None = None
 
 
 class TrendKeywordCount(BaseModel):

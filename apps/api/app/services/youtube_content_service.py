@@ -42,6 +42,8 @@ UTC = timezone.utc
 TOP_KEYWORD_COUNT = 10
 SERIES_KEYWORD_COUNT = 5
 POPULAR_VIDEO_TOP_LIMIT = 3
+POPULAR_VIDEO_QUERY_LIMIT = 1000
+POPULAR_VIDEO_LINK_QUERY_LIMIT = 5000
 YOUTUBE_API_RETRY_ATTEMPTS = 3
 YOUTUBE_API_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
@@ -94,6 +96,10 @@ def _as_str_list(value: Any) -> list[str]:
 
 def _in_filter(values: list[str]) -> str:
     return f"in.({','.join(values)})"
+
+
+def _iso_utc(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _normalize_supabase_url() -> str:
@@ -1000,36 +1006,123 @@ def _popular_video_from_row(row: dict[str, Any], category: str) -> PopularTrendV
     )
 
 
-async def _popular_video_rows() -> list[dict[str, Any]]:
-    select_candidates = [
+def _popular_video_select_candidates() -> list[tuple[str, str]]:
+    return [
         (
             "canonical",
-            "id,category_id,youtube_video_id,uploaded_at,published_at,created_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
+            "id,category_id,youtube_video_id,published_at,created_at,title,description,thumbnails,tags,view_count,like_count,comment_count,raw",
         ),
         (
-            "video_id_thumbnail_url",
-            "id,category_id,video_id,uploaded_at,published_at,created_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
+            "thumbnail_url",
+            "id,category_id,youtube_video_id,published_at,created_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
         ),
         (
             "category_name",
-            "id,category_name,category,youtube_video_id,uploaded_at,published_at,created_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
+            "id,category_name,category,youtube_video_id,published_at,created_at,title,description,thumbnail_url,tags,view_count,like_count,comment_count,raw",
         ),
         ("wildcard", "*"),
+    ]
+
+
+def _popular_video_query_params(
+    select_value: str,
+    date_range: Any,
+    extra_params: dict[str, Any] | None = None,
+    limit: int = POPULAR_VIDEO_QUERY_LIMIT,
+) -> dict[str, Any]:
+    return {
+        "select": select_value,
+        "and": f"(published_at.gte.{_iso_utc(date_range.start)},published_at.lte.{_iso_utc(date_range.end)})",
+        "order": "view_count.desc.nullslast,published_at.desc.nullslast,created_at.desc",
+        "limit": str(limit),
+        **(extra_params or {}),
+    }
+
+
+async def _popular_video_rows_for_params(
+    date_range: Any,
+    extra_params: dict[str, Any] | None = None,
+    limit: int = POPULAR_VIDEO_QUERY_LIMIT,
+) -> list[dict[str, Any]]:
+    select_candidates = [
+        *(_popular_video_select_candidates()),
     ]
 
     for label, select_value in select_candidates:
         try:
             rows = await _supabase_get(
                 "influencer_videos",
-                {
-                    "select": select_value,
-                    "limit": "1000",
-                },
+                _popular_video_query_params(select_value, date_range, extra_params, limit),
             )
             return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
         except Exception as error:
             logger.warning("Popular videos query failed with select=%s: %s", label, error)
     return []
+
+
+async def _popular_video_ids_for_category(category_id: str) -> list[str]:
+    try:
+        rows = await _supabase_get(
+            "influencer_video_categories",
+            {
+                "select": "influencer_video_id",
+                "category_id": f"eq.{category_id}",
+                "limit": str(POPULAR_VIDEO_LINK_QUERY_LIMIT),
+            },
+        )
+    except Exception as error:
+        logger.warning("Popular videos category id lookup failed categoryId=%s: %s", category_id, error)
+        return []
+
+    video_ids: list[str] = []
+    seen: set[str] = set()
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            video_id = row.get("influencer_video_id")
+            if isinstance(video_id, str) and video_id and video_id not in seen:
+                seen.add(video_id)
+                video_ids.append(video_id)
+    return video_ids
+
+
+def _dedupe_popular_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_key: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        key = _popular_video_id(row) or _as_str(row.get("id"))
+        if not key:
+            continue
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = row
+            continue
+        existing_video = _popular_video_from_row(existing, _popular_category(existing, {}))
+        current_video = _popular_video_from_row(row, _popular_category(row, {}))
+        if _popular_video_sort_key(current_video) > _popular_video_sort_key(existing_video):
+            by_key[key] = row
+    return list(by_key.values())
+
+
+async def _popular_video_rows_for_ids(video_ids: list[str], date_range: Any) -> list[dict[str, Any]]:
+    if not video_ids:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for index in range(0, len(video_ids), 100):
+        chunk = video_ids[index : index + 100]
+        rows.extend(await _popular_video_rows_for_params(date_range, {"id": _in_filter(chunk)}, POPULAR_VIDEO_QUERY_LIMIT))
+    return _dedupe_popular_rows(rows)
+
+
+async def _popular_video_rows(date_range: Any, category_id: str | None = None) -> list[dict[str, Any]]:
+    if not category_id:
+        return await _popular_video_rows_for_params(date_range)
+
+    linked_video_ids = await _popular_video_ids_for_category(category_id)
+    linked_rows = await _popular_video_rows_for_ids(linked_video_ids, date_range)
+    legacy_rows = await _popular_video_rows_for_params(date_range, {"category_id": f"eq.{category_id}"})
+    return _dedupe_popular_rows([*linked_rows, *legacy_rows])
 
 
 async def _video_category_links_by_video_id(video_ids: list[str]) -> dict[str, list[str]]:
@@ -1110,6 +1203,7 @@ async def get_popular_videos_by_category(
     category: str | None = None,
     range_value: TrendKeywordRange = "weekly",
 ) -> PopularVideosResponse:
+    date_range = get_date_range_by_period(range_value)
     try:
         categories = await _supabase_get("creator_categories", {"select": "id,name"})
         category_map = {
@@ -1121,13 +1215,14 @@ async def get_popular_videos_by_category(
         logger.exception("Failed to load creator_categories for popular videos.")
         category_map = {}
 
-    rows = await _popular_video_rows()
+    name_to_category_id = {name: category_id for category_id, name in category_map.items()}
+    selected_category = _normalize_popular_category_filter(category)
+    selected_category_id = name_to_category_id.get(selected_category) if selected_category else None
+    rows = await _popular_video_rows(date_range, selected_category_id)
     links_by_video = await _video_category_links_by_video_id(
         [row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)]
     )
 
-    selected_category = _normalize_popular_category_filter(category)
-    date_range = get_date_range_by_period(range_value)
     candidates: list[PopularTrendVideo] = []
 
     for row in rows:
@@ -1150,7 +1245,22 @@ async def get_popular_videos_by_category(
         candidates.append(normalized)
 
     videos = sorted(_dedupe_popular_videos(candidates), key=_popular_video_sort_key, reverse=True)[:POPULAR_VIDEO_TOP_LIMIT]
-    return PopularVideosResponse(videos=videos)
+    empty_reason = None
+    if not videos:
+        if selected_category and selected_category_id is None:
+            empty_reason = f"{selected_category} 카테고리 매칭 정보가 없어 인기 영상을 찾지 못했습니다."
+        elif not rows:
+            empty_reason = "해당 기간 영상 없음"
+        elif selected_category:
+            empty_reason = "해당 카테고리 기간 영상 없음"
+        else:
+            empty_reason = "조회 가능한 기간 영상 없음"
+    return PopularVideosResponse(
+        videos=videos,
+        emptyReason=empty_reason,
+        windowStart=_iso_utc(date_range.start),
+        windowEnd=_iso_utc(date_range.end),
+    )
 
 
 def _start_of_day(value: datetime) -> datetime:

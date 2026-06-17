@@ -245,6 +245,14 @@ function PopularVideosSection({
   const selectedCategoryLabel = selectedCategory === "all" ? "전체" : selectedCategory;
   const emptyTitle =
     selectedCategory === "all" ? `${rangeLabel} 전체 인기 영상이 없습니다.` : `${selectedCategory} ${rangeLabel} 인기 영상이 없습니다.`;
+  const emptyReason = state.data?.emptyReason;
+  const emptyDescription = emptyReason?.includes("카테고리")
+    ? `${emptyReason}. creator_categories와 influencer_video_categories 매핑을 확인하세요.`
+    : emptyReason?.includes("오류")
+      ? `${emptyReason}. API 로그와 Supabase 조회 조건을 확인하세요.`
+      : emptyReason
+        ? `${emptyReason}. daily collector 또는 backfill 실행 상태를 확인하세요.`
+        : `${rangeLabel} 안에 업로드된 영상이 아직 수집되지 않았습니다.`;
 
   return (
     <section className="space-y-4">
@@ -285,7 +293,7 @@ function PopularVideosSection({
       {state.status === "success" && !hasVideos ? (
         <EmptyState
           title={emptyTitle}
-          description="선택한 기간 안에 업로드된 influencer_videos 데이터가 없거나 조회수 집계가 아직 반영되지 않았습니다. daily collector를 확인하세요."
+          description={emptyDescription}
         />
       ) : null}
       {state.status === "success" && hasVideos ? (

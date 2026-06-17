@@ -16,6 +16,9 @@ export type PopularTrendVideo = {
 
 export type PopularVideosResponse = {
   videos: PopularTrendVideo[];
+  emptyReason?: string | null;
+  windowStart?: string | null;
+  windowEnd?: string | null;
 };
 
 export type TrendKeywordCount = {

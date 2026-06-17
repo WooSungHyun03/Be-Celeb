@@ -99,7 +99,7 @@ export async function adminApiFetch<T>(path: string, options: RequestInit = {}) 
   const secret = getStoredAdminSecret();
 
   if (!secret) {
-    throw new Error("Admin secret is required.");
+    throw new Error("운영자 인증이 필요합니다.");
   }
 
   const headers = new Headers(options.headers);
