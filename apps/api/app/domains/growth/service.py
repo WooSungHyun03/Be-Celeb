@@ -69,7 +69,9 @@ def _snapshot_from_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": row.get("id"),
         "youtubeChannelId": row.get("youtube_channel_id"),
+        "channelTitle": row.get("channel_title") if isinstance(row.get("channel_title"), str) else None,
         "channelUrl": row.get("channel_url"),
+        "channelThumbnailUrl": row.get("channel_thumbnail_url") if isinstance(row.get("channel_thumbnail_url"), str) else None,
         "subscriberCount": _as_int(row.get("subscriber_count")),
         "viewCount": _as_int(row.get("view_count")),
         "videoCount": _as_int(row.get("video_count")),
@@ -138,7 +140,7 @@ def _deltas(latest: dict[str, Any] | None, previous: dict[str, Any] | None) -> d
 
 async def _snapshots(user_id: str, limit: int = 12, youtube_channel_id: str | None = None) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
-        "select": "id,youtube_channel_id,channel_url,subscriber_count,view_count,video_count,recent_video_stats,collected_at,created_at",
+        "select": "id,youtube_channel_id,channel_title,channel_url,channel_thumbnail_url,subscriber_count,view_count,video_count,recent_video_stats,collected_at,created_at",
         "user_id": f"eq.{user_id}",
         "order": "collected_at.desc",
         "limit": str(limit),
@@ -220,18 +222,61 @@ async def _save_video_snapshots(rows: list[dict[str, Any]]) -> int:
     return saved
 
 
-async def _refresh_settings_snapshot(user_id: str, settings: dict[str, Any]) -> dict[str, Any]:
-    existing_channel_id = settings.get("youtubeChannelId")
-    if isinstance(existing_channel_id, str) and existing_channel_id and await _today_snapshot_id(user_id, existing_channel_id):
-        return {"skipped": True, "reason": "already_refreshed_today", "youtubeChannelId": existing_channel_id}
+def _canonical_channel_url(channel: Any, fallback: str) -> str:
+    value = getattr(channel, "channelUrl", None)
+    return value.strip() if isinstance(value, str) and value.strip() else fallback.strip()
 
-    channel = await get_channel_info(str(settings["channelUrl"]))
-    if await _today_snapshot_id(user_id, channel.youtubeChannelId):
-        await save_user_channel_settings_metadata(user_id, str(settings["channelUrl"]), str(settings.get("category") or "일상"), channel)
-        return {"skipped": True, "reason": "already_refreshed_today", "youtubeChannelId": channel.youtubeChannelId}
 
-    recent_videos = await get_recent_videos(channel)
+async def _save_channel_snapshot(row: dict[str, Any]) -> dict[str, Any]:
+    snapshot_id = await _today_snapshot_id(str(row["user_id"]), str(row["youtube_channel_id"]))
+    if snapshot_id:
+        rows = await _request(
+            "PATCH",
+            "channel_growth_snapshots",
+            params={"id": f"eq.{snapshot_id}"},
+            payload=row,
+            prefer="return=representation",
+        )
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            return rows[0]
+        raise BackendApiError("Growth snapshot update did not return a row.", 502, "SUPABASE_ERROR")
+
+    try:
+        rows = await _request(
+            "POST",
+            "channel_growth_snapshots",
+            payload=row,
+            prefer="return=representation",
+        )
+    except BackendApiError as error:
+        if error.status_code != 409:
+            raise
+        snapshot_id = await _today_snapshot_id(str(row["user_id"]), str(row["youtube_channel_id"]))
+        if not snapshot_id:
+            raise
+        rows = await _request(
+            "PATCH",
+            "channel_growth_snapshots",
+            params={"id": f"eq.{snapshot_id}"},
+            payload=row,
+            prefer="return=representation",
+        )
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        raise BackendApiError("Growth snapshot upsert did not return a row.", 502, "SUPABASE_ERROR")
+    return rows[0]
+
+
+async def _create_growth_snapshot(
+    user_id: str,
+    channel_url: str,
+    category: str,
+    channel: Any,
+    recent_videos: list[Any] | None = None,
+) -> dict[str, Any]:
+    videos = recent_videos if recent_videos is not None else await get_recent_videos(channel)
     collected_at = datetime.now(timezone.utc).isoformat()
+    canonical_channel_url = _canonical_channel_url(channel, channel_url)
+    await save_user_channel_settings_metadata(user_id, canonical_channel_url, category, channel)
     recent_stats = [
         {
             "youtubeVideoId": video.youtubeVideoId,
@@ -243,7 +288,7 @@ async def _refresh_settings_snapshot(user_id: str, settings: dict[str, Any]) -> 
             "likeCount": video.likeCount or 0,
             "commentCount": video.commentCount or 0,
         }
-        for video in recent_videos[:RECENT_VIDEO_LIMIT]
+        for video in videos[:RECENT_VIDEO_LIMIT]
     ]
     video_snapshot_rows = [
         {
@@ -258,36 +303,71 @@ async def _refresh_settings_snapshot(user_id: str, settings: dict[str, Any]) -> 
             "comment_count": video.commentCount or 0,
             "collected_at": collected_at,
         }
-        for video in recent_videos[:RECENT_VIDEO_LIMIT]
+        for video in videos[:RECENT_VIDEO_LIMIT]
     ]
     payload = {
         "user_id": user_id,
         "youtube_channel_id": channel.youtubeChannelId,
-        "channel_url": settings["channelUrl"],
+        "channel_title": channel.channelTitle,
+        "channel_url": canonical_channel_url,
+        "channel_thumbnail_url": channel.thumbnailUrl,
         "subscriber_count": channel.subscriberCount or 0,
         "view_count": channel.viewCount or 0,
         "video_count": channel.videoCount or 0,
         "recent_video_stats": recent_stats,
         "collected_at": collected_at,
     }
-    rows = await _request(
-        "POST",
-        "channel_growth_snapshots",
-        payload=payload,
-        prefer="return=representation",
-    )
-    if not isinstance(rows, list) or not rows:
-        raise BackendApiError("Growth snapshot upsert did not return a row.", 502, "SUPABASE_ERROR")
+    row = await _save_channel_snapshot(payload)
     await _save_video_snapshots(video_snapshot_rows)
-    await save_user_channel_settings_metadata(user_id, str(settings["channelUrl"]), str(settings.get("category") or "일상"), channel)
-    return rows[0]
+    return row
+
+
+async def ensure_initial_growth_snapshot(
+    user_id: str,
+    channel_url: str,
+    category: str,
+    channel: Any,
+    recent_videos: list[Any] | None = None,
+) -> dict[str, Any]:
+    canonical_channel_url = _canonical_channel_url(channel, channel_url)
+    await save_user_channel_settings_metadata(user_id, canonical_channel_url, category, channel)
+    if await _today_snapshot_id(user_id, channel.youtubeChannelId):
+        return {"skipped": True, "reason": "already_refreshed_today", "youtubeChannelId": channel.youtubeChannelId}
+    return await _create_growth_snapshot(user_id, canonical_channel_url, category, channel, recent_videos)
+
+
+async def _refresh_settings_snapshot(user_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+    existing_channel_id = settings.get("youtubeChannelId")
+    if isinstance(existing_channel_id, str) and existing_channel_id and await _today_snapshot_id(user_id, existing_channel_id):
+        return {"skipped": True, "reason": "already_refreshed_today", "youtubeChannelId": existing_channel_id}
+
+    channel = await get_channel_info(str(settings["channelUrl"]))
+    if await _today_snapshot_id(user_id, channel.youtubeChannelId):
+        await save_user_channel_settings_metadata(user_id, str(settings["channelUrl"]), str(settings.get("category") or "일상"), channel)
+        return {"skipped": True, "reason": "already_refreshed_today", "youtubeChannelId": channel.youtubeChannelId}
+
+    return await _create_growth_snapshot(user_id, str(settings["channelUrl"]), str(settings.get("category") or "일상"), channel)
 
 
 async def get_growth_report(user_id: str) -> dict[str, Any]:
     settings_result = await get_user_channel_settings(user_id)
     settings = settings_result.get("settings") if isinstance(settings_result, dict) else None
     youtube_channel_id = settings.get("youtubeChannelId") if isinstance(settings, dict) and isinstance(settings.get("youtubeChannelId"), str) else None
-    snapshots = await _snapshots(user_id, youtube_channel_id=youtube_channel_id)
+    snapshots = await _snapshots(user_id, youtube_channel_id=youtube_channel_id) if youtube_channel_id else []
+    initial_snapshot_status: str | None = None
+    initial_snapshot_message: str | None = None
+    if isinstance(settings, dict) and settings.get("channelUrl") and not snapshots:
+        try:
+            initial_snapshot_status = "created"
+            await _refresh_settings_snapshot(user_id, settings)
+            settings_result = await get_user_channel_settings(user_id)
+            settings = settings_result.get("settings") if isinstance(settings_result, dict) else settings
+            youtube_channel_id = settings.get("youtubeChannelId") if isinstance(settings, dict) and isinstance(settings.get("youtubeChannelId"), str) else youtube_channel_id
+            snapshots = await _snapshots(user_id, youtube_channel_id=youtube_channel_id)
+        except Exception as error:
+            logger.warning("Initial growth snapshot failed for user_id=%s: %s", user_id, error.__class__.__name__)
+            initial_snapshot_status = "failed"
+            initial_snapshot_message = "채널 정보를 불러오지 못했습니다. YouTube 채널 URL, @handle 또는 channelId를 확인한 뒤 다시 시도해 주세요."
     latest = snapshots[0] if snapshots else None
     previous = snapshots[1] if len(snapshots) > 1 else None
     return {
@@ -300,6 +380,8 @@ async def get_growth_report(user_id: str) -> dict[str, Any]:
         "lastRefreshedAt": latest.get("collectedAt") if latest else None,
         "refreshSchedule": GROWTH_REPORT_SCHEDULE_TEXT,
         "refreshCron": GROWTH_REPORT_SCHEDULE_CRON,
+        "initialSnapshotStatus": initial_snapshot_status,
+        "initialSnapshotMessage": initial_snapshot_message,
     }
 
 

@@ -7,6 +7,8 @@ import re
 from typing import Any
 
 from app.core.errors import BackendApiError
+from app.domains.growth.service import ensure_initial_growth_snapshot
+from app.domains.video_analysis.service import get_video_analysis_context_for_youtube_ids, get_video_analysis_prompt_context
 from app.schemas.youtube_content import (
     ContentPlan,
     ContentPlanResponse,
@@ -35,7 +37,6 @@ from app.services.database_service import (
 from app.services.llm_service import call_local_llm, parse_llm_json_with_fallback
 from app.services.prompt_template_service import get_active_prompt_template, render_prompt_template
 from app.services.text_sanitizer import KOREAN_ONLY_OUTPUT_INSTRUCTION, sanitize_user_facing_text
-from app.domains.video_analysis.service import get_video_analysis_context_for_youtube_ids, get_video_analysis_prompt_context
 from app.services.youtube_content_service import CATEGORY_KEYWORDS, CREATOR_CATEGORIES
 from app.services.youtube_service import get_channel_info, get_recent_videos
 
@@ -632,6 +633,10 @@ async def create_single_content_recommendation(
         raise BackendApiError("Recommendation was generated but could not be saved.", 502, "SUPABASE_ERROR")
     if user_id:
         await save_user_channel_settings_metadata(user_id, channel_url, selected_category, channel)
+        try:
+            await ensure_initial_growth_snapshot(user_id, channel_url, selected_category, channel, recent_videos)
+        except Exception as error:
+            logger.warning("Initial growth snapshot after recommendation failed for user_id=%s: %s", user_id, error.__class__.__name__)
 
     return SingleRecommendContentResponse(
         recommendationId=recommendation_id,

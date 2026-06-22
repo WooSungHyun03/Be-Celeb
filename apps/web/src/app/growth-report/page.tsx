@@ -88,7 +88,7 @@ export default function GrowthReportPage() {
   }, []);
 
   if (status === "loading") {
-    return <Loading label="성장 리포트를 불러오는 중입니다." />;
+    return <Loading label="성장 리포트를 불러오고 필요한 경우 초기 성장 데이터를 수집하는 중입니다." />;
   }
 
   if (status === "unauthorized") {
@@ -112,6 +112,10 @@ export default function GrowthReportPage() {
   const latest = report?.latest ?? null;
   const deltas = report?.deltas ?? { subscriberCount: 0, viewCount: 0, videoCount: 0 };
   const lastRefreshedAt = report?.lastRefreshedAt ?? latest?.collectedAt ?? null;
+  const activeChannelTitle = latest?.channelTitle ?? report?.settings?.channelTitle ?? "YouTube 채널";
+  const activeChannelThumbnailUrl = latest?.channelThumbnailUrl ?? report?.settings?.channelThumbnailUrl ?? null;
+  const activeChannelUrl = latest?.channelUrl ?? report?.settings?.channelUrl ?? null;
+  const initialSnapshotFailed = report?.initialSnapshotStatus === "failed";
 
   return (
     <div className="space-y-6">
@@ -137,14 +141,23 @@ export default function GrowthReportPage() {
             </Link>
           }
           description="대시보드에서 YouTube 채널 URL을 입력해 추천을 생성하면 채널 설정이 저장됩니다."
-          title="저장된 채널이 없습니다"
+          title="연결된 유튜브 채널이 없습니다"
         />
       ) : null}
 
       {report?.hasChannelSettings && !latest ? (
         <EmptyState
-          description="아직 저장된 성장 스냅샷이 없습니다. 매일 06:00 KST 자동 갱신이 완료된 뒤 최신 리포트가 표시됩니다."
-          title="성장 데이터가 없습니다"
+          action={
+            <Link href={ROUTES.dashboard}>
+              <Button>{initialSnapshotFailed ? "채널 다시 입력" : "대시보드로 이동"}</Button>
+            </Link>
+          }
+          description={
+            initialSnapshotFailed
+              ? report?.initialSnapshotMessage ?? "채널 정보를 불러오지 못했습니다. YouTube 채널 URL, @handle 또는 channelId를 확인해 주세요."
+              : "채널 설정은 저장되어 있지만 초기 성장 스냅샷을 아직 만들지 못했습니다. 잠시 후 다시 접속하거나 대시보드에서 채널 URL을 확인해 주세요."
+          }
+          title={initialSnapshotFailed ? "채널 정보를 불러오지 못했습니다" : "성장 데이터 수집 대기 중"}
         />
       ) : null}
 
@@ -170,6 +183,19 @@ export default function GrowthReportPage() {
 
           <Card title="채널 정보">
             <div className="grid gap-3 text-sm leading-6 text-slate-700 md:grid-cols-2">
+              <div className="flex items-center gap-3 md:col-span-2">
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full bg-slate-100">
+                  {activeChannelThumbnailUrl ? (
+                    <img alt="" className="h-full w-full object-cover" src={activeChannelThumbnailUrl} />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-xs font-black text-slate-400">YT</div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-base font-black text-ink">{activeChannelTitle}</p>
+                  <p className="break-all text-xs font-semibold text-slate-500">{latest.youtubeChannelId}</p>
+                </div>
+              </div>
               <p>
                 <span className="font-bold text-ink">채널 ID</span>
                 <br />
@@ -180,9 +206,9 @@ export default function GrowthReportPage() {
                 <br />
                 {formatDate(lastRefreshedAt)}
               </p>
-              {latest.channelUrl ? (
-                <a className="font-semibold text-violet-700 hover:underline md:col-span-2" href={latest.channelUrl} rel="noopener noreferrer" target="_blank">
-                  {latest.channelUrl}
+              {activeChannelUrl ? (
+                <a className="break-all font-semibold text-violet-700 hover:underline md:col-span-2" href={activeChannelUrl} rel="noopener noreferrer" target="_blank">
+                  {activeChannelUrl}
                 </a>
               ) : null}
             </div>

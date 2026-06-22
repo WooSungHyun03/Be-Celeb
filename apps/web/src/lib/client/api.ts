@@ -193,7 +193,9 @@ export type GrowthVideoStat = {
 export type GrowthSnapshot = {
   id: string;
   youtubeChannelId: string;
+  channelTitle?: string | null;
   channelUrl: string | null;
+  channelThumbnailUrl?: string | null;
   subscriberCount: number;
   viewCount: number;
   videoCount: number;
@@ -216,6 +218,8 @@ export type GrowthReportResponse = {
   lastRefreshedAt?: string | null;
   refreshSchedule?: string | null;
   refreshCron?: string | null;
+  initialSnapshotStatus?: "created" | "failed" | string | null;
+  initialSnapshotMessage?: string | null;
 };
 
 export type GrowthVideoTrendPoint = GrowthVideoStat & {

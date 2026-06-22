@@ -228,7 +228,7 @@ def _normalize_channel_input(value: str) -> str:
 def _parse_channel_locator(channel_url: str) -> tuple[str, str]:
     trimmed = channel_url.strip()
     if not trimmed:
-        raise BackendApiError("channelUrl is required.", 400, "VALIDATION_ERROR")
+        raise BackendApiError("YouTube 채널 URL, @handle 또는 channelId를 입력해 주세요.", 400, "VALIDATION_ERROR")
     if trimmed.startswith("@"):
         return ("handle", trimmed)
     if re.match(r"^UC[\w-]{20,}$", trimmed, re.IGNORECASE):
@@ -364,7 +364,7 @@ async def get_youtube_channel(channel_url: str) -> YouTubeChannelAnalysis:
 
     channel = await _search_channel(locator_value)
     if not channel:
-        raise BackendApiError("Could not find a YouTube channel from the provided URL.", 404, "YOUTUBE_API_ERROR")
+        raise BackendApiError("입력한 값으로 YouTube 채널을 찾지 못했습니다. 채널 URL, @handle 또는 channelId를 확인해 주세요.", 404, "YOUTUBE_API_ERROR")
     return channel
 
 

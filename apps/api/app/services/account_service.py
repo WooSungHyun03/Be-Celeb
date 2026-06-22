@@ -85,18 +85,17 @@ async def _delete_growth_snapshots(user_id: str) -> None:
     await _request("DELETE", "video_growth_snapshots", params={"user_id": f"eq.{user_id}"}, prefer="return=minimal")
 
 
-async def upsert_user_channel_settings(user_id: str, channel_url: str, category: str) -> dict[str, Any]:
-    if not channel_url.strip():
-        raise BackendApiError("channelUrl is required.", 400, "VALIDATION_ERROR")
-    if not category.strip():
-        raise BackendApiError("category is required.", 400, "VALIDATION_ERROR")
+def _canonical_channel_url(channel: Any, fallback: str) -> str:
+    value = getattr(channel, "channelUrl", None)
+    return value.strip() if isinstance(value, str) and value.strip() else fallback.strip()
 
+
+async def _reset_growth_snapshots_if_channel_changed(user_id: str, channel_url: str, channel: Any) -> None:
     existing_result = await get_user_channel_settings(user_id)
     existing = existing_result.get("settings") if isinstance(existing_result, dict) else None
     existing_channel_id = existing.get("youtubeChannelId") if isinstance(existing, dict) else None
     existing_channel_url = existing.get("channelUrl") if isinstance(existing, dict) else None
 
-    channel = await get_channel_info(channel_url)
     should_reset_growth = (
         isinstance(existing_channel_id, str)
         and existing_channel_id
@@ -112,12 +111,15 @@ async def upsert_user_channel_settings(user_id: str, channel_url: str, category:
         # YouTube channel, old growth snapshots are deleted so charts restart cleanly.
         await _delete_growth_snapshots(user_id)
 
+
+async def _upsert_channel_settings_row(user_id: str, channel_url: str, category: str, channel: Any) -> dict[str, Any]:
+    canonical_channel_url = _canonical_channel_url(channel, channel_url)
     rows = await _request(
         "POST",
         "user_channel_settings?on_conflict=user_id",
         payload={
             "user_id": user_id,
-            "channel_url": channel_url.strip(),
+            "channel_url": canonical_channel_url,
             "category": category.strip(),
             "youtube_channel_id": channel.youtubeChannelId,
             "channel_title": channel.channelTitle,
@@ -129,26 +131,22 @@ async def upsert_user_channel_settings(user_id: str, channel_url: str, category:
     if not row:
         raise BackendApiError("Channel settings upsert did not return a row.", 502, "SUPABASE_ERROR")
     return {"settings": _to_setting(row)}
+
+
+async def upsert_user_channel_settings(user_id: str, channel_url: str, category: str) -> dict[str, Any]:
+    if not channel_url.strip():
+        raise BackendApiError("YouTube 채널 URL, @handle 또는 channelId를 입력해 주세요.", 400, "VALIDATION_ERROR")
+    if not category.strip():
+        raise BackendApiError("category is required.", 400, "VALIDATION_ERROR")
+
+    channel = await get_channel_info(channel_url)
+    await _reset_growth_snapshots_if_channel_changed(user_id, channel_url, channel)
+    return await _upsert_channel_settings_row(user_id, channel_url, category, channel)
 
 
 async def save_user_channel_settings_metadata(user_id: str, channel_url: str, category: str, channel: Any) -> dict[str, Any]:
-    rows = await _request(
-        "POST",
-        "user_channel_settings?on_conflict=user_id",
-        payload={
-            "user_id": user_id,
-            "channel_url": channel_url.strip(),
-            "category": category.strip(),
-            "youtube_channel_id": channel.youtubeChannelId,
-            "channel_title": channel.channelTitle,
-            "channel_thumbnail_url": channel.thumbnailUrl,
-        },
-        prefer="resolution=merge-duplicates,return=representation",
-    )
-    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
-    if not row:
-        raise BackendApiError("Channel settings upsert did not return a row.", 502, "SUPABASE_ERROR")
-    return {"settings": _to_setting(row)}
+    await _reset_growth_snapshots_if_channel_changed(user_id, channel_url, channel)
+    return await _upsert_channel_settings_row(user_id, channel_url, category, channel)
 
 
 async def delete_account(user_id: str) -> dict[str, Any]:
